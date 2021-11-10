@@ -1,13 +1,14 @@
 from copy import copy
 from typing import List, Optional, Dict, Tuple
 
-from pyspark.ml import Pipeline
+from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.feature import Tokenizer, CountVectorizer, IDF, Normalizer
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.dataset import SparkDataset, SPARK_VECT_SUFFIX
+from lightautoml.spark.dataset.base import SparkDataset, SPARK_VECT_SUFFIX
+from lightautoml.spark.dataset.roles import NumericVectorRole
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.text import TunableTransformer, text_check
 
@@ -65,7 +66,8 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         super().__init__(default_params, freeze_defaults)
         self.subs = subs
         self.random_state = random_state
-        self.idf_columns_pipelines: Optional[Dict[Tuple[Pipeline, str]]] = None
+        self.idf_columns_pipelines: Optional[Dict[str, Tuple[PipelineModel, str, int]]] = None
+        self.vocab_size: Optional[int] = None
 
     def init_params_on_input(self, dataset: SparkDataset) -> dict:
         """Get transformer parameters depending on dataset parameters.
@@ -145,7 +147,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
             # )
             # feats.extend(features)
 
-            self.idf_columns_pipelines[c] = (tfidf_pipeline_model, out_col)
+            self.idf_columns_pipelines[c] = (tfidf_pipeline_model, out_col, count_tf.getVocabSize())
 
         self._features = feats
 
@@ -168,14 +170,22 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         sdf = sdf.fillna("")
 
         # transform
-        roles = NumericRole()
-        curr_sdf = sdf
 
+        curr_sdf = sdf
         all_idf_features = []
+        all_idf_roles = []
         for c in sdf.columns:
-            tfidf_model, idf_col = self.idf_columns_pipelines[c]
+            tfidf_model, idf_col, vocab_size = self.idf_columns_pipelines[c]
+
             curr_sdf = tfidf_model.transform(curr_sdf)
+
+            role = NumericVectorRole(
+                size=vocab_size,
+                element_col_name_template=f"{self._fname_prefix}_{{}}__{idf_col}"
+            )
+
             all_idf_features.append(idf_col)
+            all_idf_roles.append(role)
 
         # all_idf_features = [
         #     vector_to_array(F.col(idf_col))[i].alias(feat)
@@ -186,6 +196,6 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         new_sdf = curr_sdf.select(all_idf_features)
 
         output = dataset.empty()
-        output.set_data(new_sdf, self._features, roles)
+        output.set_data(new_sdf, self._features, all_idf_roles)
 
         return output

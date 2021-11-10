@@ -1,7 +1,7 @@
 from typing import cast
 
 from lightautoml.dataset.base import LAMLDataset
-from lightautoml.spark.dataset import SparkDataset
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.transformers.base import LAMLTransformer
 
 

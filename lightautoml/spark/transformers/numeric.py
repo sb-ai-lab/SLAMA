@@ -5,7 +5,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType
 
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.dataset import SparkDataset
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.numeric import numeric_check
 

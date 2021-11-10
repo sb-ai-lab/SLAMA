@@ -115,3 +115,14 @@ def compare_by_metadata(spark: SparkSession,
         This function should be used only to compare stochastic-based transformers
     """
     return compare_transformers_results(spark, ds, t_lama, t_spark, compare_metadata_only=True)
+
+
+def smoke_check(spark: SparkSession, ds: PandasDataset, t_spark: SparkTransformer) -> NumpyDataset:
+    sds = from_pandas_to_spark(ds, spark)
+
+    t_spark.fit(sds)
+    transformed_sds = t_spark.transform(sds)
+
+    spark_np_ds = transformed_sds.to_numpy()
+
+    return spark_np_ds

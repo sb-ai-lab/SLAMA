@@ -5,13 +5,15 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole, TextRole
+from lightautoml.spark.dataset.roles import NumericVectorRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
 from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags
 from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
 from lightautoml.transformers.decomposition import PCATransformer
 from lightautoml.transformers.numeric import NaNFlags
 from lightautoml.transformers.text import TfidfTextTransformer
-from . import compare_by_content, compare_by_metadata
+from . import compare_by_content, compare_by_metadata, smoke_check
+
 
 # Note:
 # -s means no stdout capturing thus allowing one to see what happens in reality
@@ -86,8 +88,14 @@ def test_tfidf_text_transformer(spark: SparkSession):
     # we cannot compare by content because the formulas used by Spark and scikit is slightly different
     # see: https://github.com/scikit-learn/scikit-learn/blob/0d378913be6d7e485b792ea36e9268be31ed52d0/sklearn/feature_extraction/text.py#L1461
     # and: https://spark.apache.org/docs/latest/ml-features#tf-idf
-    compare_by_metadata(spark, ds, TfidfTextTransformer(param_defaults), SparkTfidfTextTransformer(param_defaults))
 
+    result_ds = smoke_check(spark, ds, SparkTfidfTextTransformer(param_defaults))
+
+    new_cols = {f.split('__')[1] for f in result_ds.features}
+    assert len(result_ds.features) == len(source_data.columns)
+    assert len(new_cols) == len(source_data.columns)
+    assert all(type(r) == NumericVectorRole for r in result_ds.roles)
+    assert result_ds.shape[0] == source_data.shape[0]
 
 
 
