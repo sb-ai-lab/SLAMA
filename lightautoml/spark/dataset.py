@@ -4,6 +4,8 @@ from typing import Sequence, Any, Tuple, Union, Optional, NewType, List, cast
 import pandas as pd
 import numpy as np
 import pyspark
+from pyspark.ml.functions import vector_to_array
+from pyspark.sql import functions as F
 
 from ..dataset.base import LAMLDataset, IntIdx, RowSlice, ColSlice, LAMLColumn, RolesDict
 from ..dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
@@ -11,6 +13,8 @@ from ..dataset.roles import NumericRole, ColumnRole
 from ..tasks import Task
 
 SparkDataFrame = NewType('SparkDataFrame', pyspark.sql.DataFrame)
+
+SPARK_VECT_SUFFIX = "_spark_vect"
 
 
 class SparkDataset(LAMLDataset):
@@ -119,11 +123,35 @@ class SparkDataset(LAMLDataset):
         data = self.data.toPandas()
         return PandasDataset(data=data, roles=self.roles, task=self.task)
 
-    def to_numpy(self) -> NumpyDataset:
+    def to_numpy(self, flatten_vector_features: bool = False) -> NumpyDataset:
         # TODO: need to fix type here
         # TODO: probably size check would be a nice feature here
         # raise NotImplementedError("not implemented yet")
-        data = self.data.toPandas()
+        sdf = self.data
+
+        all_cols = [
+            vector_to_array(F.col(c)).alias(c) if c.endswith(SPARK_VECT_SUFFIX) else c
+            for c in self.data.columns
+        ]
+
+        if flatten_vector_features and any(c for c in all_cols if c.endswith(SPARK_VECT_SUFFIX)):
+            def arr_el_name(i, col_name):
+                tr_name, orig_col_name = col_name[:len(SPARK_VECT_SUFFIX)].split("__")
+
+                return f"{tr_name}_{i}__{orig_col_name}"
+
+            row = sdf.select(
+                [F.max(F.length(c)).alias(f"max_{c}") for c in all_cols if c.endswith(SPARK_VECT_SUFFIX)]
+            ).collect()[0]
+
+            all_cols = [
+                [F.col(c)[i].alias(arr_el_name(i, c)) for i in range(row[f"max_{c}"])] if c.endswith(SPARK_VECT_SUFFIX) else [c]
+                for c in all_cols
+            ]
+            all_cols = [c for c_arr in all_cols for c in c_arr]
+
+        sdf = sdf.select(all_cols)
+        data = sdf.toPandas()
         return NumpyDataset(data=data.to_numpy(), features=self.features, roles=self.roles, task=self.task)
 
     @staticmethod

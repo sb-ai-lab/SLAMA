@@ -82,6 +82,7 @@ def test_tfidf_text_transformer(spark: SparkSession):
 
     ds = PandasDataset(source_data, roles={name: TextRole() for name in source_data.columns})
 
+    # TODO: rewrite working with vector features. Spark optimizer doesn't like a lot of features.
     # we cannot compare by content because the formulas used by Spark and scikit is slightly different
     # see: https://github.com/scikit-learn/scikit-learn/blob/0d378913be6d7e485b792ea36e9268be31ed52d0/sklearn/feature_extraction/text.py#L1461
     # and: https://spark.apache.org/docs/latest/ml-features#tf-idf

@@ -7,7 +7,7 @@ from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.dataset import SparkDataset
+from lightautoml.spark.dataset import SparkDataset, SPARK_VECT_SUFFIX
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.text import TunableTransformer, text_check
 
@@ -127,7 +127,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
                 inputCol=tokenizer.getOutputCol(),
                 outputCol=f"{c}_word_features"
             )
-            out_col = f"{c}_normalized_idf_features"
+            out_col = f"{self._fname_prefix}__{c}{SPARK_VECT_SUFFIX}"
             idf = IDF(inputCol=count_tf.getOutputCol(), outputCol=f"{c}_idf_features")
 
             stages = [tokenizer, count_tf, idf]
@@ -138,14 +138,14 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
             pipeline = Pipeline(stages=stages)
             tfidf_pipeline_model = pipeline.fit(sdf)
 
-            features = list(
-                np.char.array([self._fname_prefix + "_"])
-                + np.arange(count_tf.getVocabSize()).astype(str)
-                + np.char.array(["__" + c])
-            )
-            feats.extend(features)
+            # features = list(
+            #     np.char.array([self._fname_prefix + "_"])
+            #     + np.arange(count_tf.getVocabSize()).astype(str)
+            #     + np.char.array(["__" + c])
+            # )
+            # feats.extend(features)
 
-            self.idf_columns_pipelines[c] = (tfidf_pipeline_model, out_col, features)
+            self.idf_columns_pipelines[c] = (tfidf_pipeline_model, out_col)
 
         self._features = feats
 
@@ -171,17 +171,17 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         roles = NumericRole()
         curr_sdf = sdf
 
-        idf2features = dict()
+        all_idf_features = []
         for c in sdf.columns:
-            tfidf_model, idf_col, features = self.idf_columns_pipelines[c]
+            tfidf_model, idf_col = self.idf_columns_pipelines[c]
             curr_sdf = tfidf_model.transform(curr_sdf)
-            idf2features[idf_col] = features
+            all_idf_features.append(idf_col)
 
-        all_idf_features = [
-            vector_to_array(F.col(idf_col))[i].alias(feat)
-            for idf_col, features in idf2features.items()
-            for i,feat in enumerate(features)
-        ]
+        # all_idf_features = [
+        #     vector_to_array(F.col(idf_col))[i].alias(feat)
+        #     for idf_col, features in idf2features.items()
+        #     for i,feat in enumerate(features)
+        # ]
 
         new_sdf = curr_sdf.select(all_idf_features)
 
