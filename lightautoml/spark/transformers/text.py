@@ -1,8 +1,9 @@
 from copy import copy
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from pyspark.ml import Pipeline
-from pyspark.ml.feature import Tokenizer, CountVectorizer, IDF
+from pyspark.ml.feature import Tokenizer, CountVectorizer, IDF, Normalizer
+from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
 
 from lightautoml.dataset.roles import NumericRole
@@ -24,6 +25,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         "max_df": 1.0,
         "max_features": 30_000,
         "dtype": np.float32,
+        "normalization": 2.0
     }
 
     # These properties are not supported
@@ -63,7 +65,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         super().__init__(default_params, freeze_defaults)
         self.subs = subs
         self.random_state = random_state
-        self.idf_columns_pipelines: Optional[Dict[Pipeline]] = None
+        self.idf_columns_pipelines: Optional[Dict[Tuple[Pipeline, str]]] = None
 
     def init_params_on_input(self, dataset: SparkDataset) -> dict:
         """Get transformer parameters depending on dataset parameters.
@@ -125,9 +127,15 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
                 inputCol=tokenizer.getOutputCol(),
                 outputCol=f"{c}_word_features"
             )
+            out_col = f"{c}_normalized_idf_features"
             idf = IDF(inputCol=count_tf.getOutputCol(), outputCol=f"{c}_idf_features")
-            pipeline = Pipeline(stages=[tokenizer, count_tf, idf])
 
+            stages = [tokenizer, count_tf, idf]
+            if self.params["normalization"] and self.params["normalization"] > 0:
+                norm = Normalizer(inputCol=idf.getOutputCol(), outputCol=out_col, p=self.params["normalization"])
+                stages.append(norm)
+
+            pipeline = Pipeline(stages=stages)
             tfidf_pipeline_model = pipeline.fit(sdf)
 
             features = list(
@@ -137,7 +145,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
             )
             feats.extend(features)
 
-            self.idf_columns_pipelines[c] = (tfidf_pipeline_model, features)
+            self.idf_columns_pipelines[c] = (tfidf_pipeline_model, out_col, features)
 
         self._features = feats
 
@@ -162,11 +170,20 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         # transform
         roles = NumericRole()
         curr_sdf = sdf
-        for c in sdf.columns:
-            tfidf_model, _ = self.idf_columns_pipelines[c]
-            curr_sdf = tfidf_model.transform(curr_sdf)
 
-        new_sdf = curr_sdf.select(self._features)
+        idf2features = dict()
+        for c in sdf.columns:
+            tfidf_model, idf_col, features = self.idf_columns_pipelines[c]
+            curr_sdf = tfidf_model.transform(curr_sdf)
+            idf2features[idf_col] = features
+
+        all_idf_features = [
+            vector_to_array(F.col(idf_col))[i].alias(feat)
+            for idf_col, features in idf2features.items()
+            for i,feat in enumerate(features)
+        ]
+
+        new_sdf = curr_sdf.select(all_idf_features)
 
         output = dataset.empty()
         output.set_data(new_sdf, self._features, roles)

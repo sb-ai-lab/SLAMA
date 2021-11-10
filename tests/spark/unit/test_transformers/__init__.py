@@ -54,13 +54,15 @@ def compare_transformers_results(spark: SparkSession,
 
     # compare independent of feature ordering
     assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
-        "List of features are not equal"
+        f"List of features are not equal\n" \
+        f"LAMA: {sorted(lama_np_ds.features)}\n" \
+        f"SPARK: {sorted(spark_np_ds.features)}"
 
     # compare roles equality for the columns
     assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
 
     # compare shapes
-    assert lama_np_ds.shape == spark_np_ds.shape, "Shape are not equals"
+    assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
 
     if not compare_metadata_only:
         features: List[int] = [i for i, _ in sorted(enumerate(transformed_ds.features), key=lambda x: x[1])]
