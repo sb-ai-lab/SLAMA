@@ -42,5 +42,5 @@ class NumericVectorRole(NumericRole):
             feature name
 
         """
-        assert position > self.size
+        assert 0 <= position < self.size
         return self._element_col_name_template.format(position)

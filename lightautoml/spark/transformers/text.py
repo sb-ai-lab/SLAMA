@@ -1,18 +1,14 @@
 from copy import copy
 from typing import List, Optional, Dict, Tuple
 
+import numpy as np
 from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.feature import Tokenizer, CountVectorizer, IDF, Normalizer
-from pyspark.ml.functions import vector_to_array
-from pyspark.sql import functions as F
 
-from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.dataset.base import SparkDataset, SPARK_VECT_SUFFIX
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorRole
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.text import TunableTransformer, text_check
-
-import numpy as np
 
 
 class TfidfTextTransformer(SparkTransformer, TunableTransformer):
@@ -129,7 +125,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
                 inputCol=tokenizer.getOutputCol(),
                 outputCol=f"{c}_word_features"
             )
-            out_col = f"{self._fname_prefix}__{c}{SPARK_VECT_SUFFIX}"
+            out_col = f"{self._fname_prefix}__{c}"
             idf = IDF(inputCol=count_tf.getOutputCol(), outputCol=f"{c}_idf_features")
 
             stages = [tokenizer, count_tf, idf]

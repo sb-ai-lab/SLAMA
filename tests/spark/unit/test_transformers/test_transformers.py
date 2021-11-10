@@ -11,7 +11,6 @@ from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags
 from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
 from lightautoml.transformers.decomposition import PCATransformer
 from lightautoml.transformers.numeric import NaNFlags
-from lightautoml.transformers.text import TfidfTextTransformer
 from . import compare_by_content, compare_by_metadata, smoke_check
 
 
@@ -74,7 +73,7 @@ def test_tfidf_text_transformer(spark: SparkSession):
     param_defaults = {
         "min_df": 1.0,
         "max_df": 100.0,
-        "max_features": 3
+        "max_features": 15
     }
     source_data = pd.DataFrame(data={
         "a": ["ipsen loren doloren" for _ in range(10)],
@@ -84,17 +83,18 @@ def test_tfidf_text_transformer(spark: SparkSession):
 
     ds = PandasDataset(source_data, roles={name: TextRole() for name in source_data.columns})
 
-    # TODO: rewrite working with vector features. Spark optimizer doesn't like a lot of features.
     # we cannot compare by content because the formulas used by Spark and scikit is slightly different
     # see: https://github.com/scikit-learn/scikit-learn/blob/0d378913be6d7e485b792ea36e9268be31ed52d0/sklearn/feature_extraction/text.py#L1461
     # and: https://spark.apache.org/docs/latest/ml-features#tf-idf
+    # we also cannot compare by metadata cause the number of resulting columns will be different
+    # because of Spark and sklearn treats 'max_features' param for vocab size differently
 
     result_ds = smoke_check(spark, ds, SparkTfidfTextTransformer(param_defaults))
 
     new_cols = {f.split('__')[1] for f in result_ds.features}
     assert len(result_ds.features) == len(source_data.columns)
     assert len(new_cols) == len(source_data.columns)
-    assert all(type(r) == NumericVectorRole for r in result_ds.roles)
+    assert all(isinstance(r, NumericVectorRole) for _, r in result_ds.roles.items())
     assert result_ds.shape[0] == source_data.shape[0]
 
 
