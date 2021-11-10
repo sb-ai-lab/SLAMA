@@ -4,11 +4,13 @@ import pytest
 from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
-from lightautoml.dataset.roles import NumericRole
+from lightautoml.dataset.roles import NumericRole, TextRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
 from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags
+from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
 from lightautoml.transformers.decomposition import PCATransformer
 from lightautoml.transformers.numeric import NaNFlags
+from lightautoml.transformers.text import TfidfTextTransformer
 from . import compare_by_content, compare_by_metadata
 
 # Note:
@@ -64,6 +66,24 @@ def test_pca(spark: SparkSession):
 
     # doing minor content check
     assert all(spark_data.flatten()), f"Data should not contain None-s: {spark_data.flatten()}"
+
+
+def test_tfidf_text_transformer(spark: SparkSession):
+    param_defaults = {
+        "min_df": 1.0,
+        "max_df": 100.0,
+        "max_features": 30_000
+    }
+    source_data = pd.DataFrame(data={
+        "a": ["ipsen loren doloren" for _ in range(10)],
+        "b": ["ipsen loren doloren" for _ in range(10)],
+        "c": ["ipsen loren doloren" for _ in range(10)],
+    })
+
+    ds = PandasDataset(source_data, roles={name: TextRole() for name in source_data.columns})
+
+    compare_by_content(spark, ds, TfidfTextTransformer(param_defaults), SparkTfidfTextTransformer(param_defaults))
+
 
 
 

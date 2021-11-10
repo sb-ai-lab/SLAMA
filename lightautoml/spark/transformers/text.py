@@ -12,6 +12,7 @@ from lightautoml.transformers.text import TunableTransformer, text_check
 
 import numpy as np
 
+
 class TfidfTextTransformer(SparkTransformer, TunableTransformer):
     """Simple Tfidf vectorizer."""
 
@@ -22,10 +23,13 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         "min_df": 5,
         "max_df": 1.0,
         "max_features": 30_000,
-        "ngram_range": (1, 1),
-        "analyzer": "word",
         "dtype": np.float32,
     }
+
+    # These properties are not supported
+    # cause there is no analogues in Spark ML
+    # "ngram_range": (1, 1),
+    # "analyzer": "word",
 
     @property
     def features(self) -> List[str]:
@@ -114,7 +118,13 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         for c in sdf.columns:
             # TODO: set params here from self.params
             tokenizer = Tokenizer(inputCol=c, outputCol=f"{c}_words")
-            count_tf = CountVectorizer(inputCol=tokenizer.getOutputCol(), outputCol=f"{c}_word_features")
+            count_tf = CountVectorizer(
+                minDF=self.params["min_df"],
+                maxDF=self.params["max_df"],
+                vocabSize=self.params["max_features"],
+                inputCol=tokenizer.getOutputCol(),
+                outputCol=f"{c}_word_features"
+            )
             idf = IDF(inputCol=count_tf.getOutputCol(), outputCol=f"{c}_idf_features")
             pipeline = Pipeline(stages=[tokenizer, count_tf, idf])
 
