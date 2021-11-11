@@ -10,7 +10,8 @@ from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import FloatType
 
 from lightautoml.dataset.base import LAMLDataset
-from lightautoml.image.image import DeepImageEmbedder
+from lightautoml.image.image import DeepImageEmbedder, CreateImageFeatures
+from lightautoml.image.utils import pil_loader
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.base import SparkTransformer
@@ -39,6 +40,109 @@ def path_or_vector_check(dataset: LAMLDataset):
         pass
 
     assert False, "All incoming features should have same roles of either Path or NumericVector"
+
+
+class ImageFeaturesTransformer(SparkTransformer):
+    """Simple image histogram."""
+
+    _fit_checks = (path_check,)
+    _transform_checks = ()
+    _fname_prefix = "img_hist"
+
+    def __init__(
+        self,
+        hist_size: int = 30,
+        is_hsv: bool = True,
+        n_jobs: int = 4,
+        loader: Callable = pil_loader,
+    ):
+        """Create normalized color histogram for rgb or hsv image.
+
+        Args:
+            hist_size: Number of bins for each channel.
+            is_hsv: Convert image to hsv.
+            n_jobs: Number of threads for multiprocessing.
+            loader: Callable for reading image from path.
+
+        """
+        self.hist_size = hist_size
+        self.is_hsv = is_hsv
+        self.n_jobs = n_jobs
+        self.loader = loader
+        self._fg: Optional[CreateImageFeatures] = None
+
+    @property
+    def features(self) -> List[str]:
+        """Features list.
+
+        Returns:
+            List of features names.
+
+        """
+        return self._features
+
+    def fit(self, dataset: SparkDataset):
+        """Init hist class and create feature names.
+
+        Args:
+            dataset: Pandas or Numpy dataset of text features.
+
+        Returns:
+            self.
+
+        """
+        # set transformer names and add checks
+        for check_func in self._fit_checks:
+            check_func(dataset)
+        # set transformer features
+        sdf = dataset.data
+        self._fg = CreateImageFeatures(self.hist_size, self.is_hsv, self.n_jobs, self.loader)
+        self._features = [f"{self._fname_prefix}__{c}" for c in sdf.columns]
+
+        return self
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        """Transform image dataset to color histograms.
+
+        Args:
+            dataset: Pandas or Numpy dataset of image paths.
+
+        Returns:
+            Dataset with encoded text.
+
+        """
+        # checks here
+        super().transform(dataset)
+
+        sdf = dataset.data
+
+        # transform
+        roles = []
+        new_cols = []
+        for c, out_col_name in zip(sdf.columns, self.features):
+            role = NumericVectorOrArrayRole(
+                size=len(self._fg.fe.get_names()),
+                element_col_name_template=[f"{self._fname_prefix}_{name}__{c}" for name in self._fg.fe.get_names()],
+                dtype=np.float32,
+                is_vector=False
+            )
+            fg_bcast = dataset.spark_session.sparkContext.broadcast(self._fg)
+
+            @pandas_udf("array<float>", PandasUDFType.SCALAR)
+            def calculate_embeddings(data: pd.Series) -> pd.Series:
+                fg = fg_bcast.value
+                img_embeds = pd.Series(list(fg.transform(data)))
+                return img_embeds
+
+            new_cols.append(calculate_embeddings(c).alias(out_col_name))
+            roles.append(role)
+
+        new_sdf = sdf.select(new_cols)
+
+        output = dataset.empty()
+        output.set_data(new_sdf, self.features, roles)
+
+        return output
 
 
 class AutoCVWrap(SparkTransformer):
@@ -183,7 +287,6 @@ class AutoCVWrap(SparkTransformer):
             trans, out_col_name = self._img_transformers[c]
             transformer_bcast = dataset.spark_session.sparkContext.broadcast(value=trans)
 
-            # @pandas_udf(ArrayType(ArrayType(FloatType())))
             @pandas_udf("array<float>", PandasUDFType.SCALAR)
             def calculate_embeddings(data: pd.Series) -> pd.Series:
                 transformer = transformer_bcast.value

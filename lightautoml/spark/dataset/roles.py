@@ -1,3 +1,5 @@
+from typing import Union, List
+
 from lightautoml.dataset.roles import NumericRole, Dtype
 import numpy as np
 
@@ -8,7 +10,7 @@ class NumericVectorOrArrayRole(NumericRole):
     def __init__(
             self,
             size: int,
-            element_col_name_template: str,
+            element_col_name_template: Union[str, List[str]],
             dtype: Dtype = np.float32,
             force_input: bool = False,
             prob: bool = False,
@@ -49,4 +51,8 @@ class NumericVectorOrArrayRole(NumericRole):
 
         """
         assert 0 <= position < self.size
-        return self._element_col_name_template.format(position)
+
+        if isinstance(self._element_col_name_template, str):
+            return self._element_col_name_template.format(position)
+
+        return self._element_col_name_template[position]
