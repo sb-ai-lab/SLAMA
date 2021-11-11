@@ -60,6 +60,10 @@ class AutoCVWrap(SparkTransformer):
         """
         return self._features
 
+    @property
+    def _image_loader(self):
+        raise NotImplementedError()
+
     def __init__(
             self,
             model="efficientnet-b0",
@@ -94,27 +98,20 @@ class AutoCVWrap(SparkTransformer):
         self.cache_dir = cache_dir
         self._img_transformers: Optional[Dict[str, Tuple[DeepImageEmbedder, str]]] = None
 
-        self.transformer = self._create_image_transformer(device,
+        self.transformer = DeepImageEmbedder(
+            device,
             n_jobs,
             random_state,
             is_advprop,
             model,
             weights_path,
             batch_size,
-            verbose)
+            verbose,
+            image_loader=self._image_loader
+        )
+
         self._emb_name = "DI_" + single_text_hash(self.embed_model)
         self.emb_size = self.transformer.model.feature_shape
-
-    def _create_image_transformer(self,
-                                  device: torch.device,
-                                  n_jobs: int,
-                                  random_state: int,
-                                  is_advprop: bool,
-                                  model: str,
-                                  weights_path: Optional[str],
-                                  batch_size: int,
-                                  verbose: bool) -> DeepImageEmbedder[_T]:
-        raise NotImplementedError()
 
     def fit(self, dataset: SparkDataset):
         """Fit chosen transformer and create feature names.
@@ -206,63 +203,25 @@ class AutoCVWrap(SparkTransformer):
 
 class PathBasedAutoCVWrap(AutoCVWrap):
     _fit_checks = (path_check,)
-
     _T = str
 
-    def __init__(
-            self,
-            image_loader: Callable,
-            model="efficientnet-b0",
-            weights_path: Optional[str] = None,
-            cache_dir: str = "./cache_CV",
-            subs: Optional = None,
-            device: torch.device = torch.device("cuda:0"),
-            n_jobs: int = 1,
-            random_state: int = 42,
-            is_advprop: bool = True,
-            batch_size: int = 128,
-            verbose: bool = True
-    ):
-        self.image_loader = image_loader
-        super().__init__(model, weights_path, cache_dir, subs,
-                         device, n_jobs, random_state, is_advprop, batch_size, verbose)
+    def __init__(self, image_loader: Callable, *args, **kwargs):
+        self.__image_loader = image_loader
+        super().__init__(*args, **kwargs)
 
-    def _create_image_transformer(self,
-                                  device: torch.device,
-                                  n_jobs: int,
-                                  random_state: int,
-                                  is_advprop: bool,
-                                  model: str,
-                                  weights_path: Optional[str],
-                                  batch_size: int,
-                                  verbose: bool) -> DeepImageEmbedder[_T]:
-        return DeepImageEmbedder(
-            device,
-            n_jobs,
-            random_state,
-            is_advprop,
-            model,
-            weights_path,
-            batch_size,
-            verbose,
-            image_loader=self.image_loader
-        )
+    @property
+    def _image_loader(self):
+        return self.__image_loader
 
 
 class ArrayBasedAutoCVWrap(AutoCVWrap):
     _fit_checks = (vector_or_array_check,)
     _T = bytes
 
-    def _create_image_transformer(self, device: torch.device, n_jobs: int, random_state: int, is_advprop: bool,
-                                  model: str, weights_path: Optional[str], batch_size: int, verbose: bool):
-        return DeepImageEmbedder(
-            device,
-            n_jobs,
-            random_state,
-            is_advprop,
-            model,
-            weights_path,
-            batch_size,
-            verbose,
-            image_loader=lambda x: x
-        )
+    def __init__(self, *args, **kwargs):
+        self.__image_loader = lambda x: x
+        super().__init__(*args, **kwargs)
+
+    @property
+    def _image_loader(self):
+        return self.__image_loader
