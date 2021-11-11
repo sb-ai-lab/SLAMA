@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
-from lightautoml.dataset.roles import TextRole, PathRole
+from lightautoml.dataset.roles import TextRole, PathRole, NumericRole
 from lightautoml.image.utils import pil_loader
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.image import PathBasedAutoCVWrap as SparkPathBasedAutoCVWrap
@@ -36,6 +36,8 @@ def test_path_auto_cv_wrap(spark: SparkSession):
     result_ds = smoke_check(spark, ds, SparkPathBasedAutoCVWrap(image_loader=pil_loader, device=torch.device("cpu:0")))
 
     assert result_ds.shape == ds.shape
+    assert all(isinstance(role, NumericVectorOrArrayRole) for c, role in result_ds.roles.items())
+    # TODO: add content check
 
 
 # def test_array_auto_cv_wrap(spark: SparkSession):
