@@ -24,8 +24,8 @@ def spark() -> SparkSession:
 
 def test_auto_cv_wrap(spark: SparkSession):
     source_data = pd.DataFrame(data={
-        "path_a": [f"resources/images/cat_{i + 1}.png" for i in range(3)],
-        "path_b": [f"resources/images/cate_{i + 1}.png" for i in range(3)]
+        "path_a": [f"resources/images/cat_{i + 1}.jpg" for i in range(3)],
+        "path_b": [f"resources/images/cat_{i + 1}.jpg" for i in range(3)]
     })
 
     ds = PandasDataset(source_data, roles={name: PathRole() for name in source_data.columns})

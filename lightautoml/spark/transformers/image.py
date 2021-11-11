@@ -1,12 +1,12 @@
 from array import ArrayType
 from copy import deepcopy
-from typing import List, Optional, Dict, Tuple, Callable, Sequence, TypeVar
+from typing import List, Optional, Dict, Tuple, Callable, Sequence, TypeVar, Iterator
 
 import torch
 import numpy as np
 import pandas as pd
 from pyspark import Broadcast
-from pyspark.sql.pandas.functions import pandas_udf
+from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import FloatType
 
 from lightautoml.dataset.base import LAMLDataset
@@ -62,7 +62,6 @@ class AutoCVWrap(SparkTransformer):
 
     def __init__(
             self,
-            spark: SparkSession,
             model="efficientnet-b0",
             weights_path: Optional[str] = None,
             cache_dir: str = "./cache_CV",
@@ -179,16 +178,19 @@ class AutoCVWrap(SparkTransformer):
             role = NumericVectorOrArrayRole(
                 size=self.emb_size,
                 element_col_name_template=f"{self._fname_prefix}_{self._emb_name}_{{}}__{c}",
-                dtype=np.float32
+                dtype=np.float32,
+                is_vector=False
             )
 
+            # TODO: probably transformer should be created on the worker side and not in the driver
             trans, out_col_name = self._img_transformers[c]
-            transformer_bcast = sdf (value=trans)
+            transformer_bcast = dataset.spark_session.sparkContext.broadcast(value=trans)
 
-            @pandas_udf(ArrayType(ArrayType(FloatType())))
-            def calculate_embeddings(data: pd.Series):
+            # @pandas_udf(ArrayType(ArrayType(FloatType())))
+            @pandas_udf("array<float>", PandasUDFType.SCALAR)
+            def calculate_embeddings(data: pd.Series) -> pd.Series:
                 transformer = transformer_bcast.value
-                img_embeds = pd.Series([transformer.transform(r) for r in data])
+                img_embeds = pd.Series(list(transformer.transform(data)))
                 return img_embeds
 
             new_cols.append(calculate_embeddings(c).alias(out_col_name))
@@ -264,5 +266,3 @@ class ArrayBasedAutoCVWrap(AutoCVWrap):
             verbose,
             image_loader=lambda x: x
         )
-
-

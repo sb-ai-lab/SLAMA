@@ -6,6 +6,7 @@ import pandas as pd
 import pyspark
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F
+from pyspark.sql.session import SparkSession
 
 from lightautoml.dataset.base import LAMLDataset, IntIdx, RowSlice, ColSlice, LAMLColumn, RolesDict
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
@@ -26,6 +27,10 @@ class SparkDataset(LAMLDataset):
                  **kwargs: Any):
         self._data = None
         super().__init__(data, None, roles, task, **kwargs)
+
+    @property
+    def spark_session(self):
+        return SparkSession.getActiveSession()
 
     @property
     def data(self) -> SparkDataFrame:
