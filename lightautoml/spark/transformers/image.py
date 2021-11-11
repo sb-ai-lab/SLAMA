@@ -42,6 +42,7 @@ def path_or_vector_check(dataset: LAMLDataset):
     assert False, "All incoming features should have same roles of either Path or NumericVector"
 
 
+# TODO: needs a vector based alternative
 class ImageFeaturesTransformer(SparkTransformer):
     """Simple image histogram."""
 

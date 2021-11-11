@@ -1,16 +1,16 @@
 from copy import copy
-from typing import Sequence, Any, Tuple, Union, Optional, NewType, List, cast
+from typing import Sequence, Any, Tuple, Union, Optional, NewType, List, cast, Dict
 
 import pandas as pd
 
 import pyspark
 from pyspark.ml.functions import vector_to_array
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.session import SparkSession
 
 from lightautoml.dataset.base import LAMLDataset, IntIdx, RowSlice, ColSlice, LAMLColumn, RolesDict
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
-from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.tasks import Task
 
@@ -109,12 +109,12 @@ class SparkDataset(LAMLDataset):
     def __setitem__(self, k: str, val: Any):
         raise NotImplementedError(f"The method is not supported by {self._dataset_type}")
 
-    def _materialize_to_pandas(self) -> pd.DataFrame:
+    def _materialize_to_pandas(self) -> Tuple[pd.DataFrame, Dict[str, ColumnRole]]:
         sdf = self.data
 
-        def expand_if_vector(col, role):
+        def expand_if_vec_or_arr(col, role) -> Tuple[List[Column], ColumnRole]:
             if not isinstance(role, NumericVectorOrArrayRole):
-                return [col]
+                return [col], role
             vrole = cast(NumericVectorOrArrayRole, role)
 
             def to_array(column):
@@ -122,18 +122,23 @@ class SparkDataset(LAMLDataset):
                     return vector_to_array(column)
                 return column
 
-            return [
+            arr = [
                 to_array(F.col(col))[i].alias(vrole.feature_name_at(i))
                 for i in range(vrole.size)
             ]
 
-        arr_cols = (expand_if_vector(c, self.roles[c]) for c in self.features)
-        all_cols = [c for c_arr in arr_cols for c in c_arr]
+            return arr, NumericRole(dtype=vrole.dtype)
+
+        arr_cols = (expand_if_vec_or_arr(c, self.roles[c]) for c in self.features)
+        all_cols_and_roles = [(c, role) for c_arr, role in arr_cols for c in c_arr]
+        all_cols = [scol for scol, _ in all_cols_and_roles]
 
         sdf = sdf.select(all_cols)
         data = sdf.toPandas()
 
-        return pd.DataFrame(data=data.to_dict())
+        # we do it this way, because scol doesn't have a method to retrive name as a str
+        all_roles = {c: r for c, (_, r) in zip(sdf.columns, all_cols_and_roles)}
+        return pd.DataFrame(data=data.to_dict()), all_roles
 
     def set_data(self, data: SparkDataFrame, features: List[str],  roles: NpRoles = None):
         """Inplace set data, features, roles for empty dataset.
@@ -147,12 +152,12 @@ class SparkDataset(LAMLDataset):
         super().set_data(data, None, roles)
 
     def to_pandas(self) -> PandasDataset:
-        data = self._materialize_to_pandas()
-        return PandasDataset(data=data, roles=self.roles, task=self.task)
+        data, roles = self._materialize_to_pandas()
+        return PandasDataset(data=data, roles=roles, task=self.task)
 
     def to_numpy(self) -> NumpyDataset:
-        data = self._materialize_to_pandas()
-        return NumpyDataset(data=data.to_numpy(), features=self.features, roles=self.roles, task=self.task)
+        data, roles = self._materialize_to_pandas()
+        return NumpyDataset(data=data.to_numpy(), features=list(data.columns), roles=roles, task=self.task)
 
     @staticmethod
     def _hstack(datasets: Sequence[Any]) -> Any:
