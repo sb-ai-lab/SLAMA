@@ -10,7 +10,7 @@ from pyspark.sql import functions as F
 from lightautoml.dataset.base import LAMLDataset, IntIdx, RowSlice, ColSlice, LAMLColumn, RolesDict
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
 from lightautoml.dataset.roles import ColumnRole
-from lightautoml.spark.dataset.roles import NumericVectorRole
+from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.tasks import Task
 
 SparkDataFrame = NewType('SparkDataFrame', pyspark.sql.DataFrame)
@@ -108,12 +108,17 @@ class SparkDataset(LAMLDataset):
         sdf = self.data
 
         def expand_if_vector(col, role):
-            if not isinstance(role, NumericVectorRole):
+            if not isinstance(role, NumericVectorOrArrayRole):
                 return [col]
-            vrole = cast(NumericVectorRole, role)
+            vrole = cast(NumericVectorOrArrayRole, role)
+
+            def to_array(column):
+                if vrole.is_vector:
+                    return vector_to_array(column)
+                return column
 
             return [
-                vector_to_array(F.col(col))[i].alias(vrole.feature_name_at(i))
+                to_array(F.col(col))[i].alias(vrole.feature_name_at(i))
                 for i in range(vrole.size)
             ]
 

@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole, TextRole
-from lightautoml.spark.dataset.roles import NumericVectorRole
+from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
 from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags
 from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
@@ -94,7 +94,7 @@ def test_tfidf_text_transformer(spark: SparkSession):
     new_cols = {f.split('__')[1] for f in result_ds.features}
     assert len(result_ds.features) == len(source_data.columns)
     assert len(new_cols) == len(source_data.columns)
-    assert all(isinstance(r, NumericVectorRole) for _, r in result_ds.roles.items())
+    assert all(isinstance(r, NumericVectorOrArrayRole) for _, r in result_ds.roles.items())
     assert result_ds.shape[0] == source_data.shape[0]
 
 

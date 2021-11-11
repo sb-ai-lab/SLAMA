@@ -2,8 +2,8 @@ from lightautoml.dataset.roles import NumericRole, Dtype
 import numpy as np
 
 
-class NumericVectorRole(NumericRole):
-    _name = "NumericVector"
+class NumericVectorOrArrayRole(NumericRole):
+    _name = "NumericOrArrayVector"
 
     def __init__(
             self,
@@ -13,6 +13,7 @@ class NumericVectorRole(NumericRole):
             force_input: bool = False,
             prob: bool = False,
             discretization: bool = False,
+            is_vector: bool = True
     ):
         """
         Args:
@@ -27,10 +28,15 @@ class NumericVectorRole(NumericRole):
         super().__init__(dtype, force_input, prob, discretization)
         self._size = size
         self._element_col_name_template = element_col_name_template
+        self._is_vector = is_vector
 
     @property
     def size(self):
         return self._size
+
+    @property
+    def is_vector(self):
+        return self._is_vector
 
     def feature_name_at(self, position: int) -> str:
         """

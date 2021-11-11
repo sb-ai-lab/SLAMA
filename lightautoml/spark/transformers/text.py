@@ -6,7 +6,7 @@ from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.feature import Tokenizer, CountVectorizer, IDF, Normalizer
 
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.dataset.roles import NumericVectorRole
+from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.text import TunableTransformer, text_check
 
@@ -175,7 +175,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
 
             curr_sdf = tfidf_model.transform(curr_sdf)
 
-            role = NumericVectorRole(
+            role = NumericVectorOrArrayRole(
                 size=vocab_size,
                 element_col_name_template=f"{self._fname_prefix}_{{}}__{idf_col}"
             )
