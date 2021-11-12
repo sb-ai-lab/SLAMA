@@ -7,10 +7,10 @@ from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole, TextRole
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
-from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags
+from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags, FillnaMedian as SparkFillnaMedian
 from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
 from lightautoml.transformers.decomposition import PCATransformer
-from lightautoml.transformers.numeric import NaNFlags
+from lightautoml.transformers.numeric import NaNFlags, FillnaMedian
 from . import compare_by_content, compare_by_metadata, smoke_check
 
 
@@ -33,6 +33,7 @@ def spark() -> SparkSession:
     spark.stop()
 
 
+@pytest.mark.skip
 def test_nan_flags(spark: SparkSession):
     nan_rate = 0.2
     source_data = pd.DataFrame(data={
@@ -47,6 +48,7 @@ def test_nan_flags(spark: SparkSession):
     compare_by_content(spark, ds, NaNFlags(nan_rate), SparkNaNFlags(nan_rate))
 
 
+@pytest.mark.skip
 def test_pca(spark: SparkSession):
     source_data = pd.DataFrame(data={
         "a": [0.1, 34.7, 21.34, 2.01, 5.0],
@@ -69,6 +71,7 @@ def test_pca(spark: SparkSession):
     assert all(spark_data.flatten()), f"Data should not contain None-s: {spark_data.flatten()}"
 
 
+@pytest.mark.skip
 def test_tfidf_text_transformer(spark: SparkSession):
     param_defaults = {
         "min_df": 1.0,
@@ -96,6 +99,20 @@ def test_tfidf_text_transformer(spark: SparkSession):
     assert len(new_cols) == len(source_data.columns)
     assert all(isinstance(r, NumericVectorOrArrayRole) for _, r in result_ds.roles.items())
     assert result_ds.shape[0] == source_data.shape[0]
+
+
+def test_fillna_medians(spark: SparkSession):
+    source_data = pd.DataFrame(data={
+        "a": [0.1, 34.7, float("nan"), 2.01, 5.0],
+        "b": [0.12, 1.7, 28.38, 0.002, 1.4],
+        "c": [0.11, 12.67, 89.1, float("nan"), -0.99],
+        "d": [0.001, 0.003, 0.5, 0.991, 0.1]
+    })
+
+    ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
+    _, spark_np_ds = compare_by_metadata(spark, ds, FillnaMedian(), SparkFillnaMedian())
+
+    assert ~np.isnan(spark_np_ds.data).all()
 
 
 

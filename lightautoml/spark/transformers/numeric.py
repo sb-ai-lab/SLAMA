@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import numpy as np
 from pyspark.sql import functions as F
@@ -54,6 +54,70 @@ class NaNFlags(SparkTransformer):
         new_sdf = sdf.select([
             F.isnan(c).astype(FloatType()).alias(feat)
             for feat, c in zip(self.features, self.nan_cols)
+        ])
+
+        output = dataset.empty()
+        output.set_data(new_sdf, self.features, NumericRole(np.float32))
+
+        return output
+
+
+class FillnaMedian(SparkTransformer):
+    """Fillna with median."""
+
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "fillnamed"
+
+    def __init__(self):
+        self.meds: Optional[Dict[str, float]] = None
+
+    def fit(self, dataset: SparkDataset):
+        """Approximately estimates medians.
+
+        Args:
+            dataset: SparkDataset with numerical features.
+
+        Returns:
+            self.
+
+        """
+        # set transformer names and add checks
+        super().fit(dataset)
+
+        sdf = dataset.data
+
+        rows = sdf\
+            .select([F.percentile_approx(c, 0.5).alias(c) for c in sdf.columns])\
+            .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in sdf.columns])\
+            .collect()
+
+        assert len(rows) == 1, f"Results count should be exactly 1, but it is {len(rows)}"
+
+        self.meds = rows[0].asDict()
+
+        self._features = [f"{self._fname_prefix}__{c}" for c in sdf.columns]
+
+        return self
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        """Transform - fillna with medians.
+
+        Args:
+            dataset: SparkDataset of numerical features
+
+        Returns:
+            SparkDataset with replaced NaN with medians
+
+        """
+        # checks here
+        super().transform(dataset)
+
+        sdf = dataset.data
+
+        new_sdf = sdf.select([
+            F.when(F.isnan(c), self.meds[c]).otherwise(F.col(c)).alias(f"{self._fname_prefix}__{c}")
+            for c in sdf.columns
         ])
 
         output = dataset.empty()
