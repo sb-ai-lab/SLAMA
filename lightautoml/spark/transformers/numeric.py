@@ -169,3 +169,68 @@ class LogOdds(SparkTransformer):
         output.set_data(new_sdf, self.features, NumericRole(np.float32))
 
         return output
+
+
+class StandardScaler(SparkTransformer):
+    """Classic StandardScaler."""
+
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "scaler"
+
+    def __init__(self):
+        super().__init__()
+        self._means_and_stds: Optional[Dict[str, float]] = None
+
+    def fit(self, dataset: SparkDataset):
+        """Estimate means and stds.
+
+        Args:
+            dataset: Pandas or Numpy dataset of categorical features.
+
+        Returns:
+            self.
+
+        """
+        # set transformer names and add checks
+        super().fit(dataset)
+
+        sdf = dataset.data
+
+        means = [F.mean(c).alias(f"mean_{c}") for c in sdf.columns]
+        stds = [
+            F.when(F.stddev(c) == 0, 1).when(F.isnan(F.stddev(c)), 1).otherwise(F.stddev(c)).alias(f"std_{c}")
+            for c in sdf.columns
+        ]
+
+        self._means_and_stds = sdf\
+            .select(means + stds)\
+            .collect()[0].asDict()
+
+        return self
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        """Scale test data.
+
+        Args:
+            dataset: Pandas or Numpy dataset of numeric features.
+
+        Returns:
+            Numpy dataset with encoded labels.
+
+        """
+        # checks here
+        super().transform(dataset)
+
+        sdf = dataset.data
+
+        new_sdf = sdf.select([
+            ((F.col(c) - self._means_and_stds[f"mean_{c}"]) / self._means_and_stds[f"std_{c}"]).alias(f"{self._fname_prefix}__{c}")
+            for c in sdf.columns
+        ])
+
+        # create resulted
+        output = dataset.empty()
+        output.set_data(new_sdf, self.features, NumericRole(np.float32))
+
+        return output
