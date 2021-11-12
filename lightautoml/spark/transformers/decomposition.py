@@ -4,7 +4,7 @@ from pyspark.ml.feature import PCA, VectorAssembler
 from pyspark.ml.functions import vector_to_array, array_to_vector
 
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.dataset import SparkDataset
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.decomposition import numeric_check
 

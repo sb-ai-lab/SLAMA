@@ -1,14 +1,18 @@
 from copy import copy
-from typing import Sequence, Any, Tuple, Union, Optional, NewType, List, cast
+from typing import Sequence, Any, Tuple, Union, Optional, NewType, List, cast, Dict
 
 import pandas as pd
-import numpy as np
-import pyspark
 
-from ..dataset.base import LAMLDataset, IntIdx, RowSlice, ColSlice, LAMLColumn, RolesDict
-from ..dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
-from ..dataset.roles import NumericRole, ColumnRole
-from ..tasks import Task
+import pyspark
+from pyspark.ml.functions import vector_to_array
+from pyspark.sql import functions as F, Column
+from pyspark.sql.session import SparkSession
+
+from lightautoml.dataset.base import LAMLDataset, IntIdx, RowSlice, ColSlice, LAMLColumn, RolesDict
+from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
+from lightautoml.dataset.roles import ColumnRole, NumericRole
+from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
+from lightautoml.tasks import Task
 
 SparkDataFrame = NewType('SparkDataFrame', pyspark.sql.DataFrame)
 
@@ -23,6 +27,10 @@ class SparkDataset(LAMLDataset):
                  **kwargs: Any):
         self._data = None
         super().__init__(data, None, roles, task, **kwargs)
+
+    @property
+    def spark_session(self):
+        return SparkSession.getActiveSession()
 
     @property
     def data(self) -> SparkDataFrame:
@@ -101,6 +109,37 @@ class SparkDataset(LAMLDataset):
     def __setitem__(self, k: str, val: Any):
         raise NotImplementedError(f"The method is not supported by {self._dataset_type}")
 
+    def _materialize_to_pandas(self) -> Tuple[pd.DataFrame, Dict[str, ColumnRole]]:
+        sdf = self.data
+
+        def expand_if_vec_or_arr(col, role) -> Tuple[List[Column], ColumnRole]:
+            if not isinstance(role, NumericVectorOrArrayRole):
+                return [col], role
+            vrole = cast(NumericVectorOrArrayRole, role)
+
+            def to_array(column):
+                if vrole.is_vector:
+                    return vector_to_array(column)
+                return column
+
+            arr = [
+                to_array(F.col(col))[i].alias(vrole.feature_name_at(i))
+                for i in range(vrole.size)
+            ]
+
+            return arr, NumericRole(dtype=vrole.dtype)
+
+        arr_cols = (expand_if_vec_or_arr(c, self.roles[c]) for c in self.features)
+        all_cols_and_roles = [(c, role) for c_arr, role in arr_cols for c in c_arr]
+        all_cols = [scol for scol, _ in all_cols_and_roles]
+
+        sdf = sdf.select(all_cols)
+        data = sdf.toPandas()
+
+        # we do it this way, because scol doesn't have a method to retrive name as a str
+        all_roles = {c: r for c, (_, r) in zip(sdf.columns, all_cols_and_roles)}
+        return pd.DataFrame(data=data.to_dict()), all_roles
+
     def set_data(self, data: SparkDataFrame, features: List[str],  roles: NpRoles = None):
         """Inplace set data, features, roles for empty dataset.
 
@@ -113,18 +152,12 @@ class SparkDataset(LAMLDataset):
         super().set_data(data, None, roles)
 
     def to_pandas(self) -> PandasDataset:
-        # TODO: need to fix type here
-        # TODO: probably size check would be a nice feature here
-        raise NotImplementedError("not implemented yet")
-        data = self.data.toPandas()
-        return PandasDataset(data=data, roles=self.roles, task=self.task)
+        data, roles = self._materialize_to_pandas()
+        return PandasDataset(data=data, roles=roles, task=self.task)
 
     def to_numpy(self) -> NumpyDataset:
-        # TODO: need to fix type here
-        # TODO: probably size check would be a nice feature here
-        # raise NotImplementedError("not implemented yet")
-        data = self.data.toPandas()
-        return NumpyDataset(data=data.to_numpy(), features=self.features, roles=self.roles, task=self.task)
+        data, roles = self._materialize_to_pandas()
+        return NumpyDataset(data=data.to_numpy(), features=list(data.columns), roles=roles, task=self.task)
 
     @staticmethod
     def _hstack(datasets: Sequence[Any]) -> Any:
