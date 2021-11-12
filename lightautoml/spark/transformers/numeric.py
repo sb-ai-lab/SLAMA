@@ -225,7 +225,7 @@ class StandardScaler(SparkTransformer):
         sdf = dataset.data
 
         new_sdf = sdf.select([
-            ((F.col(c) - self._means_and_stds[f"mean_{c}"]) / self._means_and_stds[f"std_{c}"]).alias(f"{self._fname_prefix}__{c}")
+            ((F.col(c) - self._means_and_stds[f"mean_{c}"]) / F.lit(self._means_and_stds[f"std_{c}"])).alias(f"{self._fname_prefix}__{c}")
             for c in sdf.columns
         ])
 

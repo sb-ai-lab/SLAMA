@@ -139,7 +139,9 @@ def test_standard_scaler(spark: SparkSession):
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    compare_by_content(spark, ds, StandardScaler(), SparkStandardScaler())
+    _, spark_np_ds = compare_by_metadata(spark, ds, StandardScaler(), SparkStandardScaler())
+
+    assert ~np.isnan(spark_np_ds.data).all()
 
 
 

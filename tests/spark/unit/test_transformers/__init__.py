@@ -71,10 +71,13 @@ def compare_transformers_results(spark: SparkSession,
         trans_data_result: np.ndarray = spark_np_ds.data
         # TODO: fix type checking here
         # compare content equality of numpy arrays
-        assert (trans_data[:, features] == trans_data_result[:, features]).all(), \
+        diff = (trans_data[:, features] - trans_data_result[:, features])
+        assert (diff < 0.001).all(), \
             f"Results of the LAMA's transformer and the Spark based transformer are not equal: " \
             f"\n\nLAMA: \n{trans_data}" \
-            f"\n\nSpark: \n{trans_data_result}"
+            f"\n\nSpark: \n{trans_data_result}" \
+            f"\n\nDiff: \n{diff}" \
+            f"\n\nCompare matrix: \n{diff < 0.001}"
 
     return lama_np_ds, spark_np_ds
 
