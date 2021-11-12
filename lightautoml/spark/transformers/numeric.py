@@ -1,7 +1,9 @@
 from typing import Optional, Dict
 
 import numpy as np
+import pandas as pd
 from pyspark.sql import functions as F
+from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import FloatType
 
 from lightautoml.dataset.roles import NumericRole
@@ -120,6 +122,49 @@ class FillnaMedian(SparkTransformer):
             for c in sdf.columns
         ])
 
+        output = dataset.empty()
+        output.set_data(new_sdf, self.features, NumericRole(np.float32))
+
+        return output
+
+
+class LogOdds(SparkTransformer):
+    """Convert probs to logodds."""
+
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "logodds"
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        """Transform - convert num values to logodds.
+
+        Args:
+            dataset: Pandas or Numpy dataset of categorical features.
+
+        Returns:
+            Numpy dataset with encoded labels.
+
+        """
+        # checks here
+        super().transform(dataset)
+
+        sdf = dataset.data
+
+        # # transform
+        # # TODO: maybe np.exp and then cliping and logodds?
+        # data = np.clip(data, 1e-7, 1 - 1e-7)
+        # data = np.log(data / (1 - data))
+
+        new_sdf = sdf.select([
+            F.when(F.col(c) < 1e-7, 1e-7)
+            .when(F.col(c) > 1 - 1e-7, 1 - 1e-7)
+            .otherwise(F.col(c))
+            .alias(c)
+            for c in sdf.columns
+        ])\
+        .select([F.log(F.col(c) / (F.lit(1) - F.col(c))).alias(f"{self._fname_prefix}__{c}") for c in sdf.columns])
+
+        # create resulted
         output = dataset.empty()
         output.set_data(new_sdf, self.features, NumericRole(np.float32))
 
