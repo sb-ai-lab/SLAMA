@@ -4,13 +4,15 @@ import pytest
 from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
-from lightautoml.dataset.roles import NumericRole, TextRole
+from lightautoml.dataset.roles import NumericRole, TextRole, CategoryRole
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
 from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags, \
     FillnaMedian as SparkFillnaMedian, LogOdds as SparkLogOdds, StandardScaler as SparkStandardScaler, \
     QuantileBinning as SparkQuantileBinning
+from lightautoml.spark.transformers.categorical import OHEEncoder as SparkOHEEncoder
 from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
+from lightautoml.transformers.categorical import OHEEncoder
 from lightautoml.transformers.decomposition import PCATransformer
 from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, LogOdds, StandardScaler, QuantileBinning
 from . import compare_by_content, compare_by_metadata, smoke_check
@@ -145,6 +147,7 @@ def test_standard_scaler(spark: SparkSession):
     assert ~np.isnan(spark_np_ds.data).all()
 
 
+@pytest.mark.skip
 def test_quantile_binning(spark: SparkSession):
     n_bins = 10
     source_data = pd.DataFrame(data={
@@ -161,3 +164,17 @@ def test_quantile_binning(spark: SparkSession):
     assert ~np.isnan(spark_np_ds.data).all()
     assert (spark_np_ds.data <= n_bins).all()
     assert (spark_np_ds.data >= 0).all()
+
+
+def test_ohe(spark: SparkSession):
+    make_sparse = False
+    source_data = pd.DataFrame(data={
+        "a": [1, 4, 5, 4, 2, 3],
+        "b": [1, 4, 4, 4, 2, 3],
+        "c": [1, 1, 1, 1, 1, 1],
+        "d": [3, 1, 3, 2, 2, 1]
+    })
+
+    ds = PandasDataset(source_data, roles={name: CategoryRole(dtype=np.int32, label_encoded=True) for name in source_data.columns})
+    _, _ = compare_by_metadata(spark, ds, OHEEncoder(make_sparse), SparkOHEEncoder(make_sparse))
+
