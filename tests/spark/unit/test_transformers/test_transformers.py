@@ -149,11 +149,15 @@ def test_quantile_binning(spark: SparkSession):
     n_bins = 10
     source_data = pd.DataFrame(data={
         "a": [0.1, 34.7, 23.12, 2.01, 5.0],
-        "b": [0.12, 1.7, 28.38, 0.002, 1.4],
+        "b": [0.12, 1.7, 28.38, 0.002, float("nan")],
         "c": [0.11, 12.67, 89.1, 500.0, -0.99],
         "d": [0.001, 0.003, 0.5, 0.991, 0.1]
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
+    lama_np_ds, spark_np_ds = compare_by_metadata(spark, ds, QuantileBinning(n_bins), SparkQuantileBinning(n_bins))
+    # TODO: add more advanced check
 
-    compare_by_content(spark, ds, QuantileBinning(n_bins), SparkQuantileBinning(n_bins))
+    assert ~np.isnan(spark_np_ds.data).all()
+    assert (spark_np_ds.data <= n_bins).all()
+    assert (spark_np_ds.data >= 0).all()

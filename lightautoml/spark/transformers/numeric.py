@@ -302,7 +302,7 @@ class QuantileBinning(SparkTransformer):
             .transform(sdf)\
             .select([F.col(c).astype(IntegerType()).alias(c) for c in self._bucketizer.getOutputCols()])\
             .select([
-                F.when(F.col(c) == self.nbins, 0).otherwise(F.col(c) + 1)
+                F.when(F.col(c) == self.nbins, 0).otherwise(F.col(c) + 1).alias(c)
                 for c in self._bucketizer.getOutputCols()
             ])
 
