@@ -8,10 +8,11 @@ from lightautoml.dataset.roles import NumericRole, TextRole
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
 from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags, \
-    FillnaMedian as SparkFillnaMedian, LogOdds as SparkLogOdds, StandardScaler as SparkStandardScaler
+    FillnaMedian as SparkFillnaMedian, LogOdds as SparkLogOdds, StandardScaler as SparkStandardScaler, \
+    QuantileBinning as SparkQuantileBinning
 from lightautoml.spark.transformers.text import TfidfTextTransformer as SparkTfidfTextTransformer
 from lightautoml.transformers.decomposition import PCATransformer
-from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, LogOdds, StandardScaler
+from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, LogOdds, StandardScaler, QuantileBinning
 from . import compare_by_content, compare_by_metadata, smoke_check
 
 
@@ -129,7 +130,7 @@ def test_logodds(spark: SparkSession):
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
     compare_by_content(spark, ds, LogOdds(), SparkLogOdds())
 
-
+@pytest.mark.skip
 def test_standard_scaler(spark: SparkSession):
     source_data = pd.DataFrame(data={
         "a": [0.1, 34.7, 23.12, 2.01, 5.0],
@@ -144,4 +145,15 @@ def test_standard_scaler(spark: SparkSession):
     assert ~np.isnan(spark_np_ds.data).all()
 
 
+def test_quantile_binning(spark: SparkSession):
+    n_bins = 10
+    source_data = pd.DataFrame(data={
+        "a": [0.1, 34.7, 23.12, 2.01, 5.0],
+        "b": [0.12, 1.7, 28.38, 0.002, 1.4],
+        "c": [0.11, 12.67, 89.1, 500.0, -0.99],
+        "d": [0.001, 0.003, 0.5, 0.991, 0.1]
+    })
 
+    ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
+
+    compare_by_content(spark, ds, QuantileBinning(n_bins), SparkQuantileBinning(n_bins))

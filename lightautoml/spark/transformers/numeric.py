@@ -2,11 +2,12 @@ from typing import Optional, Dict
 
 import numpy as np
 import pandas as pd
+from pyspark.ml.feature import QuantileDiscretizer, Bucketizer
 from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-from pyspark.sql.types import FloatType
+from pyspark.sql.types import FloatType, IntegerType
 
-from lightautoml.dataset.roles import NumericRole
+from lightautoml.dataset.roles import NumericRole, CategoryRole
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.transformers.numeric import numeric_check
@@ -232,5 +233,80 @@ class StandardScaler(SparkTransformer):
         # create resulted
         output = dataset.empty()
         output.set_data(new_sdf, self.features, NumericRole(np.float32))
+
+        return output
+
+
+class QuantileBinning(SparkTransformer):
+    """Discretization of numeric features by quantiles."""
+
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "qntl"
+
+    def __init__(self, nbins: int = 10):
+        """
+
+        Args:
+            nbins: maximum number of bins.
+                One more will be added to keep NaN values (bin num = 0)
+
+        """
+        self.nbins = nbins
+        self._bucketizer: Optional[Bucketizer] = None
+
+    def fit(self, dataset: SparkDataset):
+        """Estimate bins borders.
+
+        Args:
+            dataset: Pandas or Numpy dataset of numeric features.
+
+        Returns:
+            self.
+
+        """
+        # set transformer names and add checks
+        super().fit(dataset)
+
+        sdf = dataset.data
+
+        qdisc = QuantileDiscretizer(numBucketsArray=[self.nbins for _ in sdf.columns],
+                                    handleInvalid="keep",
+                                    inputCols=[c for c in sdf.columns],
+                                    outputCols=[f"{self._fname_prefix}__{c}" for c in sdf.columns])
+
+        self._bucketizer = qdisc.fit(sdf)
+
+        return self
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        """Apply bin borders.
+
+        Args:
+            dataset: Spark dataset of numeric features.
+
+        Returns:
+            Spark dataset with encoded labels.
+
+        """
+        # checks here
+        super().transform(dataset)
+
+        sdf = dataset.data
+
+        # we do the last select to renumerate our bins
+        # 0 bin is reserved for NaN's and the rest just shifted by +1
+        # ...or keep (keep invalid values in a special additional bucket)
+        # see: https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.feature.QuantileDiscretizer.html
+        new_sdf = self._bucketizer\
+            .transform(sdf)\
+            .select([F.col(c).astype(IntegerType()).alias(c) for c in self._bucketizer.getOutputCols()])\
+            .select([
+                F.when(F.col(c) == self.nbins, 0).otherwise(F.col(c) + 1)
+                for c in self._bucketizer.getOutputCols()
+            ])
+
+        output = dataset.empty()
+        output.set_data(new_sdf, self.features, CategoryRole(np.int32, label_encoded=True))
 
         return output
