@@ -37,7 +37,6 @@ def spark() -> SparkSession:
     spark.stop()
 
 
-@pytest.mark.skip
 def test_nan_flags(spark: SparkSession):
     nan_rate = 0.2
     source_data = pd.DataFrame(data={
@@ -52,7 +51,6 @@ def test_nan_flags(spark: SparkSession):
     compare_by_content(spark, ds, NaNFlags(nan_rate), SparkNaNFlags(nan_rate))
 
 
-@pytest.mark.skip
 def test_pca(spark: SparkSession):
     source_data = pd.DataFrame(data={
         "a": [0.1, 34.7, 21.34, 2.01, 5.0],
@@ -75,7 +73,6 @@ def test_pca(spark: SparkSession):
     assert all(spark_data.flatten()), f"Data should not contain None-s: {spark_data.flatten()}"
 
 
-@pytest.mark.skip
 def test_tfidf_text_transformer(spark: SparkSession):
     param_defaults = {
         "min_df": 1.0,
@@ -98,14 +95,11 @@ def test_tfidf_text_transformer(spark: SparkSession):
 
     result_ds = smoke_check(spark, ds, SparkTfidfTextTransformer(param_defaults))
 
-    new_cols = {f.split('__')[1] for f in result_ds.features}
-    assert len(result_ds.features) == len(source_data.columns)
-    assert len(new_cols) == len(source_data.columns)
-    assert all(isinstance(r, NumericVectorOrArrayRole) for _, r in result_ds.roles.items())
+    assert len(result_ds.features) == len(source_data.columns) * param_defaults["max_features"]
+    assert all(isinstance(r, NumericRole) for _, r in result_ds.roles.items())
     assert result_ds.shape[0] == source_data.shape[0]
 
 
-@pytest.mark.skip
 def test_fillna_medians(spark: SparkSession):
     source_data = pd.DataFrame(data={
         "a": [0.1, 34.7, float("nan"), 2.01, 5.0],
@@ -120,19 +114,6 @@ def test_fillna_medians(spark: SparkSession):
     assert ~np.isnan(spark_np_ds.data).all()
 
 
-@pytest.mark.skip
-def test_logodds(spark: SparkSession):
-    source_data = pd.DataFrame(data={
-        "a": [0.1, 34.7, float(1e-10), 2.01, 5.0],
-        "b": [0.12, 1.7, 28.38, 0.002, 1.4],
-        "c": [0.11, 12.67, 89.1, 500.0, -0.99],
-        "d": [0.001, 0.003, 0.5, 0.991, 0.1]
-    })
-
-    ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    compare_by_content(spark, ds, LogOdds(), SparkLogOdds())
-
-@pytest.mark.skip
 def test_standard_scaler(spark: SparkSession):
     source_data = pd.DataFrame(data={
         "a": [0.1, 34.7, 23.12, 2.01, 5.0],
@@ -147,7 +128,19 @@ def test_standard_scaler(spark: SparkSession):
     assert ~np.isnan(spark_np_ds.data).all()
 
 
-@pytest.mark.skip
+@pytest.mark.skip("Need to check implementation again")
+def test_logodds(spark: SparkSession):
+    source_data = pd.DataFrame(data={
+        "a": [0.1, 34.7, float(1e-10), 2.01, 5.0],
+        "b": [0.12, 1.7, 28.38, 0.002, 1.4],
+        "c": [0.11, 12.67, 89.1, 500.0, -0.99],
+        "d": [0.001, 0.003, 0.5, 0.991, 0.1]
+    })
+
+    ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
+    compare_by_content(spark, ds, LogOdds(), SparkLogOdds())
+
+
 def test_quantile_binning(spark: SparkSession):
     n_bins = 10
     source_data = pd.DataFrame(data={
