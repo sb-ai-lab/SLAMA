@@ -40,17 +40,13 @@ class PCATransformer(SparkTransformer):
         self.pca_output_col = "pcaFeatures"
         self._features = None
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Fit algorithm on dataset.
 
         Args:
             dataset: Sparse or Numpy dataset of text features.
 
         """
-        # set transformer names and add checks
-        for check_func in self._fit_checks:
-            check_func(dataset)
-        # set transformer features
 
         sdf = dataset.data
         self.n_components = np.minimum(self.n_components, len(sdf.columns) - 1)
@@ -70,7 +66,7 @@ class PCATransformer(SparkTransformer):
         self._features = list(feats)
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform input dataset to PCA representation.
 
         Args:
@@ -80,8 +76,6 @@ class PCATransformer(SparkTransformer):
             Numpy dataset with text embeddings.
 
         """
-        # checks here
-        super().transform(dataset)
 
         assert self.pca, "This transformer has not been fitted yet"
 

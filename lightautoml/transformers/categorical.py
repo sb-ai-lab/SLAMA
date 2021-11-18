@@ -164,7 +164,8 @@ class LabelEncoder(LAMLTransformer):
                 .sort_values([i, "index"], ascending=[False, True])
                 .set_index("index")
             )
-            vals = cnts[cnts > co].index.values
+            # TODO SPARK-LAMA: Fixed
+            vals = cnts[cnts[i] > co].index.values
             self.dicts[i] = Series(np.arange(vals.shape[0], dtype=np.int32) + 1, index=vals)
 
         return self

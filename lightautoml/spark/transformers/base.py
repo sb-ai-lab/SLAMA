@@ -6,8 +6,29 @@ from lightautoml.transformers.base import LAMLTransformer
 
 
 class SparkTransformer(LAMLTransformer):
-    def fit(self, dataset: LAMLDataset) -> "SparkTransformer":
-        return cast(SparkTransformer, super().fit(dataset))
+
+    _features = []
+
+    def fit(self, dataset: SparkDataset) -> "SparkTransformer":
+
+        self._features = dataset.features
+        for check_func in self._fit_checks:
+            check_func(dataset)
+
+        return self._fit(dataset)
+
+    def _fit(self, dataset: SparkDataset) -> "SparkTransformer":
+        return self
 
     def transform(self, dataset: SparkDataset) -> SparkDataset:
-        return cast(SparkDataset, super(SparkTransformer, self).transform(dataset))
+        for check_func in self._transform_checks:
+            check_func(dataset)
+
+        return self._transform(dataset)
+
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+        return dataset
+
+    def fit_transform(self, dataset: SparkDataset) -> SparkDataset:
+        self.fit(dataset)
+        return self.transform(dataset)

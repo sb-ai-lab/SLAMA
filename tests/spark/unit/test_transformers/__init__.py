@@ -1,15 +1,32 @@
-from typing import Tuple, get_args, cast, List
+from typing import Tuple, get_args, cast, List, Optional, Dict
 
 import pytest
 from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
+from lightautoml.dataset.roles import ColumnRole
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.spark.utils import from_pandas_to_spark
 from lightautoml.transformers.base import LAMLTransformer
 from lightautoml.transformers.numeric import NumpyTransformable
 
 import numpy as np
+import pandas as pd
+
+# NOTE!!!
+# All tests require PYSPARK_PYTHON env variable to be set
+# for example: PYSPARK_PYTHON=/home/nikolay/.conda/envs/LAMA/bin/python
+
+
+@pytest.fixture(scope="session")
+def spark() -> SparkSession:
+    spark = SparkSession.builder.config("master", "local[1]").getOrCreate()
+
+    print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
+
+    yield spark
+
+    spark.stop()
 
 
 def compare_transformers_results(spark: SparkSession,
@@ -34,6 +51,8 @@ def compare_transformers_results(spark: SparkSession,
     t_lama.fit(ds)
     transformed_ds = t_lama.transform(ds)
 
+    # print(f"Transformed LAMA: {transformed_ds.data}")
+
     assert isinstance(transformed_ds, get_args(NumpyTransformable)), \
         f"The returned dataset doesn't belong numpy covertable types {NumpyTransformable} and " \
         f"thus cannot be checked againt the resulting spark dataset." \
@@ -41,10 +60,17 @@ def compare_transformers_results(spark: SparkSession,
 
     lama_np_ds = cast(NumpyTransformable, transformed_ds).to_numpy()
 
+    print(f"\nTransformed LAMA: \n{lama_np_ds}")
+    # for row in lama_np_ds:
+    #     print(row)
+
     t_spark.fit(sds)
     transformed_sds = t_spark.transform(sds)
 
     spark_np_ds = transformed_sds.to_numpy()
+    print(f"\nTransformed SPRK: \n{spark_np_ds}")
+    # for row in spark_np_ds:
+    #     print(row)
 
     # One can compare lists, sets and dicts in Python using '==' operator
     # For dicts, for instance, pythons checks presence of the same keya in both dicts
@@ -71,13 +97,10 @@ def compare_transformers_results(spark: SparkSession,
         trans_data_result: np.ndarray = spark_np_ds.data
         # TODO: fix type checking here
         # compare content equality of numpy arrays
-        diff = (trans_data[:, features] - trans_data_result[:, features])
-        assert (diff < 0.001).all(), \
+        assert np.allclose(trans_data[:, features], trans_data_result[:, features], equal_nan=True), \
             f"Results of the LAMA's transformer and the Spark based transformer are not equal: " \
             f"\n\nLAMA: \n{trans_data}" \
-            f"\n\nSpark: \n{trans_data_result}" \
-            f"\n\nDiff: \n{diff}" \
-            f"\n\nCompare matrix: \n{diff < 0.001}"
+            f"\n\nSpark: \n{trans_data_result}"
 
     return lama_np_ds, spark_np_ds
 
@@ -100,9 +123,9 @@ def compare_by_content(spark: SparkSession,
 
 
 def compare_by_metadata(spark: SparkSession,
-                       ds: PandasDataset,
-                       t_lama: LAMLTransformer,
-                       t_spark: SparkTransformer) -> Tuple[NumpyDataset, NumpyDataset]:
+                        ds: PandasDataset,
+                        t_lama: LAMLTransformer,
+                        t_spark: SparkTransformer) -> Tuple[NumpyDataset, NumpyDataset]:
     """
 
         Args:
@@ -129,3 +152,24 @@ def smoke_check(spark: SparkSession, ds: PandasDataset, t_spark: SparkTransforme
     spark_np_ds = transformed_sds.to_numpy()
 
     return spark_np_ds
+
+
+class DatasetForTest:
+    def __init__(self, path: Optional[str] = None,
+                 df: Optional[pd.DataFrame] = None,
+                 columns: Optional[List[str]] = None,
+                 roles: Optional[Dict] = None,
+                 default_role: Optional[ColumnRole] = None):
+
+        if path is not None:
+            self.dataset = pd.read_csv(path)
+        else:
+            self.dataset = df
+
+        if columns is not None:
+            self.dataset = self.dataset[columns]
+
+        if roles is None:
+            self.roles = {name: default_role for name in self.dataset.columns}
+        else:
+            self.roles = roles
