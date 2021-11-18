@@ -2,7 +2,7 @@ from copy import copy
 from typing import Sequence, Any, Tuple, Union, Optional, NewType, List, cast, Dict
 
 import pandas as pd
-
+import numpy as np
 import pyspark
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as F, Column

@@ -5,15 +5,21 @@ import gensim
 import numpy as np
 import pandas as pd
 from pyspark.ml import Pipeline, PipelineModel
-from pyspark.ml.feature import Tokenizer, CountVectorizer, IDF, Normalizer
+from pyspark.ml.feature import RegexTokenizer as PysparkRegexTokenizer
+from pyspark.ml.feature import Tokenizer as PysparkTokenizer, CountVectorizer, IDF, Normalizer
+from pyspark.sql.functions import concat_ws
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from sklearn.base import TransformerMixin
 
+from lightautoml.dataset.roles import TextRole
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.base import SparkTransformer
 from lightautoml.text.dl_transformers import DLTransformer
-from lightautoml.transformers.text import TunableTransformer, text_check, model_by_name, logger
+from lightautoml.text.tokenizer import BaseTokenizer
+from lightautoml.text.tokenizer import SimpleEnTokenizer
+from lightautoml.transformers.text import TunableTransformer, model_by_name, logger
+from lightautoml.transformers.text import text_check
 
 
 class TfidfTextTransformer(SparkTransformer, TunableTransformer):
@@ -122,7 +128,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         feats = []
         for c in sdf.columns:
             # TODO: set params here from self.params
-            tokenizer = Tokenizer(inputCol=c, outputCol=f"{c}_words")
+            tokenizer = PysparkTokenizer(inputCol=c, outputCol=f"{c}_words")
             count_tf = CountVectorizer(
                 minDF=self.params["min_df"],
                 maxDF=self.params["max_df"],
@@ -492,3 +498,63 @@ class AutoNLPWrap(SparkTransformer):
         if mode is not None:
             logger.info2("Unknown sentence scaler mode: sent_scaler={}, " "no normalization will be used".format(mode))
         return 1
+
+
+class Tokenizer(SparkTransformer):
+    _fit_checks = (text_check,)
+    _transform_checks = ()
+    _fname_prefix = "tokenized"
+
+    def __init__(self, tokenizer: BaseTokenizer = SimpleEnTokenizer()):
+        """
+        Args:
+            tokenizer: text tokenizer.
+        """
+        self.tokenizer = tokenizer
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+
+        spark_data_frame = dataset.data
+        spark_column_names = spark_data_frame.schema.names
+
+        for i, column in enumerate(spark_column_names):
+            # PysparkTokenizer transforms strings to lowercase, do not use it
+            # tokenizer = PysparkTokenizer(inputCol=column, outputCol=self._fname_prefix + "__" + column)
+
+            tokenizer = PysparkRegexTokenizer(inputCol=column, outputCol=self._fname_prefix + "__" + column, toLowercase=False)
+            tokenized = tokenizer.transform(spark_data_frame)
+            spark_data_frame = tokenized
+            spark_data_frame = spark_data_frame.drop(column)
+
+        output = dataset.empty()
+        output.set_data(spark_data_frame, self.features, TextRole(np.str))
+
+        return output
+
+
+class ConcatTextTransformer(SparkTransformer):
+    _fit_checks = (text_check,)
+    _transform_checks = ()
+    _fname_prefix = "concated"
+
+    def __init__(self, special_token: str = " [SEP] "):
+        """
+
+        Args:
+            special_token: Add special token between columns.
+
+        """
+        self.special_token = special_token
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        spark_data_frame = dataset.data
+        spark_column_names = spark_data_frame.schema.names
+
+        colum_name = self._fname_prefix + "__" + "__".join(spark_column_names)
+        concatExpr = concat_ws(self.special_token, *spark_column_names).alias(colum_name)
+        concated = spark_data_frame.select(concatExpr)
+
+        output = dataset.empty()
+        output.set_data(concated, self.features, TextRole(np.str))
+
+        return output
