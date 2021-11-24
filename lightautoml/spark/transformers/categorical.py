@@ -6,14 +6,17 @@ import numpy as np
 from pandas import Series
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder
-from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window
+from pyspark.sql.functions import udf, array, monotonically_increasing_id
+from pyspark.sql.types import FloatType, DoubleType, IntegerType
 from sklearn.utils.murmurhash import murmurhash3_32
 
 from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.base import SparkTransformer
-from lightautoml.transformers.categorical import categorical_check, encoding_check
+from lightautoml.transformers.categorical import categorical_check, encoding_check, oof_task_check, \
+    multiclass_task_check
 
 # FIXME SPARK-LAMA: np.nan in str representation is 'nan' while Spark's NaN is 'NaN'. It leads to different hashes.
 # FIXME SPARK-LAMA: If udf is defined inside the class, it not works properly.
@@ -385,5 +388,236 @@ class OHEEncoder(SparkTransformer):
         # create resulted
         output = dataset.empty()
         output.set_data(data, self.features, roles)
+
+        return output
+
+
+class TargetEncoder(SparkTransformer):
+
+    _fit_checks = (categorical_check, oof_task_check, encoding_check)
+    _transform_checks = ()
+    _fname_prefix = "oof"
+
+    def __init__(self, alphas: List[float] = [0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 250.0, 1000.0]):
+
+        self.alphas = alphas
+
+    def fit(self, dataset: SparkDataset):
+        super().fit_transform(dataset)
+
+    def fit_transform(self,
+                      dataset: SparkDataset,
+                      target_column: str,
+                      folds_column: str) -> SparkDataset:
+
+        # set transformer names and add checks
+        super().fit(dataset)
+        # set transformer features
+
+        # convert to accepted dtype and get attributes
+        data = dataset.data
+        self._features = [f"{self._fname_prefix}__{c}" for c in data.columns]
+
+        self.encodings = []
+        prior = data.agg(F.avg(F.col(target_column).cast("double"))).collect()[0][0]
+        # folds priorss
+        f_sum = data.groupBy(F.col(folds_column)).agg(F.sum(F.col(target_column).cast("double")).alias("sumd"), F.count(F.col(target_column).cast("double")).alias("countd"))
+        tot_sum = data.agg(F.sum(F.col(target_column).cast("double")).alias("sumT")).collect()[0][0]
+        tot_count = data.agg(F.count(F.col(target_column).cast("double")).alias("countT")).collect()[0][0]
+
+        folds_prior = f_sum.withColumn("folds_prior", udf(lambda x, y: (tot_sum - x) / (tot_count - y), FloatType())(F.col("sumd"), F.col("countd")))
+        # oof_feats = np.zeros(data.shape, dtype=np.float32)
+        self.feats = data
+        self.encs = {}
+
+        for col_name in data.columns:
+
+            # calc folds stats
+            enc_dim = data.agg(F.max(F.col(col_name))).collect()[0][0] + 1
+
+            f_sum = data.groupBy(F.col(folds_column), F.col(col_name)).agg(F.sum(F.col(target_column).cast("double")).alias("sumd"), F.count(F.col(target_column).cast("double")).alias("countd"))
+
+            # calc total stats
+            t_sum = data.groupBy(F.col(col_name)).agg(F.sum(F.col(target_column).cast("double")).alias("sumt"), F.count(F.col(target_column).cast("double")).alias("countt"))
+
+            # calc oof stats
+            f_sum = f_sum.join(t_sum, col_name)
+            oof_sum = f_sum.withColumn("oof_sum", F.col("sumt") - F.col(("sumd"))).withColumn("oof_count", F.col("countt") - F.col(("countd")))
+            oof_sum_joined = oof_sum.join(data, [col_name, folds_column]).join(folds_prior, folds_column)
+            diff = {}
+            udf_diff = udf(lambda x, y: float(-(y * np.log(x) + (1 - y) * (np.log(1 - x)))), DoubleType()) if dataset.task.name == "binary" \
+                  else udf(lambda x, y: float(((y - x) ** 2)), DoubleType())
+            # calc candidates alpha
+            for a in self.alphas:
+                udf_a = udf(lambda os, fp, oc: (os + a * fp) / (oc + a), DoubleType())
+                alp_colname = f"walpha{a}".replace(".", "d").replace(",", "d")
+                dif_colname = f"{alp_colname}Diff"
+                oof_sum_joined = oof_sum_joined.withColumn(alp_colname, udf_a(F.col("oof_sum").cast("double"), F.col("folds_prior").cast("double"), F.col("oof_count").cast("double")))
+                oof_sum_joined = oof_sum_joined.withColumn(dif_colname, udf_diff(F.col(alp_colname).cast("double"), F.col(target_column).cast("double")))
+                diff[a] = oof_sum_joined.agg(F.avg(F.col(alp_colname + "Diff").cast("double"))).collect()[0][0]
+            a_opt = min(diff, key=diff.get)
+            out_col = f"walpha{a_opt}".replace(".", "d").replace(",", "d")
+
+            w = Window.orderBy(monotonically_increasing_id())
+
+            self.feats = self.feats.withColumn("columnindex", F.row_number().over(w))
+            oof_sum_joined = oof_sum_joined.withColumn("columnindex", F.row_number().over(w))
+
+            self.feats = self.feats.alias('a').join(oof_sum_joined.withColumnRenamed(out_col, self._fname_prefix + "__" +col_name).alias('b'),
+                                                     self.feats.columnindex == oof_sum_joined.columnindex, 'inner').select(
+                [F.col('a.' + xx) for xx in self.feats.columns] + [F.col('b.{}'.format(self._fname_prefix + "__" +col_name))]).drop(self.feats.columnindex)
+
+            # calc best encoding
+            enc = t_sum.withColumn(f"enc_{col_name}", udf(lambda tot_sum, tot_count: float((tot_sum + a_opt * prior) / (tot_count + a_opt)), FloatType())(F.col("sumt"), F.col("countt"))).select(f"enc_{col_name}")
+            enc = list(map(lambda x: x[0], enc.collect()))
+            self.encs[col_name] = enc
+
+        output = dataset.empty()
+        self.output_role = NumericRole(np.float32)
+        self.feats = self.feats.drop(*data.columns)
+        output.set_data(self.feats, self.features, self.output_role)
+
+        return output
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+
+        # checks here
+        super().transform(dataset)
+
+        data = dataset.data
+
+        # transform
+        for c in data.columns:
+            data = data.withColumn(c, data[c].cast("double"))
+            data = data.replace(to_replace=dict(enumerate(self.encs[c])), subset=c)
+
+        # create resulted
+        output = dataset.empty()
+        output.set_data(data, self.features, self.output_role)
+
+        return output
+
+
+
+class MultiClassTargetEncoder(SparkTransformer):
+
+    _fit_checks = (categorical_check, multiclass_task_check, encoding_check)
+    _transform_checks = ()
+    _fname_prefix = "multioof"
+
+    @property
+    def features(self) -> List[str]:
+        return self._features
+
+    def __init__(self, alphas: Sequence[float] = (0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 250.0, 1000.0)):
+        self.alphas = alphas
+
+    #TODO
+    @staticmethod
+    def score_func(candidates: np.ndarray, target: np.ndarray) -> int:
+
+        target = target[:, np.newaxis, np.newaxis]
+        scores = -np.log(np.take_along_axis(candidates, target, axis=1)).mean(axis=0)[0]
+        idx = scores.argmin()
+
+        return idx
+
+    def fit_transform(self,
+                      dataset: SparkDataset,
+                      target_column: str,
+                      folds_column: str) -> SparkDataset:
+
+        # set transformer names and add checks
+        super().fit(dataset)
+
+        data = dataset.data
+
+        self.encodings = []
+        prior = data.groupBy(target_column).agg(F.count(F.col(target_column).cast("double"))/data.count()).collect()
+        prior = list(map(lambda x: x[1], prior))
+
+        f_sum = data.groupBy(target_column, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("sumd"))
+        f_count = data.groupBy(folds_column).agg(F.count(F.col(target_column).cast("double")).alias("countd"))
+        f_sum = f_sum.join(f_count, folds_column)
+        tot_sum = data.groupBy(target_column).agg(F.count(F.col(target_column).cast("double")).alias("sumT"))
+        f_sum = f_sum.join(tot_sum, target_column)
+        tot_count = data.agg(F.count(F.col(target_column).cast("double")).alias("countT")).collect()[0][0]
+
+        folds_prior = f_sum.withColumn("folds_prior", udf(lambda x, y, z: (z - x) / (tot_count - y), FloatType())(F.col("sumd"), F.col("countd"), F.col("sumT")))
+        self.feats = data
+        self.encs = {}
+        self.n_classes = data.agg(F.max(target_column)).collect()[0][0] + 1
+        self._features = []
+        for i in dataset.features:
+            for j in range(self.n_classes):
+                self._features.append("{0}_{1}__{2}".format("multioof", j, i))
+
+        for col_name in data.columns:
+
+            f_sum = data.groupBy(col_name, target_column, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("sumd"))
+            f_count = data.groupBy(col_name, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("countd"))
+            t_sum = data.groupBy(col_name, target_column).agg(F.count(F.col(target_column).cast("double")).alias("sumt"))
+            t_count = data.groupBy(col_name).agg(F.count(F.col(target_column).cast("double")).alias("countt"))
+            f_sum = f_sum.join(f_count, [col_name, folds_column]).join(t_sum, [col_name, target_column]).join(t_count, col_name)
+
+            oof_sum = f_sum.withColumn("oof_sum", F.col("sumt") - F.col(("sumd"))).withColumn("oof_count", F.col("countt") - F.col(("countd")))
+            oof_sum_joined = oof_sum.join(data[col_name, target_column, folds_column], [col_name, target_column, folds_column]).join(folds_prior[folds_column, target_column, "folds_prior"], [folds_column, target_column])
+            diff = {}
+            udf_diff = udf(lambda x: float(-(np.log(x))), DoubleType())
+
+            for a in self.alphas:
+                udf_a = udf(lambda os, fp, oc: (os + a * fp) / (oc + a), DoubleType())
+                alp_colname = f"walpha{a}".replace(".", "d").replace(",", "d")
+                dif_colname = f"{alp_colname}Diff"
+                oof_sum_joined = oof_sum_joined.withColumn(alp_colname, udf_a(F.col("oof_sum").cast("double"), F.col("folds_prior").cast("double"), F.col("oof_count").cast("double")))
+                oof_sum_joined = oof_sum_joined.withColumn(dif_colname, udf_diff(F.col(alp_colname).cast("double")))
+                diff[a] = oof_sum_joined.agg(F.avg(F.col(alp_colname + "Diff").cast("double"))).collect()[0][0]
+            a_opt = min(diff, key=diff.get)
+            out_col = f"walpha{a_opt}".replace(".", "d").replace(",", "d")
+
+            w = Window.orderBy(monotonically_increasing_id())
+
+            self.feats = self.feats.withColumn("columnindex", F.row_number().over(w))
+            oof_sum_joined = oof_sum_joined.withColumn("columnindex", F.row_number().over(w))
+
+            self.feats = self.feats.alias('a').join(oof_sum_joined.withColumnRenamed(out_col, self._fname_prefix + "__" +col_name).alias('b'),
+                                                     self.feats.columnindex == oof_sum_joined.columnindex, 'inner').select(
+                [F.col('a.' + xx) for xx in self.feats.columns] + [F.col('b.{}'.format(self._fname_prefix + "__" +col_name))]).drop(self.feats.columnindex)
+
+            # calc best encoding
+            enc_list = []
+            for i in range(self.n_classes):
+                enc = f_sum.withColumn(f"enc_{col_name}", udf(lambda tot_sum, tot_count: float((tot_sum + a_opt * prior[i]) / (tot_count + a_opt)), FloatType())(F.col("sumt"), F.col("countt"))).select(f"enc_{col_name}")
+                enc = list(map(lambda x: x[0], enc.collect()))
+                enc_list.append(enc)
+            sums = [sum(x) for x in zip(*enc_list)]
+            for i in range(self.n_classes):
+                self.encs[col_name + "_" + str(i)] = [enc_list[i][j]/sums[j] for j in range(len(enc_list[i]))]
+
+        output = dataset.empty()
+        self.output_role = NumericRole(np.float32)
+        self.feats = self.feats.drop(*data.columns)
+        output.set_data(self.feats, self.features, self.output_role)
+
+        return output
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+
+        # checks here
+        super().transform(dataset)
+
+        data = dataset.data
+        dc = data.columns
+        # transform
+        for c in dc:
+            data = data.withColumn(c, data[c].cast("int"))
+            for i in range(self.n_classes):
+                col = self.encs[f"{c}_{i}"]
+                data = data.withColumn(f"{c}_{i}", udf(lambda x: col[x], DoubleType())(c))
+            data = data.drop(c)
+
+        # create resulted
+        output = dataset.empty()
+        output.set_data(data, self.features, self.output_role)
 
         return output
