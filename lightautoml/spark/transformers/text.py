@@ -100,7 +100,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
 
         return suggested_params
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Fit tfidf vectorizer.
 
         Args:
@@ -110,10 +110,6 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
             self.
 
         """
-        # set transformer names and add checks
-        for check_func in self._fit_checks:
-            check_func(dataset)
-        # set transformer features
 
         # convert to accepted dtype and get attributes
         if self._params is None:
@@ -160,7 +156,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform text dataset to sparse tfidf representation.
 
         Args:
@@ -170,8 +166,6 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
             Sparse dataset with encoded text.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
         sdf = sdf.fillna("")
@@ -353,15 +347,13 @@ class AutoNLPWrap(SparkTransformer):
 
         return params
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Fit chosen transformer and create feature names.
 
         Args:
             dataset: Pandas or Numpy dataset of text features.
 
         """
-        for check_func in self._fit_checks:
-            check_func(dataset)
 
         # TODO: cache should be reimplemented after the discussion
         # if self.cache_dir is not None:
@@ -435,7 +427,7 @@ class AutoNLPWrap(SparkTransformer):
         return self
 
     # TODO: this method may be unified with what we have in AutoCVWrap and ImageFeaturesTransformer
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform tokenized dataset to text embeddings.
 
         Args:
@@ -445,8 +437,6 @@ class AutoNLPWrap(SparkTransformer):
             Numpy dataset with text embeddings.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 
@@ -512,7 +502,7 @@ class Tokenizer(SparkTransformer):
         """
         self.tokenizer = tokenizer
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
         spark_data_frame = dataset.data
         spark_column_names = spark_data_frame.schema.names
@@ -546,7 +536,7 @@ class ConcatTextTransformer(SparkTransformer):
         """
         self.special_token = special_token
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         spark_data_frame = dataset.data
         spark_column_names = spark_data_frame.schema.names
 

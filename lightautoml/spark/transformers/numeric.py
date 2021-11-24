@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -29,12 +29,9 @@ class NaNFlags(SparkTransformer):
         """
         self.nan_rate = nan_rate
         self.nan_cols: Optional[str] = None
-        self._features: Optional[str] = None
+        self._features: Optional[List[str]] = None
 
-    def fit(self, dataset: SparkDataset) -> "NaNFlags":
-        # TODO: can be in the base class (SparkTransformer)
-        for check_func in self._fit_checks:
-            check_func(dataset)
+    def _fit(self, dataset: SparkDataset) -> "NaNFlags":
 
         sdf = dataset.data
 
@@ -47,10 +44,7 @@ class NaNFlags(SparkTransformer):
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
-        # TODO: can be in the base class (SparkTransformer)
-        # checks here
-        super().transform(dataset)
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
         sdf = dataset.data
 
@@ -101,7 +95,7 @@ class FillnaMedian(SparkTransformer):
     def __init__(self):
         self.meds: Optional[Dict[str, float]] = None
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Approximately estimates medians.
 
         Args:
@@ -111,8 +105,6 @@ class FillnaMedian(SparkTransformer):
             self.
 
         """
-        # set transformer names and add checks
-        super().fit(dataset)
 
         sdf = dataset.data
 
@@ -129,7 +121,7 @@ class FillnaMedian(SparkTransformer):
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform - fillna with medians.
 
         Args:
@@ -139,8 +131,6 @@ class FillnaMedian(SparkTransformer):
             SparkDataset with replaced NaN with medians
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 
@@ -162,7 +152,7 @@ class LogOdds(SparkTransformer):
     _transform_checks = ()
     _fname_prefix = "logodds"
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform - convert num values to logodds.
 
         Args:
@@ -172,8 +162,6 @@ class LogOdds(SparkTransformer):
             Numpy dataset with encoded labels.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 
@@ -209,7 +197,7 @@ class StandardScaler(SparkTransformer):
         super().__init__()
         self._means_and_stds: Optional[Dict[str, float]] = None
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Estimate means and stds.
 
         Args:
@@ -219,8 +207,6 @@ class StandardScaler(SparkTransformer):
             self.
 
         """
-        # set transformer names and add checks
-        super().fit(dataset)
 
         sdf = dataset.data
 
@@ -236,7 +222,7 @@ class StandardScaler(SparkTransformer):
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Scale test data.
 
         Args:
@@ -246,8 +232,6 @@ class StandardScaler(SparkTransformer):
             Numpy dataset with encoded labels.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 
@@ -281,7 +265,7 @@ class QuantileBinning(SparkTransformer):
         self.nbins = nbins
         self._bucketizer: Optional[Bucketizer] = None
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Estimate bins borders.
 
         Args:
@@ -291,8 +275,6 @@ class QuantileBinning(SparkTransformer):
             self.
 
         """
-        # set transformer names and add checks
-        super().fit(dataset)
 
         sdf = dataset.data
 
@@ -305,7 +287,7 @@ class QuantileBinning(SparkTransformer):
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Apply bin borders.
 
         Args:
@@ -315,8 +297,6 @@ class QuantileBinning(SparkTransformer):
             Spark dataset with encoded labels.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 

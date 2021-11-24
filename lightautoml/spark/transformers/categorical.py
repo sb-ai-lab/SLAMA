@@ -325,7 +325,7 @@ class OHEEncoder(SparkTransformer):
 
         self._ohe_transformer_and_roles: Optional[Tuple[Transformer, Dict[str, ColumnRole]]] = None
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Calc output shapes.
 
         Automatically do ohe in sparse form if approximate fill_rate < `0.2`.
@@ -337,11 +337,6 @@ class OHEEncoder(SparkTransformer):
             self.
 
         """
-
-        # set transformer names and add checks
-        for check_func in self._fit_checks:
-            check_func(dataset)
-        # set transformer features
 
         sdf = dataset.data
         temp_sdf = sdf.cache()
@@ -369,7 +364,7 @@ class OHEEncoder(SparkTransformer):
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform categorical dataset to ohe.
 
         Args:
@@ -379,8 +374,6 @@ class OHEEncoder(SparkTransformer):
             Numpy dataset with encoded labels.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 

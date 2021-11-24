@@ -82,7 +82,7 @@ class ImageFeaturesTransformer(SparkTransformer):
         """
         return self._features
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Init hist class and create feature names.
 
         Args:
@@ -92,17 +92,14 @@ class ImageFeaturesTransformer(SparkTransformer):
             self.
 
         """
-        # set transformer names and add checks
-        for check_func in self._fit_checks:
-            check_func(dataset)
-        # set transformer features
+
         sdf = dataset.data
         self._fg = CreateImageFeatures(self.hist_size, self.is_hsv, self.n_jobs, self.loader)
         self._features = [f"{self._fname_prefix}__{c}" for c in sdf.columns]
 
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform image dataset to color histograms.
 
         Args:
@@ -112,8 +109,6 @@ class ImageFeaturesTransformer(SparkTransformer):
             Dataset with encoded text.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 
@@ -218,15 +213,13 @@ class AutoCVWrap(SparkTransformer):
         self._emb_name = "DI_" + single_text_hash(self.embed_model)
         self.emb_size = self.transformer.model.feature_shape
 
-    def fit(self, dataset: SparkDataset):
+    def _fit(self, dataset: SparkDataset):
         """Fit chosen transformer and create feature names.
 
         Args:
             dataset: Pandas or Numpy dataset of text features.
 
         """
-        for check_func in self._fit_checks:
-            check_func(dataset)
 
         # TODO: SPARK-LAMA cache should be implemented with an external storage system: Cassandra, Redis, S3, HDFS
         # if self.cache_dir is not None:
@@ -258,7 +251,7 @@ class AutoCVWrap(SparkTransformer):
         self._features = [feat for _, feat in self._img_transformers.values()]
         return self
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform dataset to image embeddings.
 
         Args:
@@ -268,8 +261,6 @@ class AutoCVWrap(SparkTransformer):
             Numpy dataset with image embeddings.
 
         """
-        # checks here
-        super().transform(dataset)
 
         sdf = dataset.data
 
