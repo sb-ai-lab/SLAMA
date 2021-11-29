@@ -67,6 +67,12 @@ class TrainValidIterator:
         """Abstract method. Get validation sample."""
         raise NotImplementedError
 
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
     def apply_feature_pipeline(self, features_pipeline: FeaturesPipeline) -> "TrainValidIterator":
         """Apply features pipeline on train data.
 

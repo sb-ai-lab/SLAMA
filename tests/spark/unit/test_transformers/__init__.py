@@ -1,3 +1,4 @@
+import os
 from typing import Tuple, get_args, cast, List, Optional, Dict
 
 import pytest
@@ -5,8 +6,8 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
 from lightautoml.dataset.roles import ColumnRole
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.transformers.base import SparkTransformer
-from lightautoml.spark.utils import from_pandas_to_spark
 from lightautoml.transformers.base import LAMLTransformer
 from lightautoml.transformers.numeric import NumpyTransformable
 
@@ -20,6 +21,8 @@ import pandas as pd
 
 @pytest.fixture(scope="session")
 def spark() -> SparkSession:
+    os.environ['PYSPARK_PYTHON'] = '/home/nikolay/.conda/envs/LAMA/bin/python'
+
     spark = SparkSession.builder.config("master", "local[1]").getOrCreate()
 
     print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
@@ -173,3 +176,13 @@ class DatasetForTest:
             self.roles = {name: default_role for name in self.dataset.columns}
         else:
             self.roles = roles
+
+
+def from_pandas_to_spark(p: PandasDataset, spark: SparkSession) -> SparkDataset:
+    pdf = cast(pd.DataFrame, p.data)
+    pdf = pdf.copy()
+    pdf[SparkDataset.ID_COLUMN] = pdf.index
+    dummy_target = pd.DataFrame({SparkDataset.ID_COLUMN: pdf.index, "target": np.zeros(pdf.shape[0])})
+    sdf = spark.createDataFrame(data=pdf)
+    # dummy target
+    return SparkDataset(sdf, roles=p.roles, target=dummy_target)

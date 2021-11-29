@@ -2,7 +2,7 @@
 
 import logging
 
-from typing import Any
+from typing import Any, Callable
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -184,6 +184,7 @@ class AutoML:
         """
         set_stdout_level(verbosity_to_loglevel(verbose))
         self.timer.start()
+
         train_dataset = self.reader.fit_read(train_data, train_features, roles)
 
         assert (
@@ -198,7 +199,9 @@ class AutoML:
         if valid_data is not None:
             valid_dataset = self.reader.read(valid_data, valid_features, add_array_attrs=True)
 
-        train_valid = create_validation_iterator(train_dataset, valid_dataset, n_folds=None, cv_iter=cv_iter)
+        # TODO: SPARK-LAMA need cache for train_valid (use 'with' syntax below)
+        train_valid = self._create_validation_iterator(train_dataset, valid_dataset, n_folds=None, cv_iter=cv_iter)
+
         # for pycharm)
         level_predictions = None
         pipes = None
@@ -214,51 +217,52 @@ class AutoML:
                 f"Layer \x1b[1m{leven_number}\x1b[0m train process start. Time left {self.timer.time_left:.2f} secs"
             )
 
-            for k, ml_pipe in enumerate(level):
+            with train_valid:
+                for k, ml_pipe in enumerate(level):
 
-                pipe_pred = ml_pipe.fit_predict(train_valid)
-                level_predictions.append(pipe_pred)
-                pipes.append(ml_pipe)
+                    pipe_pred = ml_pipe.fit_predict(train_valid)
+                    level_predictions.append(pipe_pred)
+                    pipes.append(ml_pipe)
 
-                logger.info("Time left {:.2f} secs\n".format(self.timer.time_left))
+                    logger.info("Time left {:.2f} secs\n".format(self.timer.time_left))
 
-                if self.timer.time_limit_exceeded():
-                    logger.info(
-                        "Time limit exceeded. Last level models will be blended and unused pipelines will be pruned.\n"
-                    )
+                    if self.timer.time_limit_exceeded():
+                        logger.info(
+                            "Time limit exceeded. Last level models will be blended and unused pipelines will be pruned.\n"
+                        )
 
-                    flg_last_level = True
+                        flg_last_level = True
+                        break
+                else:
+                    if self.timer.child_out_of_time:
+                        logger.info(
+                            "Time limit exceeded in one of the tasks. AutoML will blend level {0} models.\n".format(
+                                leven_number
+                            )
+                        )
+                        flg_last_level = True
+
+                logger.info("\x1b[1mLayer {} training completed.\x1b[0m\n".format(leven_number))
+
+                # here is split on exit condition
+                if not flg_last_level:
+
+                    self.levels.append(pipes)
+                    level_predictions = self._concatenate_datasets(level_predictions)
+
+                    if self.skip_conn:
+                        valid_part = train_valid.get_validation_data()
+                        try:
+                            # convert to initital dataset type
+                            level_predictions = valid_part.from_dataset(level_predictions)
+                        except TypeError:
+                            raise TypeError(
+                                "Can not convert prediction dataset type to input features. Set skip_conn=False"
+                            )
+                        level_predictions = self._concatenate_datasets([level_predictions, valid_part])
+                    train_valid = self._create_validation_iterator(level_predictions, None, n_folds=None, cv_iter=None)
+                else:
                     break
-            else:
-                if self.timer.child_out_of_time:
-                    logger.info(
-                        "Time limit exceeded in one of the tasks. AutoML will blend level {0} models.\n".format(
-                            leven_number
-                        )
-                    )
-                    flg_last_level = True
-
-            logger.info("\x1b[1mLayer {} training completed.\x1b[0m\n".format(leven_number))
-
-            # here is split on exit condition
-            if not flg_last_level:
-
-                self.levels.append(pipes)
-                level_predictions = concatenate(level_predictions)
-
-                if self.skip_conn:
-                    valid_part = train_valid.get_validation_data()
-                    try:
-                        # convert to initital dataset type
-                        level_predictions = valid_part.from_dataset(level_predictions)
-                    except TypeError:
-                        raise TypeError(
-                            "Can not convert prediction dataset type to input features. Set skip_conn=False"
-                        )
-                    level_predictions = concatenate([level_predictions, valid_part])
-                train_valid = create_validation_iterator(level_predictions, None, n_folds=None, cv_iter=None)
-            else:
-                break
 
         blended_prediction, last_pipes = self.blender.fit_predict(level_predictions, pipes)
         self.levels.append(last_pipes)
@@ -268,7 +272,7 @@ class AutoML:
         del self._levels
 
         if self.return_all_predictions:
-            return concatenate(level_predictions)
+            return self._concatenate_datasets(level_predictions)
         return blended_prediction
 
     def predict(
@@ -300,7 +304,7 @@ class AutoML:
 
             if n != len(self.levels):
 
-                level_predictions = concatenate(level_predictions)
+                level_predictions = self._concatenate_datasets(level_predictions)
 
                 if self.skip_conn:
 
@@ -311,12 +315,12 @@ class AutoML:
                         raise TypeError(
                             "Can not convert prediction dataset type to input features. Set skip_conn=False"
                         )
-                    dataset = concatenate([level_predictions, dataset])
+                    dataset = self._concatenate_datasets([level_predictions, dataset])
                 else:
                     dataset = level_predictions
             else:
                 if (return_all_predictions is None and self.return_all_predictions) or return_all_predictions:
-                    return concatenate(level_predictions)
+                    return self._concatenate_datasets(level_predictions)
                 return self.blender.predict(level_predictions)
 
     def collect_used_feats(self) -> List[str]:
@@ -351,3 +355,12 @@ class AutoML:
                     model_stats[ml_algo.name] = len(ml_algo.models)
 
         return model_stats
+
+    def _create_validation_iterator(self, train: LAMLDataset,
+                                    valid: Optional[LAMLDataset],
+                                    n_folds: Optional[int],
+                                    cv_iter: Optional[Callable]):
+        return create_validation_iterator(train, valid, n_folds=n_folds, cv_iter=cv_iter)
+
+    def _concatenate_datasets(self, datasets: Sequence[LAMLDataset]) -> LAMLDataset:
+        return concatenate(datasets)

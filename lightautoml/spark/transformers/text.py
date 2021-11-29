@@ -122,7 +122,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
 
         self.idf_columns_pipelines = dict()
         feats = []
-        for c in sdf.columns:
+        for c in dataset.features:
             # TODO: set params here from self.params
             tokenizer = PysparkTokenizer(inputCol=c, outputCol=f"{c}_words")
             count_tf = CountVectorizer(
@@ -175,7 +175,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         curr_sdf = sdf
         all_idf_features = []
         all_idf_roles = []
-        for c in sdf.columns:
+        for c in dataset.features:
             tfidf_model, idf_col, vocab_size = self.idf_columns_pipelines[c]
 
             curr_sdf = tfidf_model.transform(curr_sdf)
@@ -194,7 +194,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         #     for i,feat in enumerate(features)
         # ]
 
-        new_sdf = curr_sdf.select(all_idf_features)
+        new_sdf = curr_sdf.select(*dataset.service_columns, *all_idf_features)
 
         output = dataset.empty()
         output.set_data(new_sdf, self._features, all_idf_roles)
@@ -495,6 +495,8 @@ class Tokenizer(SparkTransformer):
     _transform_checks = ()
     _fname_prefix = "tokenized"
 
+    _can_unwind_parents = False
+
     def __init__(self, tokenizer: BaseTokenizer = SimpleEnTokenizer()):
         """
         Args:
@@ -505,9 +507,8 @@ class Tokenizer(SparkTransformer):
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
         spark_data_frame = dataset.data
-        spark_column_names = spark_data_frame.schema.names
 
-        for i, column in enumerate(spark_column_names):
+        for i, column in enumerate(dataset.features):
             # PysparkTokenizer transforms strings to lowercase, do not use it
             # tokenizer = PysparkTokenizer(inputCol=column, outputCol=self._fname_prefix + "__" + column)
 
@@ -527,6 +528,8 @@ class ConcatTextTransformer(SparkTransformer):
     _transform_checks = ()
     _fname_prefix = "concated"
 
+    _can_unwind_parents = False
+
     def __init__(self, special_token: str = " [SEP] "):
         """
 
@@ -538,11 +541,11 @@ class ConcatTextTransformer(SparkTransformer):
 
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
         spark_data_frame = dataset.data
-        spark_column_names = spark_data_frame.schema.names
+        spark_column_names = dataset.features
 
         colum_name = self._fname_prefix + "__" + "__".join(spark_column_names)
         concatExpr = concat_ws(self.special_token, *spark_column_names).alias(colum_name)
-        concated = spark_data_frame.select(concatExpr)
+        concated = spark_data_frame.select(*dataset.service_columns, concatExpr)
 
         output = dataset.empty()
         output.set_data(concated, self.features, TextRole(np.str))

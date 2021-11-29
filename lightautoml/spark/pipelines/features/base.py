@@ -1,196 +1,37 @@
 """Basic classes for features generation."""
 
 from copy import copy
-from copy import deepcopy
 from typing import Any
-from typing import Callable
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Union
 
 import numpy as np
-
 from pandas import DataFrame
 from pandas import Series
+from pyspark.sql import functions as F
 
-from ...dataset.base import LAMLDataset
-from ...dataset.np_pd_dataset import NumpyDataset
-from ...dataset.np_pd_dataset import PandasDataset
-from ...dataset.roles import ColumnRole
-from ...dataset.roles import NumericRole
-from ...transformers.base import ChangeRoles
-from ...transformers.base import ColumnsSelector
-from ...transformers.base import ConvertDataset
-from ...transformers.base import LAMLTransformer
-from ...transformers.base import SequentialTransformer
-from ...transformers.base import UnionTransformer
-from ...transformers.categorical import CatIntersectstions
-from ...transformers.categorical import FreqEncoder
-from ...transformers.categorical import LabelEncoder
-from ...transformers.categorical import MultiClassTargetEncoder
-from ...transformers.categorical import OrdinalEncoder
-from ...transformers.categorical import TargetEncoder
-from ...transformers.datetime import BaseDiff
-from ...transformers.datetime import DateSeasons
-from ...transformers.numeric import QuantileBinning
-from ..utils import get_columns_by_role
-from ..utils import map_pipeline_names
+from lightautoml.dataset.roles import ColumnRole, NumericRole
+from lightautoml.pipelines.utils import get_columns_by_role
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.transformers.categorical import FreqEncoder, OrdinalEncoder, LabelEncoder, TargetEncoder, \
+    MultiClassTargetEncoder, CatIntersectstions
+from lightautoml.spark.transformers.datetime import BaseDiff, DateSeasons
+from lightautoml.transformers.base import LAMLTransformer, SequentialTransformer, ColumnsSelector, ChangeRoles
+from lightautoml.transformers.numeric import QuantileBinning
 
 
-NumpyOrPandas = Union[PandasDataset, NumpyDataset]
-
-
-class FeaturesPipeline:
-    """Abstract class.
-
-    Analyze train dataset and create composite transformer
-    based on subset of features.
-    Instance can be interpreted like Transformer
-    (look for :class:`~lightautoml.transformers.base.LAMLTransformer`)
-    with delayed initialization (based on dataset metadata)
-    Main method, user should define in custom pipeline is ``.create_pipeline``.
-    For example, look at
-    :class:`~lightautoml.pipelines.features.lgb_pipeline.LGBSimpleFeatures`.
-    After FeaturePipeline instance is created, it is used like transformer
-    with ``.fit_transform`` and ``.transform`` method.
-
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.pipes: List[Callable[[LAMLDataset], LAMLTransformer]] = [self.create_pipeline]
-        self.sequential = False
-
-    # TODO: visualize pipeline ?
-    @property
-    def input_features(self) -> List[str]:
-        """Names of input features of train data."""
-        return self._input_features
-
-    @input_features.setter
-    def input_features(self, val: List[str]):
-        """Setter for input_features.
-
-        Args:
-            val: List of strings.
-
-        """
-        self._input_features = deepcopy(val)
-
-    @property
-    def output_features(self) -> List[str]:
-        """List of feature names that produces _pipeline."""
-        return self._pipeline.features
-
-    @property
-    def used_features(self) -> List[str]:
-        """List of feature names from original dataset that was used to produce output."""
-        mapped = map_pipeline_names(self.input_features, self.output_features)
-        return list(set(mapped))
-
-    def create_pipeline(self, train: LAMLDataset) -> LAMLTransformer:
-        """Analyse dataset and create composite transformer.
-
-        Args:
-            train: Dataset with train data.
-
-        Returns:
-            Composite transformer (pipeline).
-
-        """
-        raise NotImplementedError
-
-    def fit_transform(self, train: LAMLDataset) -> LAMLDataset:
-        """Create pipeline and then fit on train data and then transform.
-
-        Args:
-            train: Dataset with train data.n
-
-        Returns:
-            Dataset with new features.
-
-        """
-        # TODO: Think about input/output features attributes
-        self._input_features = train.features
-        self._pipeline = self._merge_seq(train) if self.sequential else self._merge(train)
-
-        # TODO: LAMA-SPARK a place with potential duplicate computations
-        #        need to think carefully about it
-
-        return self._pipeline.fit_transform(train)
-
-    def transform(self, test: LAMLDataset) -> LAMLDataset:
-        """Apply created pipeline to new data.
-
-        Args:
-            test: Dataset with test data.
-
-        Returns:
-            Dataset with new features.
-
-        """
-        return self._pipeline.transform(test)
-
-    def set_sequential(self, val: bool = True):
-        self.sequential = val
-        return self
-
-    def append(self, pipeline):
-        if isinstance(pipeline, FeaturesPipeline):
-            pipeline = [pipeline]
-
-        for _pipeline in pipeline:
-            self.pipes.extend(_pipeline.pipes)
-
-        return self
-
-    def prepend(self, pipeline):
-        if isinstance(pipeline, FeaturesPipeline):
-            pipeline = [pipeline]
-
-        for _pipeline in reversed(pipeline):
-            self.pipes = _pipeline.pipes + self.pipes
-
-        return self
-
-    def pop(self, i: int = -1) -> Optional[Callable[[LAMLDataset], LAMLTransformer]]:
-        if len(self.pipes) > 1:
-            return self.pipes.pop(i)
-
-    def _merge(self, data: LAMLDataset) -> LAMLTransformer:
-        pipes = []
-        for pipe in self.pipes:
-            pipes.append(pipe(data))
-
-        return UnionTransformer(pipes) if len(pipes) > 1 else pipes[-1]
-
-    def _merge_seq(self, data: LAMLDataset) -> LAMLTransformer:
-        pipes = []
-        for pipe in self.pipes:
-            _pipe = pipe(data)
-            data = _pipe.fit_transform(data)
-            pipes.append(_pipe)
-
-        return SequentialTransformer(pipes) if len(pipes) > 1 else pipes[-1]
-
-
-class EmptyFeaturePipeline(FeaturesPipeline):
-    """Dummy feature pipeline - ``.fit_transform`` and transform do nothing."""
-
-    def create_pipeline(self, train: LAMLDataset) -> LAMLTransformer:
-        """Create empty pipeline.
-
-        Args:
-            train: Dataset with train data.
-
-        Returns:
-            Composite transformer (pipeline), that do nothing.
-
-        """
-        return LAMLTransformer()
-
-
+# The class is almost identical to what we have in regular LAMA
+# But we cannot reuse it directly due to:
+# - imports of transformers directly from lightautoml module
+#   (probably, can be solved through conditional imports in transformer's modules __init__ file,
+#   but everyone should use imports from __init__ instead of direct imports)
+# - NumpyPandas dataset used in some places, including ConvertDataset
+#   (can be solved via ConvertDataset replacement with SparkDataset that do nothing,
+#   NumpyPandas should be replaced with an appropriate base class)
+# - self.get_uniques_cnt - this methods works with data,
+#   not metadata and thus requires rewriting
+#   (can be replace with an external function that can be substituted)
 class TabularDataFeatures:
     """Helper class contains basic features transformations for tabular data.
 
@@ -208,7 +49,7 @@ class TabularDataFeatures:
         self.multiclass_te_co = 3
         self.top_intersections = 5
         self.max_intersection_depth = 3
-        self.subsample = 10000
+        self.subsample = 0.1 #10000
         self.random_state = 42
         self.feats_imp = None
         self.ascending_by_cardinality = False
@@ -220,7 +61,7 @@ class TabularDataFeatures:
             self.__dict__[k] = kwargs[k]
 
     @staticmethod
-    def get_cols_for_datetime(train: NumpyOrPandas) -> Tuple[List[str], List[str]]:
+    def get_cols_for_datetime(train: SparkDataset) -> Tuple[List[str], List[str]]:
         """Get datetime columns to calculate features.
 
         Args:
@@ -237,7 +78,7 @@ class TabularDataFeatures:
 
         return base_dates, datetimes
 
-    def get_datetime_diffs(self, train: NumpyOrPandas) -> Optional[LAMLTransformer]:
+    def get_datetime_diffs(self, train: SparkDataset) -> Optional[LAMLTransformer]:
         """Difference for all datetimes with base date.
 
         Args:
@@ -260,7 +101,7 @@ class TabularDataFeatures:
         return dt_processing
 
     def get_datetime_seasons(
-        self, train: NumpyOrPandas, outp_role: Optional[ColumnRole] = None
+        self, train: SparkDataset, outp_role: Optional[ColumnRole] = None
     ) -> Optional[LAMLTransformer]:
         """Get season params from dates.
 
@@ -293,7 +134,7 @@ class TabularDataFeatures:
 
     @staticmethod
     def get_numeric_data(
-        train: NumpyOrPandas,
+        train: SparkDataset,
         feats_to_select: Optional[List[str]] = None,
         prob: Optional[bool] = None,
     ) -> Optional[LAMLTransformer]:
@@ -320,7 +161,9 @@ class TabularDataFeatures:
         num_processing = SequentialTransformer(
             [
                 ColumnsSelector(keys=feats_to_select),
-                ConvertDataset(dataset_type=NumpyDataset),
+                # we don't need this because everything is handled by Spark
+                # thus we have no other dataset type except SparkDataset
+                # ConvertDataset(dataset_type=NumpyDataset),
                 ChangeRoles(NumericRole(np.float32)),
             ]
         )
@@ -329,7 +172,7 @@ class TabularDataFeatures:
 
     @staticmethod
     def get_freq_encoding(
-        train: NumpyOrPandas, feats_to_select: Optional[List[str]] = None
+        train: SparkDataset, feats_to_select: Optional[List[str]] = None
     ) -> Optional[LAMLTransformer]:
         """Get frequency encoding part.
 
@@ -356,7 +199,7 @@ class TabularDataFeatures:
         return cat_processing
 
     def get_ordinal_encoding(
-        self, train: NumpyOrPandas, feats_to_select: Optional[List[str]] = None
+        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
     ) -> Optional[LAMLTransformer]:
         """Get order encoded part.
 
@@ -383,7 +226,7 @@ class TabularDataFeatures:
         return cat_processing
 
     def get_categorical_raw(
-        self, train: NumpyOrPandas, feats_to_select: Optional[List[str]] = None
+        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
     ) -> Optional[LAMLTransformer]:
         """Get label encoded categories data.
 
@@ -411,7 +254,7 @@ class TabularDataFeatures:
         cat_processing = SequentialTransformer(cat_processing)
         return cat_processing
 
-    def get_target_encoder(self, train: NumpyOrPandas) -> Optional[type]:
+    def get_target_encoder(self, train: SparkDataset) -> Optional[type]:
         """Get target encoder func for dataset.
 
         Args:
@@ -433,7 +276,7 @@ class TabularDataFeatures:
         return target_encoder
 
     def get_binned_data(
-        self, train: NumpyOrPandas, feats_to_select: Optional[List[str]] = None
+        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
     ) -> Optional[LAMLTransformer]:
         """Get encoded quantiles of numeric features.
 
@@ -460,7 +303,7 @@ class TabularDataFeatures:
         return binned_processing
 
     def get_categorical_intersections(
-        self, train: NumpyOrPandas, feats_to_select: Optional[List[str]] = None
+        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
     ) -> Optional[LAMLTransformer]:
         """Get transformer that implements categorical intersections.
 
@@ -487,11 +330,12 @@ class TabularDataFeatures:
         elif len(feats_to_select) <= 1:
             return
 
+        # TODO: removed from CatIntersection
+        # subs = self.subsample,
+        # random_state = self.random_state,
         cat_processing = [
             ColumnsSelector(keys=feats_to_select),
             CatIntersectstions(
-                subs=self.subsample,
-                random_state=self.random_state,
                 max_depth=self.max_intersection_depth,
             ),
         ]
@@ -499,8 +343,10 @@ class TabularDataFeatures:
 
         return cat_processing
 
-    def get_uniques_cnt(self, train: NumpyOrPandas, feats: List[str]) -> Series:
+    def get_uniques_cnt(self, train: SparkDataset, feats: List[str]) -> Series:
         """Get unique values cnt.
+
+        Be aware that this function uses approx_count_distinct and thus cannot return precise results
 
         Args:
             train: Dataset with train data.
@@ -511,22 +357,22 @@ class TabularDataFeatures:
 
         """
 
-        uns = []
-        for col in feats:
-            feat = Series(train[:, col].data)
-            if self.subsample is not None and self.subsample < len(feat):
-                feat = feat.sample(
-                    n=int(self.subsample) if self.subsample > 1 else None,
-                    frac=self.subsample if self.subsample <= 1 else None,
-                    random_state=self.random_state,
-                )
+        # TODO: LAMA-SPARK: should be conditioned on a global setting
+        #       producing either an error or warning
+        assert not train.data.is_cached, "The train dataset should be cached before executing this operation"
 
-            un = feat.value_counts(dropna=False)
-            uns.append(un.shape[0])
+        sdf = train.data.select(feats)
 
+        if self.subsample:
+            sdf = sdf.sample(withReplacement=False, fraction=self.subsample, seed=self.random_state)
+
+        sdf = sdf.select([F.approx_count_distinct(col).alias(col) for col in feats])
+        result = sdf.collect()[0]
+
+        uns = [result[col] for col in feats]
         return Series(uns, index=feats, dtype="int")
 
-    def get_top_categories(self, train: NumpyOrPandas, top_n: int = 5) -> List[str]:
+    def get_top_categories(self, train: SparkDataset, top_n: int = 5) -> List[str]:
         """Get top categories by importance.
 
         If feature importance is not defined,

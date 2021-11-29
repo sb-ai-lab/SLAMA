@@ -68,10 +68,11 @@ class LabelEncoder(SparkTransformer):
 
         roles = dataset.roles
 
-        cached_dataset = dataset.data.cache()
+        # cached_dataset = dataset.data.cache()
+        dataset.cache()
 
         self.dicts = {}
-        for i in cached_dataset.columns:
+        for i in dataset.features:
             role = roles[i]
 
             # TODO: think what to do with this warning
@@ -81,7 +82,7 @@ class LabelEncoder(SparkTransformer):
             # TODO SPARK-LAMA: Can be implemented without multiple groupby and thus shuffling using custom UDAF.
             # May be an alternative it there would be performance problems.
             # https://github.com/fonhorst/LightAutoML/pull/57/files/57c15690d66fbd96f3ee838500de96c4637d59fe#r749539901
-            vals = cached_dataset \
+            vals = dataset.data \
                 .groupBy(i).count() \
                 .where(F.col("count") > co) \
                 .orderBy(["count", i], ascending=[False, True]) \
@@ -92,7 +93,8 @@ class LabelEncoder(SparkTransformer):
             # it may be joined. I propose to keep this variable as a spark dataframe. Discuss?
             self.dicts[i] = Series(np.arange(vals.shape[0], dtype=np.int32) + 1, index=vals[i])
 
-        cached_dataset.unpersist()
+        # cached_dataset.unpersist()
+        dataset.uncache()
 
         return self
 
@@ -100,7 +102,7 @@ class LabelEncoder(SparkTransformer):
 
         df = dataset.data
 
-        for i in df.columns:
+        for i in dataset.features:
 
             # FIXME SPARK-LAMA: Dirty hot-fix
             # TODO SPARK-LAMA: It can be done easier with only one select and without withColumn but a single select.
@@ -204,10 +206,11 @@ class OrdinalEncoder(LabelEncoder):
 
         roles = dataset.roles
 
-        cached_dataset = dataset.data.cache()
+        dataset.cache()
+        cached_dataset = dataset.data
 
         self.dicts = {}
-        for i in cached_dataset.columns:
+        for i in dataset.features:
             role = roles[i]
 
             if not type(cached_dataset.schema[i].dataType) in self._spark_numeric_types:
@@ -223,7 +226,7 @@ class OrdinalEncoder(LabelEncoder):
                 cnts = Series(cnts[i].astype(str).rank().values, index=cnts[i])
                 self.dicts[i] = cnts.append(Series([cnts.shape[0] + 1], index=[np.nan])).drop_duplicates()
 
-        cached_dataset.unpersist()
+        dataset.uncache()
 
         return self
 
@@ -267,7 +270,7 @@ class CatIntersectstions(LabelEncoder):
             )
 
         df = df.select(
-            [f"({comb[0]}__{comb[1]})" for comb in self.intersections]
+            *dataset.service_columns, *[f"({comb[0]}__{comb[1]})" for comb in self.intersections]
         )
 
         output = dataset.empty()
@@ -343,13 +346,13 @@ class OHEEncoder(SparkTransformer):
 
         sdf = dataset.data
         temp_sdf = sdf.cache()
-        maxs = [F.max(c).alias(f"max_{c}") for c in sdf.columns]
-        mins = [F.min(c).alias(f"min_{c}") for c in sdf.columns]
+        maxs = [F.max(c).alias(f"max_{c}") for c in dataset.features]
+        mins = [F.min(c).alias(f"min_{c}") for c in dataset.features]
         mm = temp_sdf.select(maxs + mins).collect()[0].asDict()
 
-        self._features = [f"{self._fname_prefix}__{c}" for c in sdf.columns]
+        self._features = [f"{self._fname_prefix}__{c}" for c in dataset.features]
 
-        ohe = OneHotEncoder(inputCols=sdf.columns, outputCols=self._features, handleInvalid="error")
+        ohe = OneHotEncoder(inputCols=dataset.features, outputCols=self._features, handleInvalid="error")
         transformer = ohe.fit(temp_sdf)
         temp_sdf.unpersist()
 
@@ -360,7 +363,7 @@ class OHEEncoder(SparkTransformer):
                     f"{self._fname_prefix}_{i}__{c}"
                     for i in np.arange(mm[f"min_{c}"], mm[f"max_{c}"] + 1)
                 ]
-            ) for c in sdf.columns
+            ) for c in dataset.features
         }
 
         self._ohe_transformer_and_roles = (transformer, roles)
@@ -383,7 +386,7 @@ class OHEEncoder(SparkTransformer):
         ohe, roles = self._ohe_transformer_and_roles
 
         # transform
-        data = ohe.transform(sdf).select(list(roles.keys()))
+        data = ohe.transform(sdf).select(*dataset.service_columns, *list(roles.keys()))
 
         # create resulted
         output = dataset.empty()

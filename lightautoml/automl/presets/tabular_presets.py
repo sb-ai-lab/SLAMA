@@ -173,6 +173,7 @@ class TabularAutoML(AutoMLPreset):
                 param = {}
             self.__dict__[name] = upd_params(self.__dict__[name], param)
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def infer_auto_params(self, train_data: DataFrame, multilevel_avail: bool = False):
 
         length = train_data.shape[0]
@@ -243,6 +244,7 @@ class TabularAutoML(AutoMLPreset):
             score *= 0.5
         return score
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def get_selector(self, n_level: Optional[int] = 1) -> SelectionPipeline:
         selection_params = self.selection_params
         # lgb_params
@@ -302,6 +304,7 @@ class TabularAutoML(AutoMLPreset):
 
         return pre_selector
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def get_linear(self, n_level: int = 1, pre_selector: Optional[SelectionPipeline] = None) -> NestedTabularMLPipeline:
 
         # linear model with l2
@@ -319,6 +322,7 @@ class TabularAutoML(AutoMLPreset):
         )
         return linear_l2_pipe
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def get_gbms(
         self,
         keys: Sequence[str],
@@ -359,6 +363,7 @@ class TabularAutoML(AutoMLPreset):
 
         return gbm_pipe
 
+    # TODO: SPARK-LAMA correct it to rewrite only some submethods in the descendant
     def create_automl(self, **fit_args):
         """Create basic automl instance.
 
@@ -412,6 +417,7 @@ class TabularAutoML(AutoMLPreset):
             timer=self.timer,
         )
 
+    # TODO: SPARK-LAMA should be renamed into a more general way
     def _get_read_csv_params(self):
         try:
             cols_to_read = self.reader.used_features
@@ -433,6 +439,7 @@ class TabularAutoML(AutoMLPreset):
 
         return read_csv_params
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def fit_predict(
         self,
         train_data: ReadableToDf,
@@ -497,6 +504,7 @@ class TabularAutoML(AutoMLPreset):
 
         return cast(NumpyDataset, oof_pred)
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def predict(
         self,
         data: ReadableToDf,
@@ -568,6 +576,7 @@ class TabularAutoML(AutoMLPreset):
 
         return res
 
+    # TODO: SPARK-LAMA rewrite in the descdent (or reload read_data)
     def get_feature_scores(
         self,
         calc_method: str = "fast",
@@ -616,6 +625,7 @@ class TabularAutoML(AutoMLPreset):
         )
         return fi
 
+    # TODO: SPARK-LAMA rewrite in the descdent
     def get_individual_pdp(
         self,
         test_data: ReadableToDf,

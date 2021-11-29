@@ -50,6 +50,8 @@ class ImageFeaturesTransformer(SparkTransformer):
     _transform_checks = ()
     _fname_prefix = "img_hist"
 
+    _can_unwind_parents = False
+
     def __init__(
         self,
         hist_size: int = 30,
@@ -115,7 +117,7 @@ class ImageFeaturesTransformer(SparkTransformer):
         # transform
         roles = []
         new_cols = []
-        for c, out_col_name in zip(sdf.columns, self.features):
+        for c, out_col_name in zip(dataset.features, self.features):
             role = NumericVectorOrArrayRole(
                 size=len(self._fg.fe.get_names()),
                 element_col_name_template=[f"{self._fname_prefix}_{name}__{c}" for name in self._fg.fe.get_names()],
@@ -133,7 +135,7 @@ class ImageFeaturesTransformer(SparkTransformer):
             new_cols.append(calculate_embeddings(c).alias(out_col_name))
             roles.append(role)
 
-        new_sdf = sdf.select(new_cols)
+        new_sdf = sdf.select(*dataset.service_columns, *new_cols)
 
         output = dataset.empty()
         output.set_data(new_sdf, self.features, roles)
@@ -237,7 +239,7 @@ class AutoCVWrap(SparkTransformer):
         #     subs = df
 
         self._img_transformers = dict()
-        for c in sdf.columns:
+        for c in dataset.features:
             out_column_name = f"{self._fname_prefix}_{self._emb_name}__{c}"
 
             self._img_transformers[c] = (
@@ -267,7 +269,7 @@ class AutoCVWrap(SparkTransformer):
         # transform
         roles = []
         new_cols = []
-        for c in sdf.columns:
+        for c in dataset.features:
             role = NumericVectorOrArrayRole(
                 size=self.emb_size,
                 element_col_name_template=f"{self._fname_prefix}_{self._emb_name}_{{}}__{c}",
@@ -288,7 +290,7 @@ class AutoCVWrap(SparkTransformer):
             new_cols.append(calculate_embeddings(c).alias(out_col_name))
             roles.append(role)
 
-        new_sdf = sdf.select(new_cols)
+        new_sdf = sdf.select(*dataset.service_columns, *new_cols)
 
         output = dataset.empty()
         output.set_data(new_sdf, self.features, roles)

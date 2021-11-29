@@ -79,10 +79,10 @@ class PCATransformer(SparkTransformer):
 
         assert self.pca, "This transformer has not been fitted yet"
 
-        sdf = dataset.data.select(array_to_vector(F.array('*')).alias("features"))
+        sdf = dataset.data.select(*dataset.service_columns, array_to_vector(F.array('*')).alias("features"))
         new_sdf = self.pca\
             .transform(sdf)\
-            .select([
+            .select(*dataset.service_columns, *[
                 vector_to_array(F.col(self.pca_output_col))[i].alias(feat)
                 for i, feat in zip(range(self.n_components), self.features)
             ])

@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from lightautoml.transformers.text import AutoNLPWrap
-from . import smoke_check, compare_by_content, spark
+from . import smoke_check, compare_by_content, spark, from_pandas_to_spark
 
 
 @pytest.fixture
@@ -87,7 +87,6 @@ def test_tokenizer(spark: SparkSession):
     print(lama_result)
 
     from lightautoml.spark.transformers.text import Tokenizer as SparkTokenizer
-    from lightautoml.spark.utils import from_pandas_to_spark
 
     spark_tokenizer_transformer = SparkTokenizer()
     spark_dataset = from_pandas_to_spark(ds, spark)
@@ -124,7 +123,6 @@ def test_concat_text_transformer(spark: SparkSession):
     print(lama_result)
 
     from lightautoml.spark.transformers.text import ConcatTextTransformer as SparkConcatTextTransformer
-    from lightautoml.spark.utils import from_pandas_to_spark
 
     spark_tokenizer_transformer = SparkConcatTextTransformer()
     spark_dataset = from_pandas_to_spark(ds, spark)

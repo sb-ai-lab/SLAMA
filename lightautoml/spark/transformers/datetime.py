@@ -75,6 +75,8 @@ class TimeToNum(SparkDatetimeTransformer):
     basic_time = "2020-01-01"
     _fname_prefix = "dtdiff"
 
+    _can_unwind_parents = False
+
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
         df = dataset.data
@@ -82,7 +84,7 @@ class TimeToNum(SparkDatetimeTransformer):
         # TODO SPARK-LAMA: It can be done easier without witColumn and withColumnRenamed.
         # Use .alias instead of the latter one.
         # https://github.com/fonhorst/LightAutoML/pull/57/files#r749549078
-        for i in df.columns:
+        for i in dataset.features:
             df = df.withColumn(
                 i,
                 (
@@ -105,6 +107,7 @@ class TimeToNum(SparkDatetimeTransformer):
 class BaseDiff(SparkDatetimeTransformer):
 
     _fname_prefix = "basediff"
+    _can_unwind_parents = False
 
     @property
     def features(self) -> List[str]:
@@ -142,7 +145,8 @@ class BaseDiff(SparkDatetimeTransformer):
                 )
 
         df = df.select(
-            [f"{self._fname_prefix}_{base}__{dif}" for base in self.base_names for dif in self.diff_names]
+            *dataset.service_columns,
+            *[f"{self._fname_prefix}_{base}__{dif}" for base in self.base_names for dif in self.diff_names]
         )
 
         output = dataset.empty()
@@ -154,6 +158,7 @@ class BaseDiff(SparkDatetimeTransformer):
 class DateSeasons(SparkDatetimeTransformer):
 
     _fname_prefix = "season"
+    _can_unwind_parents = False
 
     @property
     def features(self) -> List[str]:
@@ -213,7 +218,8 @@ class DateSeasons(SparkDatetimeTransformer):
                 )
 
         df = df.select(
-            [col for col in self.features]
+            *dataset.service_columns,
+            *[col for col in self.features]
         )
 
         output = dataset.empty()

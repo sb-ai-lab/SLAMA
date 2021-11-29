@@ -36,7 +36,7 @@ class NaNFlags(SparkTransformer):
         sdf = dataset.data
 
         row = sdf\
-            .select([F.mean(F.isnan(c).astype(FloatType())).alias(c) for c in sdf.columns])\
+            .select([F.mean(F.isnan(c).astype(FloatType())).alias(c) for c in dataset.features])\
             .collect()[0]
 
         self.nan_cols = [col for col, col_nan_rate in row.asDict(True).items() if col_nan_rate > self.nan_rate]
@@ -48,7 +48,7 @@ class NaNFlags(SparkTransformer):
 
         sdf = dataset.data
 
-        new_sdf = sdf.select([
+        new_sdf = sdf.select(*dataset.service_columns, *[
             F.isnan(c).astype(FloatType()).alias(feat)
             for feat, c in zip(self.features, self.nan_cols)
         ])
@@ -65,11 +65,13 @@ class FillInf(SparkTransformer):
     _transform_checks = ()
     _fname_prefix = "fillinf"
 
+    _can_unwind_parents = False
+
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
         df = dataset.data
 
-        for i in df.columns:
+        for i in dataset.features:
             df = df \
                 .withColumn(i,
                             F.when(
@@ -109,15 +111,15 @@ class FillnaMedian(SparkTransformer):
         sdf = dataset.data
 
         rows = sdf\
-            .select([F.percentile_approx(c, 0.5).alias(c) for c in sdf.columns])\
-            .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in sdf.columns])\
+            .select([F.percentile_approx(c, 0.5).alias(c) for c in dataset.features])\
+            .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in dataset.features])\
             .collect()
 
         assert len(rows) == 1, f"Results count should be exactly 1, but it is {len(rows)}"
 
         self.meds = rows[0].asDict()
 
-        self._features = [f"{self._fname_prefix}__{c}" for c in sdf.columns]
+        self._features = [f"{self._fname_prefix}__{c}" for c in dataset.features]
 
         return self
 
@@ -134,9 +136,9 @@ class FillnaMedian(SparkTransformer):
 
         sdf = dataset.data
 
-        new_sdf = sdf.select([
+        new_sdf = sdf.select(*dataset.service_columns, *[
             F.when(F.isnan(c), self.meds[c]).otherwise(F.col(c)).alias(f"{self._fname_prefix}__{c}")
-            for c in sdf.columns
+            for c in dataset.features
         ])
 
         output = dataset.empty()
@@ -151,6 +153,8 @@ class LogOdds(SparkTransformer):
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "logodds"
+
+    _can_unwind_parents = False
 
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
         """Transform - convert num values to logodds.
@@ -213,7 +217,7 @@ class StandardScaler(SparkTransformer):
         means = [F.mean(c).alias(f"mean_{c}") for c in sdf.columns]
         stds = [
             F.when(F.stddev(c) == 0, 1).when(F.isnan(F.stddev(c)), 1).otherwise(F.stddev(c)).alias(f"std_{c}")
-            for c in sdf.columns
+            for c in dataset.features
         ]
 
         self._means_and_stds = sdf\
@@ -235,9 +239,9 @@ class StandardScaler(SparkTransformer):
 
         sdf = dataset.data
 
-        new_sdf = sdf.select([
+        new_sdf = sdf.select(*dataset.service_columns, *[
             ((F.col(c) - self._means_and_stds[f"mean_{c}"]) / F.lit(self._means_and_stds[f"std_{c}"])).alias(f"{self._fname_prefix}__{c}")
-            for c in sdf.columns
+            for c in dataset.features
         ])
 
         # create resulted
@@ -278,10 +282,10 @@ class QuantileBinning(SparkTransformer):
 
         sdf = dataset.data
 
-        qdisc = QuantileDiscretizer(numBucketsArray=[self.nbins for _ in sdf.columns],
+        qdisc = QuantileDiscretizer(numBucketsArray=[self.nbins for _ in dataset.features],
                                     handleInvalid="keep",
-                                    inputCols=[c for c in sdf.columns],
-                                    outputCols=[f"{self._fname_prefix}__{c}" for c in sdf.columns])
+                                    inputCols=[c for c in dataset.features],
+                                    outputCols=[f"{self._fname_prefix}__{c}" for c in dataset.features])
 
         self._bucketizer = qdisc.fit(sdf)
 
@@ -306,8 +310,8 @@ class QuantileBinning(SparkTransformer):
         # see: https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.feature.QuantileDiscretizer.html
         new_sdf = self._bucketizer\
             .transform(sdf)\
-            .select([F.col(c).astype(IntegerType()).alias(c) for c in self._bucketizer.getOutputCols()])\
-            .select([
+            .select(*dataset.service_columns, *[F.col(c).astype(IntegerType()).alias(c) for c in self._bucketizer.getOutputCols()])\
+            .select(*dataset.service_columns, *[
                 F.when(F.col(c) == self.nbins, 0).otherwise(F.col(c) + 1).alias(c)
                 for c in self._bucketizer.getOutputCols()
             ])
