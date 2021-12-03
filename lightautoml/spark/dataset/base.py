@@ -79,7 +79,7 @@ class SparkDataset(LAMLDataset):
         # TODO: SPARK-LAMA there is a clear problem with this target
         #       we either need to bring this column through all datasets(e.g. duplication)
         #       or really save it as a separate dataframe
-        self._target_column: str = "target"
+        self._target_column: str = kwargs["target"]
         self._data = None
         self._is_frozen_in_cache: bool = False
         self._dependencies = dependencies

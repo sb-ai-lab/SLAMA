@@ -153,3 +153,6 @@ poetry.lock
 *.db
 
 temp/
+
+
+*.pickle

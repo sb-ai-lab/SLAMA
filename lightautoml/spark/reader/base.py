@@ -1,9 +1,13 @@
 import logging
-from typing import Optional, Any
+from collections import defaultdict
+from copy import copy
+from itertools import chain
+from typing import Optional, Any, List, Dict, Tuple
 
 import numpy as np
-from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType
+from bidict import bidict
+from pyspark.sql import functions as F, Column
+from pyspark.sql.types import IntegerType, NumericType, StringType
 
 from lightautoml.dataset.base import array_attr_roles, valid_array_attributes
 from lightautoml.dataset.roles import ColumnRole, DropRole, NumericRole, DatetimeRole, CategoryRole
@@ -13,6 +17,32 @@ from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
 from lightautoml.tasks import Task
 
 logger = logging.getLogger(__name__)
+
+dtype2Stype ={
+    "str": "string",
+    "bool": "boolean",
+    "int": "int",
+    "int8": "int",
+    "int16": "int",
+    "int32": "int",
+    "int64": "int",
+    "int128": "bigint",
+    "int256": "bigint",
+    "integer": "int",
+    "uint8": "int",
+    "uint16": "int",
+    "uint32": "int",
+    "uint64": "int",
+    "uint128": "bigint",
+    "uint256": "bigint",
+    "longlong": "long",
+    "ulonglong": "long",
+    "float16": "float",
+    "float": "float",
+    "float32": "float",
+    "float64": "double",
+    "float128": "double"
+}
 
 
 class SparkToSparkReader(Reader):
@@ -116,7 +146,7 @@ class SparkToSparkReader(Reader):
             Dataset with selected features.
 
         """
-        logger.info("\x1b[1mTrain data shape: {}\x1b[0m\n".format(train_data.shape))
+        logger.info(f"\x1b[1mTrain data columns: {train_data.columns}\x1b[0m\n")
 
         if SparkDataset.ID_COLUMN not in train_data.columns:
             train_data = train_data.withColumn(SparkDataset.ID_COLUMN, F.monotonically_increasing_id())
@@ -149,10 +179,21 @@ class SparkToSparkReader(Reader):
             # add new role
             parsed_roles[feat] = r
 
-        assert "target" in kwargs, "Target should be defined"
-        self.target = kwargs["target"]
+        if "target" in kwargs:
+            assert isinstance(kwargs["target"], (str, Column)), \
+                f"Target must be a column or column name, but it is {type(kwargs['target'])}"
+            assert str(kwargs["target"]) in train_data.columns, "Target must be a part of dataframe"
+            self.target = kwargs["target"]
+        elif "target" in train_data.columns:
+            self.target = "target"
+        elif "TARGET" in train_data.columns:
+            self.target = "TARGET"
+        else:
+            assert False,  "Target should be defined"
+        # assert "target" in kwargs or "target" in [c.lower() for c in train_data.columns], "Target should be defined"
+        # self.target = kwargs["target"] if "target" in kwargs else "target"
 
-        train_data = self._create_target(train_data, target_col=kwargs["target"])
+        train_data = self._create_target(train_data, target_col=self.target)
 
         # get subsample if it needed
         subsample = train_data
@@ -170,6 +211,8 @@ class SparkToSparkReader(Reader):
         #   5. if not possible (e.g. string type), try to guess using LAMA logic
 
         # infer roles
+        feats_to_guess: List[str] = []
+        inferred_feats: Dict[str, ColumnRole] = dict()
         for feat in subsample.columns:
             if feat == SparkDataset.ID_COLUMN:
                 continue
@@ -207,15 +250,22 @@ class SparkToSparkReader(Reader):
                     ):
                         r.dtype = self._get_default_role_from_str("numeric").dtype
 
+                inferred_feats[feat] = r
             else:
                 # TODO: SPARK-LAMA this functions can be applied for all columns in a single round
-                # if no - infer
-                if self._is_ok_feature(subsample, feat):
-                    r = self._guess_role(subsample, feat)
-                else:
-                    r = DropRole()
+                feats_to_guess.append(feat)
+                # # if no - infer
+                # if self._is_ok_feature(subsample, feat):
+                #     r = self._guess_role(subsample, feat)
+                # else:
+                #     r = DropRole()
 
-            # set back
+        ok_features = self._ok_features(train_data, feats_to_guess)
+        guessed_feats = self._guess_role(train_data, ok_features)
+        inferred_feats.update(guessed_feats)
+
+        # # set back
+        for feat, r in inferred_feats.items():
             if r.name != "Drop":
                 self._roles[feat] = r
                 self._used_features.append(feat)
@@ -240,8 +290,11 @@ class SparkToSparkReader(Reader):
 
         # get dataset
         # TODO: SPARK-LAMA send parent for unwinding
+        kwargs = copy(kwargs)
+        kwargs["target"] = self.target
+
         dataset = SparkDataset(
-            train_data.select(SparkDataset.ID_COLUMN, self.used_features),
+            train_data.select(SparkDataset.ID_COLUMN, *self.used_features),
             self.roles,
             task=self.task,
             **kwargs
@@ -277,23 +330,41 @@ class SparkToSparkReader(Reader):
         """
         self.class_mapping = None
 
-        rows = sdf.where(F.isnan(target_col)).first().collect()
-        assert len(rows) == 0, "Nan in target detected"
+        nan_count = sdf.where(F.isnan(target_col)).count()
+        assert nan_count == 0, "Nan in target detected"
 
         if self.task.name != "reg":
-            srtd = sdf.select(target_col).distinct().sort().collect()
-            srtd = np.array([r[target_col] for r in srtd])
-            self._n_classes = len(srtd)
+            uniques = sdf.select(target_col).distinct().collect()
+            uniques = [r[target_col] for r in uniques]
+            self._n_classes = len(uniques)
+            # dict(sdf.dtypes)[target_col]
 
-            if (np.arange(srtd.shape[0]) == srtd).all():
+            # TODO: make it pretty
+            # 1. check the column type if it is numeric or not
+            # 2. if it is string can i convert it to num?
+            if isinstance(sdf.schema[target_col], NumericType):
+                srtd = np.ndarray(sorted(uniques))
+            # elif isinstance(sdf.schema[target_col], StringType):
+            #     try:
+            #         srtd = np.ndarray(sorted([int(el) for el in uniques]))
+            #         sdf = sdf
+            #     except ValueError:
+            #         srtd = None
+            else:
+                srtd = None
+
+            if srtd and (np.arange(srtd.shape[0]) == srtd).all():
 
                 assert srtd.shape[0] > 1, "Less than 2 unique values in target"
                 if self.task.name == "binary":
                     assert srtd.shape[0] == 2, "Binary task and more than 2 values in target"
                 return sdf
 
-            self.class_mapping = {x: i for i, x in enumerate(srtd)}
-            sdf_with_proc_target = sdf.na.replace(self.class_mapping, subset=[target_col])
+            self.class_mapping = {x: i for i, x in enumerate(uniques)}
+
+            remap = F.udf(lambda x: self.class_mapping[x], returnType=IntegerType())
+            rest_cols = [c for c in sdf.columns if c != target_col]
+            sdf_with_proc_target = sdf.select(*rest_cols, remap(target_col).alias(target_col))
 
             return sdf_with_proc_target
 
@@ -317,7 +388,7 @@ class SparkToSparkReader(Reader):
 
         return ColumnRole.from_string(name, **role_params)
 
-    def _guess_role(self, data: SparkDataFrame, feature: str) -> RoleType:
+    def _guess_role(self, data: SparkDataFrame, features: List[Tuple[str, bool]]) -> Dict[str, RoleType]:
         """Try to infer role, simple way.
 
         If convertable to float -> number.
@@ -331,36 +402,56 @@ class SparkToSparkReader(Reader):
             Feature role.
 
         """
-        inferred_dtype = next(dtyp for fname, dtyp in data.dtypes if fname == feature)
-        inferred_dtype = np.dtype(inferred_dtype)
+        guessed_cols = dict()
+        cols_to_check = []
+        check_columns = []
+        for feature, ok in features:
+            if not ok:
+                guessed_cols[feature] = DropRole()
+            inferred_dtype = next(dtyp for fname, dtyp in data.dtypes if fname == feature)
+            # numpy doesn't understand 'string' but 'str' is ok
+            inferred_dtype = 'str' if inferred_dtype == 'string' else inferred_dtype
+            inferred_dtype = np.dtype(inferred_dtype)
 
-        # testing if it can be numeric or not
-        num_dtype = self._get_default_role_from_str("numeric").dtype
-        date_format = self._get_default_role_from_str("datetime").format
-        # TODO: can it be really converted?
-        if np.issubdtype(inferred_dtype, np.number):
-            return NumericRole(num_dtype)
+            # testing if it can be numeric or not
+            num_dtype = self._get_default_role_from_str("numeric").dtype
+            date_format = self._get_default_role_from_str("datetime").format
+            # TODO: can it be really converted?
+            if np.issubdtype(inferred_dtype, np.number):
+                guessed_cols[feature] = NumericRole(num_dtype)
 
-        can_cast_to_numeric = F.col(feature).cast(num_dtype).isNotNull().astype(IntegerType())
+            can_cast_to_numeric = (
+                F.col(feature)
+                .cast(dtype2Stype[num_dtype.__name__])
+                .isNotNull()
+                .astype(IntegerType())
+            )
 
-        # TODO: utc handling here?
-        can_cast_to_datetime = F.to_timestamp(feature, format=date_format).isNotNull().astype(IntegerType())
+            # TODO: utc handling here?
+            can_cast_to_datetime = F.to_timestamp(feature, format=date_format).isNotNull().astype(IntegerType())
+
+            cols_to_check.append((feature, num_dtype, date_format))
+            check_columns.extend([
+                F.sum(can_cast_to_datetime).alias(f"{feature}_num"),
+                F.sum(can_cast_to_numeric).alias(f"{feature}_dt"),
+            ])
 
         result = data.select(
-            F.sum(can_cast_to_datetime).alias(f"{feature}_num"),
-            F.sum(can_cast_to_numeric).alias(f"{feature}_dt"),
+            *check_columns,
             F.count('*').alias('count')
         ).first()
 
-        if result[f"{feature}_num"] == result['count']:
-            return NumericRole(num_dtype)
+        for feature, num_dtype, date_format in cols_to_check:
+            if result[f"{feature}_num"] == result['count']:
+                guessed_cols[feature] = NumericRole(num_dtype)
+            elif result[f"{feature}_dt"] == result['count']:
+                guessed_cols[feature] = DatetimeRole(np.datetime64, date_format=date_format)
+            else:
+                guessed_cols[feature] = CategoryRole(object)
 
-        if result[f"{feature}_dt"] == result['count']:
-            return DatetimeRole(np.datetime64, date_format=date_format)
+        return guessed_cols
 
-        return CategoryRole(object)
-
-    def _is_ok_feature(self, train_data: SparkDataFrame, feature: str) -> bool:
+    def _ok_features(self, train_data: SparkDataFrame, features: List[str]) -> List[Tuple[str, bool]]:
         """Check if column is filled well to be a feature.
 
         Args:
@@ -372,12 +463,20 @@ class SparkToSparkReader(Reader):
         """
 
         row = train_data.select(
-            F.mean(F.isnan(feature).astype(IntegerType())).alias(f"{feature}_nan_rate"),
-            (F.count_distinct(feature) / F.count(feature)).alias(f"{feature}_constant_rate")
-        ).collect()[0]
+            *[F.mean(F.isnan(feature).astype(IntegerType())).alias(f"{feature}_nan_rate")
+              for feature in features],
+            *[(F.approx_count_distinct(feature) / F.count(feature)).alias(f"{feature}_constant_rate")
+              for feature in features]
+        ).first()
 
-        return (row[f"{feature}_nan_rate"] < self.max_nan_rate) \
-               and (row[f"{feature}_constant_rate"] < self.max_constant_rate)
+        return [
+            (
+                feature,
+                (row[f"{feature}_nan_rate"] < self.max_nan_rate)
+                and (row[f"{feature}_constant_rate"] < self.max_constant_rate)
+            )
+            for feature in features
+        ]
 
     def read(self, data: SparkDataFrame, features_names: Any = None, add_array_attrs: bool = False) -> SparkDataset:
         """Read dataset with fitted metadata.
