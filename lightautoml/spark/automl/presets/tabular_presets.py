@@ -20,6 +20,7 @@ from lightautoml.spark.pipelines.ml.nested_ml_pipe import NestedTabularMLPipelin
 from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.tasks import Task
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -391,6 +392,9 @@ class TabularAutoML(AutoMLPreset):
 
         if isinstance(data, pd.DataFrame):
             # TODO SPARK-LAMA: Fix schema inference
+            object_cols = [c for c, dtype in dict(data.dtypes).items() if str(dtype) == 'object']
+            for c in object_cols:
+                data[c] = data[c].replace(np.nan, None)
             return self._spark.createDataFrame(data), None
 
         # case - dict of array args passed
