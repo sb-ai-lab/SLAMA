@@ -431,9 +431,14 @@ class TargetEncoder(SparkTransformer):
         folds_prior = f_sum.withColumn("folds_prior", udf(lambda x, y: (tot_sum - x) / (tot_count - y), FloatType())(F.col("sumd"), F.col("countd")))
         # oof_feats = np.zeros(data.shape, dtype=np.float32)
         self.feats = data
+        self.old_cols = data.columns
+        self.old_cols.remove('_id')
         self.encs = {}
 
-        for col_name in data.columns:
+        for col_name in self.old_cols:
+
+            if col_name == '_id':
+                continue
 
             # calc folds stats
             enc_dim = data.agg(F.max(F.col(col_name))).collect()[0][0] + 1
@@ -476,8 +481,8 @@ class TargetEncoder(SparkTransformer):
             self.encs[col_name] = enc
 
         output = dataset.empty()
-        self.output_role = NumericRole(np.float32)
-        self.feats = self.feats.drop(*data.columns)
+        self.output_role = NumericRole(np.float32, prob=True)
+        self.feats = self.feats.drop(*self.old_cols)
         output.set_data(self.feats, self.features, self.output_role)
 
         return output
@@ -490,7 +495,7 @@ class TargetEncoder(SparkTransformer):
         data = dataset.data
 
         # transform
-        for c in data.columns:
+        for c in self.old_columns:
             data = data.withColumn(c, data[c].cast("double"))
             data = data.replace(to_replace=dict(enumerate(self.encs[c])), subset=c)
 
@@ -550,12 +555,14 @@ class MultiClassTargetEncoder(SparkTransformer):
         self.feats = data
         self.encs = {}
         self.n_classes = data.agg(F.max(target_column)).collect()[0][0] + 1
+        self.old_columns = data.columns
+        self.old_columns.remove('_id')
         self._features = []
         for i in dataset.features:
             for j in range(self.n_classes):
                 self._features.append("{0}_{1}__{2}".format("multioof", j, i))
 
-        for col_name in data.columns:
+        for col_name in self.old_columns:
 
             f_sum = data.groupBy(col_name, target_column, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("sumd"))
             f_count = data.groupBy(col_name, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("countd"))
@@ -595,14 +602,10 @@ class MultiClassTargetEncoder(SparkTransformer):
                 enc_list.append(enc)
             sums = [sum(x) for x in zip(*enc_list)]
             for i in range(self.n_classes):
-                self.encs[col_name + "_" + str(i)] = [enc_list[i][j]/sums[j] for j in range(len(enc_list[i]))]
+                self.encs[self._fname_prefix + "_" + str(i) + "__" + col_name ] = [enc_list[i][j]/sums[j] for j in range(len(enc_list[i]))]
 
-        output = dataset.empty()
-        self.output_role = NumericRole(np.float32)
-        self.feats = self.feats.drop(*data.columns)
-        output.set_data(self.feats, self.features, self.output_role)
-
-        return output
+        self.output_role = NumericRole(np.float32, prob=True)
+        return self.transform(dataset)
 
     def transform(self, dataset: SparkDataset) -> SparkDataset:
 
@@ -610,13 +613,13 @@ class MultiClassTargetEncoder(SparkTransformer):
         super().transform(dataset)
 
         data = dataset.data
-        dc = data.columns
+        dc = self.old_columns
         # transform
         for c in dc:
             data = data.withColumn(c, data[c].cast("int"))
             for i in range(self.n_classes):
-                col = self.encs[f"{c}_{i}"]
-                data = data.withColumn(f"{c}_{i}", udf(lambda x: col[x], DoubleType())(c))
+                col = self.encs[self._fname_prefix + "_" + str(i) + "__" + c]
+                data = data.withColumn(self._fname_prefix + "_" + str(i) + "__" + c, udf(lambda x: col[x], DoubleType())(c))
             data = data.drop(c)
 
         # create resulted
