@@ -390,6 +390,7 @@ class TabularAutoML(AutoMLPreset):
             return data, None
 
         if isinstance(data, pd.DataFrame):
+            # TODO SPARK-LAMA: Fix schema inference
             return self._spark.createDataFrame(data), None
 
         # case - dict of array args passed

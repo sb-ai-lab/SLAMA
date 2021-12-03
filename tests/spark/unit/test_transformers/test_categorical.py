@@ -1,3 +1,5 @@
+from typing import cast, List
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,21 +13,25 @@ from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabe
     CatIntersectstions as SparkCatIntersectstions, OHEEncoder as SparkOHEEncoder, \
     TargetEncoder as SparkTargetEncoder, MultiClassTargetEncoder as SparkMultiClassTargetEncoder
 from lightautoml.transformers.categorical import LabelEncoder, FreqEncoder, OrdinalEncoder, CatIntersectstions, \
-    OHEEncoder, TargetEncoder, MultiClassTargetEncoder
-from . import from_pandas_to_spark
-from . import compare_by_content, compare_by_metadata, DatasetForTest, spark
+    OHEEncoder
+from lightautoml.tasks import Task
+
+from . import compare_by_content, compare_by_metadata, DatasetForTest, spark, NumpyTransformable, compare_obtained_datasets
+from lightautoml.spark.dataset.base import SparkDataset
+
 
 DATASETS = [
 
     DatasetForTest("test_transformers/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
 
     DatasetForTest("test_transformers/resources/datasets/house_prices.csv",
-                   columns=["Id", "MSSubClass", "MSZoning", "LotFrontage"],
+                   columns=["Id", "MSSubClass", "MSZoning", "LotFrontage", "WoodDeckSF"],
                    roles={
                        "Id": CategoryRole(np.int32),
                        "MSSubClass": CategoryRole(np.int32),
                        "MSZoning": CategoryRole(str),
-                       "LotFrontage": CategoryRole(np.float32)
+                       "LotFrontage": CategoryRole(np.float32),
+                       "WoodDeckSF": CategoryRole(bool)
                    })
 ]
 
@@ -78,27 +84,20 @@ def test_ohe(spark: SparkSession):
     _, _ = compare_by_metadata(spark, ds, OHEEncoder(make_sparse), SparkOHEEncoder(make_sparse))
 
 
-def test_target_encoder(spark: SparkSession):
-    df = pd.read_csv("test_transformers/resources/datasets/house_prices.csv")[
-        ["Id", 'MSSubClass', 'MSZoning', 'LotFrontage', 'WoodDeckSF']
-    ]
-    # %%
-    ds = PandasDataset(df.head(50),
-                       roles={
-                           "Id": CategoryRole(np.int32),
-                           "MSSubClass": CategoryRole(np.int32),
-                           "MSZoning": CategoryRole(str),
-                           "LotFrontage": CategoryRole(np.float32),
-                           "WoodDeckSF": CategoryRole(bool)
-                       },
-                       task=Task("binary")
-                       )
 
-    lt = LabelEncoder()
-    lt.fit(ds)
-    labeled_ds = lt.transform(ds)
+@pytest.mark.parametrize("dataset", [DATASETS[1]])
+def test_mock_target_encoder(spark: SparkSession, dataset: DatasetForTest):
+    from lightautoml.transformers.categorical import TargetEncoder
+    from lightautoml.spark.transformers.categorical import MockTargetEncoder
 
-    ds = NumpyDataset(
+    ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
+
+    label_encoder = LabelEncoder()
+    label_encoder.fit(ds)
+    labeled_ds = label_encoder.transform(ds)
+
+    n_ds = NumpyDataset(
+        distributed/master
         data=labeled_ds.data,
         features=labeled_ds.features,
         roles=labeled_ds.roles,
@@ -107,78 +106,110 @@ def test_target_encoder(spark: SparkSession):
         folds=labeled_ds.data[:, 2]
     )
 
-    lama_transformer = TargetEncoder()
-    lama_result = lama_transformer.fit_transform(ds)
+# def test_target_encoder(spark: SparkSession):
+#     df = pd.read_csv("test_transformers/resources/datasets/house_prices.csv")[
+#         ["Id", 'MSSubClass', 'MSZoning', 'LotFrontage', 'WoodDeckSF']
+#     ]
+#     # %%
+#     ds = PandasDataset(df.head(50),
+#                        roles={
+#                            "Id": CategoryRole(np.int32),
+#                            "MSSubClass": CategoryRole(np.int32),
+#                            "MSZoning": CategoryRole(str),
+#                            "LotFrontage": CategoryRole(np.float32),
+#                            "WoodDeckSF": CategoryRole(bool)
+#                        },
+#                        task=Task("binary")
+#                        )
 
-    spark_data = from_pandas_to_spark(ds.to_pandas(), spark)
-    spark_data.task = Task("binary")
-    spark_transformer = SparkTargetEncoder()
-    spark_result = spark_transformer.fit_transform(spark_data, target_column='le__WoodDeckSF', folds_column='le__MSZoning')
+#     lt = LabelEncoder()
+#     lt.fit(ds)
+#     labeled_ds = lt.transform(ds)
 
-    lama_np_ds = lama_result.to_numpy()
-    spark_np_ds = spark_result.to_numpy()
+#     ds = NumpyDataset(
+#         data=labeled_ds.data,
+#         features=labeled_ds.features,
+#         roles=labeled_ds.roles,
+#         task=labeled_ds.task,
+#         target=labeled_ds.data[:, -1],
+#         folds=labeled_ds.data[:, 2]
+#     )
 
-    assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
-        f"List of features are not equal\n" \
-        f"LAMA: {sorted(lama_np_ds.features)}\n" \
-        f"SPARK: {sorted(spark_np_ds.features)}"
+#     lama_transformer = TargetEncoder()
+#     lama_result = lama_transformer.fit_transform(ds)
 
-    # compare roles equality for the columns
-    assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
+#     spark_data = from_pandas_to_spark(ds.to_pandas(), spark)
+#     spark_data.task = Task("binary")
+#     spark_transformer = SparkTargetEncoder()
+#     spark_result = spark_transformer.fit_transform(spark_data, target_column='le__WoodDeckSF', folds_column='le__MSZoning')
 
-    # compare shapes
-    assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
+#     lama_np_ds = lama_result.to_numpy()
+#     spark_np_ds = spark_result.to_numpy()
+
+#     assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
+#         f"List of features are not equal\n" \
+#         f"LAMA: {sorted(lama_np_ds.features)}\n" \
+#         f"SPARK: {sorted(spark_np_ds.features)}"
+
+#     # compare roles equality for the columns
+#     assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
+
+#     # compare shapes
+#     assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
 
 
 
-def test_multiclass_target_encoder(spark: SparkSession):
-    df = pd.read_csv("test_transformers/resources/datasets/house_prices.csv")[
-        ["Id", 'MSSubClass', 'MSZoning', 'LotFrontage', 'WoodDeckSF']
-    ]
-    # %%
-    ds = PandasDataset(df.head(50),
-                       roles={
-                           "Id": CategoryRole(np.int32),
-                           "MSSubClass": CategoryRole(np.int32),
-                           "MSZoning": CategoryRole(str),
-                           "LotFrontage": CategoryRole(np.float32),
-                           "WoodDeckSF": CategoryRole(np.int32)
-                       },
-                       task=Task("multiclass")
-                       )
+# def test_multiclass_target_encoder(spark: SparkSession):
+#     df = pd.read_csv("test_transformers/resources/datasets/house_prices.csv")[
+#         ["Id", 'MSSubClass', 'MSZoning', 'LotFrontage', 'WoodDeckSF']
+#     ]
+#     # %%
+#     ds = PandasDataset(df.head(50),
+#                        roles={
+#                            "Id": CategoryRole(np.int32),
+#                            "MSSubClass": CategoryRole(np.int32),
+#                            "MSZoning": CategoryRole(str),
+#                            "LotFrontage": CategoryRole(np.float32),
+#                            "WoodDeckSF": CategoryRole(np.int32)
+#                        },
+#                        task=Task("multiclass")
+#                        )
 
-    lt = LabelEncoder()
-    lt.fit(ds)
-    labeled_ds = lt.transform(ds)
+#     lt = LabelEncoder()
+#     lt.fit(ds)
+#     labeled_ds = lt.transform(ds)
 
-    ds = NumpyDataset(
-        data=labeled_ds.data,
-        features=labeled_ds.features,
-        roles=labeled_ds.roles,
-        task=labeled_ds.task,
-        target=labeled_ds.data[:, -1],
-        folds=labeled_ds.data[:, 2]
-    )
+#     ds = NumpyDataset(
 
-    lama_transformer = MultiClassTargetEncoder()
-    lama_result = lama_transformer.fit_transform(ds)
+    sds = SparkDataset.from_lama(n_ds, spark)
 
-    spark_data = from_pandas_to_spark(ds.to_pandas(), spark)
-    spark_data.task = Task("multiclass")
-    spark_transformer = SparkMultiClassTargetEncoder()
-    spark_result = spark_transformer.fit_transform(spark_data, target_column='le__WoodDeckSF', folds_column='le__MSZoning')
+    target_encoder = TargetEncoder()
+    lama_output = target_encoder.fit_transform(n_ds)
 
-    lama_np_ds = lama_result.to_numpy()
-    spark_np_ds = spark_result.to_numpy()
+    mock_encoder = MockTargetEncoder()
+    mock_output = mock_encoder.fit_transform(sds)
 
-    assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
-        f"List of features are not equal\n" \
-        f"LAMA: {sorted(lama_np_ds.features)}\n" \
-        f"SPARK: {sorted(spark_np_ds.features)}"
+    compare_obtained_datasets(lama_output, mock_output)
 
-    # compare roles equality for the columns
-    assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
+#     lama_transformer = MultiClassTargetEncoder()
+#     lama_result = lama_transformer.fit_transform(ds)
 
-    # compare shapes
-    assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
+#     spark_data = from_pandas_to_spark(ds.to_pandas(), spark)
+#     spark_data.task = Task("multiclass")
+#     spark_transformer = SparkMultiClassTargetEncoder()
+#     spark_result = spark_transformer.fit_transform(spark_data, target_column='le__WoodDeckSF', folds_column='le__MSZoning')
+
+#     lama_np_ds = lama_result.to_numpy()
+#     spark_np_ds = spark_result.to_numpy()
+
+#     assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
+#         f"List of features are not equal\n" \
+#         f"LAMA: {sorted(lama_np_ds.features)}\n" \
+#         f"SPARK: {sorted(spark_np_ds.features)}"
+
+#     # compare roles equality for the columns
+#     assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
+
+#     # compare shapes
+#     assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
 

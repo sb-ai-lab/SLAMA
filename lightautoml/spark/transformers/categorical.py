@@ -1,6 +1,6 @@
 from collections import defaultdict
 from itertools import chain, combinations
-from typing import Optional, Sequence, List, Tuple, Dict
+from typing import Optional, Sequence, List, Tuple, Dict, Union, cast
 
 import numpy as np
 from pandas import Series
@@ -247,11 +247,18 @@ class CatIntersectstions(LabelEncoder):
 
     @staticmethod
     def _make_category(df: SparkDataFrame, cols: Sequence[str]) -> SparkDataFrame:
+        lit = F.lit("_")
+        col_name = f"({'__'.join(cols)})"
+        columns_for_concat = []
+        for col in cols:
+            columns_for_concat.append(F.col(col))
+            columns_for_concat.append(lit)
+        columns_for_concat = columns_for_concat[:-1]
 
         return df.withColumn(
-            f"({cols[0]}__{cols[1]})",
+            col_name,
             murmurhash3_32_udf(
-                F.concat(F.col(cols[0]), F.lit("_"), F.col(cols[1]))
+                F.concat(*columns_for_concat)
             )
         )
 
@@ -263,14 +270,14 @@ class CatIntersectstions(LabelEncoder):
 
         for comb in self.intersections:
             df = self._make_category(df, comb)
-            roles[f"({comb[0]}__{comb[1]})"] = CategoryRole(
+            roles[f"({'__'.join(comb)})"] = CategoryRole(
                 object,
                 unknown=max((dataset.roles[x].unknown for x in comb)),
                 label_encoded=True,
             )
 
         df = df.select(
-            *dataset.service_columns, *[f"({comb[0]}__{comb[1]})" for comb in self.intersections]
+            *dataset.service_columns, *[f"({'__'.join(comb)})" for comb in self.intersections]
         )
 
         output = dataset.empty()
@@ -505,6 +512,40 @@ class TargetEncoder(SparkTransformer):
 
         return output
 
+
+from lightautoml.transformers.categorical import TargetEncoder as LAMATargetEncoder
+from lightautoml.dataset.np_pd_dataset import NumpyDataset, PandasDataset
+class MockTargetEncoder(LAMATargetEncoder, SparkTransformer):
+
+    def _convert_to_lama(self, dataset: SparkDataset) -> Union[NumpyDataset, PandasDataset]:
+        return dataset.to_numpy()
+
+    def _convert_to_spark(self, dataset: Union[NumpyDataset, PandasDataset], spark) -> SparkDataset:
+        return SparkDataset.from_lama(dataset, spark)
+
+    def fit(self, dataset: SparkDataset) -> SparkDataset:
+        lama_ds = self._convert_to_lama(dataset)
+        fitted_ds = LAMATargetEncoder.fit(self, lama_ds)
+        converted_ds = self._convert_to_spark(fitted_ds, spark=dataset.data.sql_ctx.sparkSession)
+        return converted_ds
+
+    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        return self._convert_to_spark(
+            LAMATargetEncoder.transform(
+                self,
+                self._convert_to_lama(dataset)
+            ),
+            spark=dataset.data.sql_ctx.sparkSession
+        )
+
+    def fit_transform(self, dataset: SparkDataset) -> SparkDataset:
+        return self._convert_to_spark(
+            LAMATargetEncoder.fit_transform(
+                self,
+                self._convert_to_lama(dataset)
+            ),
+            spark=dataset.data.sql_ctx.sparkSession
+        )
 
 
 class MultiClassTargetEncoder(SparkTransformer):

@@ -21,7 +21,6 @@ import pandas as pd
 
 @pytest.fixture(scope="session")
 def spark() -> SparkSession:
-    os.environ['PYSPARK_PYTHON'] = '/home/nikolay/.conda/envs/LAMA/bin/python'
 
     spark = SparkSession.builder.config("master", "local[1]").getOrCreate()
 
@@ -186,3 +185,31 @@ def from_pandas_to_spark(p: PandasDataset, spark: SparkSession) -> SparkDataset:
     sdf = spark.createDataFrame(data=pdf)
     # dummy target
     return SparkDataset(sdf, roles=p.roles, target=dummy_target)
+
+
+def compare_obtained_datasets(lama_ds: NumpyDataset, spark_ds: SparkDataset):
+    lama_np_ds = cast(NumpyTransformable, lama_ds).to_numpy()
+    spark_np_ds = spark_ds.to_numpy()
+
+    assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
+        f"List of features are not equal\n" \
+        f"LAMA: {sorted(lama_np_ds.features)}\n" \
+        f"SPARK: {sorted(spark_np_ds.features)}"
+
+    # compare roles equality for the columns
+    assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
+
+    # compare shapes
+    assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
+
+    lama_data: np.ndarray = lama_np_ds.data
+    spark_data: np.ndarray = spark_np_ds.data
+    features: List[int] = [i for i, _ in sorted(enumerate(lama_np_ds.features), key=lambda x: x[1])]
+
+    assert np.allclose(
+        np.sort(lama_data[:, features], axis=0), np.sort(spark_data[:, features], axis=0),
+        equal_nan=True
+    ), \
+        f"Results of the LAMA's transformer and the Spark based transformer are not equal: " \
+        f"\n\nLAMA: \n{lama_data}" \
+        f"\n\nSpark: \n{spark_data}"

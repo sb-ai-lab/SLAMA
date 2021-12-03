@@ -28,6 +28,13 @@ class SparkDataset(LAMLDataset):
 
     ID_COLUMN = "_id"
 
+    def empty(self) -> "SparkDataset":
+
+        dataset = super().empty()
+        dataset._dependencies = []
+
+        return dataset
+
     @staticmethod
     def uncache_dataframes():
         spark = SparkSession.getActiveSession()
@@ -47,16 +54,16 @@ class SparkDataset(LAMLDataset):
             a joined dataset, containing features (and columns too) from all datasets
             except containing only one _id column
         """
-        assert len(datasets) == 0, "Cannot join an empty list of datasets"
+        assert len(datasets) > 0, "Cannot join an empty list of datasets"
 
         # requires presence of hidden "_id" column in each dataset
         # that should be saved across all transformations
         features = [feat for ds in datasets for feat in ds.features]
-        roles = {col: role for ds in datasets for col, role  in ds.roles.items()}
+        roles = {col: role for ds in datasets for col, role in ds.roles.items()}
         curr_sdf = datasets[0].data
 
         for ds in datasets[1:]:
-            curr_sdf = curr_sdf.data.join(ds.data, cls.ID_COLUMN)
+            curr_sdf = curr_sdf.join(ds.data, cls.ID_COLUMN)
 
         # TODO: SPARK-LAMA can we do it without cast?
         curr_sdf = cast(SparkDataFrame, curr_sdf.select(datasets[0].data[cls.ID_COLUMN], *features))
@@ -82,7 +89,7 @@ class SparkDataset(LAMLDataset):
         self._target_column: str = kwargs["target"]
         self._data = None
         self._is_frozen_in_cache: bool = False
-        self._dependencies = dependencies
+        self._dependencies = [] if dependencies is None else dependencies
         self._service_columns: Set[str] = {self.ID_COLUMN}
 
         roles = roles if roles else dict()
@@ -174,10 +181,10 @@ class SparkDataset(LAMLDataset):
 
     @property
     def dependencies(self) -> Optional[List['SparkDataset']]:
-        return list(self._dependencies) if self._dependencies else None
+        return self._dependencies
 
     @dependencies.setter
-    def dependencies(self, *val: 'SparkDataset') -> None:
+    def dependencies(self, val: List['SparkDataset']) -> None:
         assert not self._dependencies
         self._dependencies = val
 
@@ -317,13 +324,38 @@ class SparkDataset(LAMLDataset):
         self._validate_dataframe(data)
         super().set_data(data, None, roles)
 
+        if dependencies is not None:
+            self._dependencies = dependencies
+
     def to_pandas(self) -> PandasDataset:
         data, roles = self._materialize_to_pandas()
         return PandasDataset(data=data, roles=roles, task=self.task)
 
     def to_numpy(self) -> NumpyDataset:
         data, roles = self._materialize_to_pandas()
-        return NumpyDataset(data=data.to_numpy(), features=list(data.columns), roles=roles, task=self.task)
+
+        try:
+            target = self.target
+            if isinstance(target, pd.Series):
+                target = target.to_numpy()
+        except AttributeError:
+            target = None
+
+        try:
+            folds = self.folds
+            if isinstance(folds, pd.Series):
+                folds = folds.to_numpy()
+        except AttributeError:
+            folds = None
+
+        return NumpyDataset(
+            data=data.to_numpy(),
+            features=list(data.columns),
+            roles=roles,
+            task=self.task,
+            target=target,
+            folds=folds
+        )
 
     @staticmethod
     def _hstack(datasets: Sequence[Any]) -> Any:
@@ -335,3 +367,34 @@ class SparkDataset(LAMLDataset):
     @staticmethod
     def _get_cols(data, k: IntIdx) -> Any:
         raise NotImplementedError("It is not yet ready")
+
+    @staticmethod
+    def from_lama(dataset: Union[NumpyDataset, PandasDataset], spark: SparkSession) -> "SparkDataset":
+        dataset: PandasDataset = dataset.to_pandas()
+        pdf = cast(pd.DataFrame, dataset.data)
+        pdf = pdf.copy()
+        pdf[SparkDataset.ID_COLUMN] = pdf.index
+        sdf = spark.createDataFrame(data=pdf)
+
+        try:
+            target = dataset.target
+            if isinstance(target, pd.Series):
+                target = target.to_numpy()
+        except AttributeError:
+            target = None
+
+        try:
+            folds = dataset.folds
+            if isinstance(folds, pd.Series):
+                folds = folds.to_numpy()
+        except AttributeError:
+            folds = None
+
+        return SparkDataset(
+            data=sdf,
+            roles=dataset.roles,
+            task=dataset.task,
+            dependencies=[],
+            target=target,
+            folds=folds
+        )

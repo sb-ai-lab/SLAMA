@@ -1,6 +1,5 @@
 from abc import ABC
-from collections import Sequence
-from typing import Optional, cast, Tuple, List
+from typing import Optional, cast, Tuple, List, Sequence
 
 from pyspark.sql.types import FloatType
 

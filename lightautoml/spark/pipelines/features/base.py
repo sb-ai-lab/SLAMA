@@ -14,10 +14,10 @@ from pyspark.sql import functions as F
 from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.pipelines.utils import get_columns_by_role
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.transformers.categorical import FreqEncoder, OrdinalEncoder, LabelEncoder, TargetEncoder, \
-    MultiClassTargetEncoder, CatIntersectstions
+from lightautoml.spark.transformers.categorical import FreqEncoder, OrdinalEncoder, LabelEncoder, \
+    MockTargetEncoder as TargetEncoder, MultiClassTargetEncoder, CatIntersectstions
 from lightautoml.spark.transformers.datetime import BaseDiff, DateSeasons
-from lightautoml.transformers.base import LAMLTransformer, SequentialTransformer, ColumnsSelector, ChangeRoles
+from lightautoml.spark.transformers.base import LAMLTransformer, SequentialTransformer, ColumnsSelector, ChangeRoles
 from lightautoml.transformers.numeric import QuantileBinning
 
 
@@ -336,7 +336,8 @@ class TabularDataFeatures:
         cat_processing = [
             ColumnsSelector(keys=feats_to_select),
             CatIntersectstions(
-                max_depth=self.max_intersection_depth,
+                # intersections=feats_to_select,
+                max_depth=self.max_intersection_depth
             ),
         ]
         cat_processing = SequentialTransformer(cat_processing)
@@ -363,8 +364,9 @@ class TabularDataFeatures:
 
         sdf = train.data.select(feats)
 
-        if self.subsample:
-            sdf = sdf.sample(withReplacement=False, fraction=self.subsample, seed=self.random_state)
+        # TODO SPARK-LAMA: Do we really need this sampling?
+        # if self.subsample:
+        #     sdf = sdf.sample(withReplacement=False, fraction=self.subsample, seed=self.random_state)
 
         sdf = sdf.select([F.approx_count_distinct(col).alias(col) for col in feats])
         result = sdf.collect()[0]
