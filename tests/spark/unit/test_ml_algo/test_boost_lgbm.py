@@ -8,7 +8,7 @@ from lightautoml.dataset.roles import CategoryRole
 from lightautoml.spark.ml_algo.boost_lgbm import BoostLGBM
 from lightautoml.spark.validation.base import DummyIterator as SparkDummyIterator
 from . import DatasetForTest, spark
-from lightautoml.spark.utils import from_pandas_to_spark
+from ..test_transformers import from_pandas_to_spark
 
 DATASETS = [
 

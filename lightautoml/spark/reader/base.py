@@ -114,6 +114,7 @@ class SparkToSparkReader(Reader):
 
         self.roles_params = roles_params
         self.target = None
+        self.target_col = None
         if roles_params is None:
             self.roles_params = {}
 
@@ -183,17 +184,23 @@ class SparkToSparkReader(Reader):
             assert isinstance(kwargs["target"], (str, Column)), \
                 f"Target must be a column or column name, but it is {type(kwargs['target'])}"
             assert str(kwargs["target"]) in train_data.columns, "Target must be a part of dataframe"
-            self.target = kwargs["target"]
+            # self.target = kwargs["target"]
+            self.target_col = str(kwargs["target"])
         elif "target" in train_data.columns:
-            self.target = "target"
+            # self.target = "target"
+            self.target_col = "target"
         elif "TARGET" in train_data.columns:
-            self.target = "TARGET"
+            # self.target = "TARGET"
+            self.target_col = "TARGET"
         else:
             assert False,  "Target should be defined"
         # assert "target" in kwargs or "target" in [c.lower() for c in train_data.columns], "Target should be defined"
         # self.target = kwargs["target"] if "target" in kwargs else "target"
 
-        train_data = self._create_target(train_data, target_col=self.target)
+        train_data = self._create_target(train_data, target_col=self.target_col)
+
+        self.target = train_data.select(SparkDataset.ID_COLUMN, self.target_col)
+        train_data = train_data.select(*[c for c in train_data.columns if c != self.target_col])
 
         # get subsample if it needed
         subsample = train_data
@@ -289,10 +296,12 @@ class SparkToSparkReader(Reader):
         #     kwargs["folds"] = Series(folds, index=train_data.index)
 
         # get dataset
-        # TODO: SPARK-LAMA send parent for unwinding
+
+        # replace data target with freshly created spark dataframe
         kwargs = copy(kwargs)
         kwargs["target"] = self.target
 
+        # TODO: SPARK-LAMA send parent for unwinding
         dataset = SparkDataset(
             train_data.select(SparkDataset.ID_COLUMN, *self.used_features),
             self.roles,

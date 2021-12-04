@@ -6,7 +6,6 @@ from pyspark.sql import SparkSession
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
 from lightautoml.dataset.roles import ColumnRole
 from lightautoml.spark.transformers.base import SparkTransformer
-from lightautoml.spark.utils import from_pandas_to_spark
 from lightautoml.transformers.base import LAMLTransformer
 from lightautoml.transformers.numeric import NumpyTransformable
 
@@ -16,6 +15,7 @@ import pandas as pd
 # NOTE!!!
 # All tests require PYSPARK_PYTHON env variable to be set
 # for example: PYSPARK_PYTHON=/home/nikolay/.conda/envs/LAMA/bin/python
+from tests.spark.unit.test_transformers import from_pandas_to_spark
 
 
 @pytest.fixture(scope="session")

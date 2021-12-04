@@ -177,14 +177,23 @@ class DatasetForTest:
             self.roles = roles
 
 
-def from_pandas_to_spark(p: PandasDataset, spark: SparkSession) -> SparkDataset:
+def from_pandas_to_spark(p: PandasDataset, spark: SparkSession, target: Optional[pd.Series] = None) -> SparkDataset:
     pdf = cast(pd.DataFrame, p.data)
     pdf = pdf.copy()
     pdf[SparkDataset.ID_COLUMN] = pdf.index
-    dummy_target = pd.DataFrame({SparkDataset.ID_COLUMN: pdf.index, "target": np.zeros(pdf.shape[0])})
+
+    if target is not None:
+        # TODO: you may have an array in the input cols, so probably it should be transformed into the vector
+        tpdf = target.to_frame("target")
+        tpdf[SparkDataset.ID_COLUMN] = pdf.index
+    else:
+        # dummy target
+        tpdf = pd.DataFrame({SparkDataset.ID_COLUMN: pdf.index, "target": np.zeros(pdf.shape[0])})
+
+    target_sdf = spark.createDataFrame(data=tpdf)
+
     sdf = spark.createDataFrame(data=pdf)
-    # dummy target
-    return SparkDataset(sdf, roles=p.roles, target=dummy_target)
+    return SparkDataset(sdf, roles=p.roles, target=target_sdf, task=p.task)
 
 
 def compare_obtained_datasets(lama_ds: NumpyDataset, spark_ds: SparkDataset):

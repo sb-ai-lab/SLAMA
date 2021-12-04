@@ -25,11 +25,11 @@ class LinearLBFGS(TabularMLAlgo):
 
     def __init__(self,
                  params={}):
+        super().__init__()
+
         self._prediction_col = f"prediction_{self._name}"
         self.params = params
         self.task = None
-
-        super().__init__()
 
     def _infer_params(self, train: SparkDataset) -> Pipeline:
         params = copy(self.params)
@@ -79,7 +79,7 @@ class LinearLBFGS(TabularMLAlgo):
             self.task = train.task
 
         # TODO: SPARK-LAMA target column?
-        train_sdf = self._make_sdf_with_target(train.data)
+        train_sdf = self._make_sdf_with_target(train)
         val_sdf = valid.data
 
         pipeline = self._infer_params(train)

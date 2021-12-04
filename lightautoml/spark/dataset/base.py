@@ -81,12 +81,21 @@ class SparkDataset(LAMLDataset):
                  **kwargs: Any):
 
         assert "target" in kwargs, "Arguments should contain 'target'"
-        self._validate_dataframe(data)
+        assert isinstance(kwargs["target"], pyspark.sql.DataFrame), "Target should be a spark dataframe"
+
+        target_sdf = cast(pyspark.sql.DataFrame, kwargs["target"])
+
+        assert len(target_sdf.columns) == 2, "Only 2 columns should be in the target spark dataframe"
+        assert SparkDataset.ID_COLUMN in target_sdf.columns, \
+            f"id column {SparkDataset.ID_COLUMN} should be presented in the target spark dataframe"
 
         # TODO: SPARK-LAMA there is a clear problem with this target
         #       we either need to bring this column through all datasets(e.g. duplication)
         #       or really save it as a separate dataframe
-        self._target_column: str = kwargs["target"]
+        self._target_column: str = next(c for c in target_sdf.columns if c != SparkDataset.ID_COLUMN)
+
+        self._validate_dataframe(data)
+
         self._data = None
         self._is_frozen_in_cache: bool = False
         self._dependencies = [] if dependencies is None else dependencies

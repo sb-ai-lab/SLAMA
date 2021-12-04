@@ -1,7 +1,7 @@
 """Basic classes for validation iterators."""
 
 from copy import copy
-from typing import Any
+from typing import Any, Iterator
 from typing import Generator
 from typing import Iterable
 from typing import List
@@ -134,14 +134,14 @@ class DummyIterator(TrainValidIterator):
         """
         return 1
 
-    def __iter__(self) -> List[Tuple[None, Dataset, Dataset]]:
+    def __iter__(self) -> Iterator[Tuple[None, Dataset, Dataset]]:
         """Simple iterable object.
 
         Returns:
             Iterable object for dataset, where for validation also uses train.
 
         """
-        return [(None, self.train, self.train)]
+        return iter([(None, self.train, self.train)])
 
     def get_validation_data(self) -> Dataset:
         """Just get validation sample.
