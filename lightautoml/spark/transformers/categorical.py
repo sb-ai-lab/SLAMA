@@ -116,6 +116,16 @@ class LabelEncoder(SparkTransformer):
 
                 if len(self.dicts[i]) > 0:
 
+                    # TODO SPARK-LAMA: The related issue is in _fit
+                    # Moreover, dict keys should be the same type. I.e. {true, false, nan} raises an exception.
+                    if type(df.schema[i].dataType) == SparkTypes.BooleanType:
+                        _s = self.dicts[i].reset_index().dropna()
+                        try:
+                            _s = _s.set_index("index")
+                        except KeyError:
+                            _s = _s.set_index(i)
+                        self.dicts[i] = _s.iloc[:, 0]
+
                     labels = F.create_map([F.lit(x) for x in chain(*self.dicts[i].to_dict().items())])
 
                     if np.issubdtype(role.dtype, np.number):
@@ -219,7 +229,14 @@ class OrdinalEncoder(LabelEncoder):
 
                 cnts = cached_dataset \
                     .groupBy(i).count() \
-                    .where((F.col("count") > co) & F.col(i).isNotNull() & ~F.isnan(F.col(i))) \
+                    .where((F.col("count") > co) & F.col(i).isNotNull()) \
+
+                # TODO SPARK-LAMA: isnan raises an exception if column is boolean.
+                if type(cached_dataset.schema[i].dataType) != SparkTypes.BooleanType:
+                    cnts = cnts \
+                        .where(~F.isnan(F.col(i)))
+
+                cnts = cnts \
                     .select(i) \
                     .toPandas()
 

@@ -1,4 +1,4 @@
-from lightautoml.pipelines.features.base import FeaturesPipeline
+from lightautoml.spark.pipelines.features.base import FeaturesPipeline
 from lightautoml.pipelines.features.lgb_pipeline import LGBAdvancedPipeline as LAMALGBAdvancedPipeline
 from lightautoml.pipelines.utils import get_columns_by_role
 from lightautoml.spark.dataset.base import SparkDataset

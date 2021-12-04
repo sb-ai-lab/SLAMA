@@ -1,7 +1,7 @@
 """Basic classes for features generation."""
 
-from copy import copy
-from typing import Any
+from copy import copy, deepcopy
+from typing import Any, Callable
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -17,8 +17,144 @@ from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.transformers.categorical import FreqEncoder, OrdinalEncoder, LabelEncoder, \
     MockTargetEncoder as TargetEncoder, MultiClassTargetEncoder, CatIntersectstions
 from lightautoml.spark.transformers.datetime import BaseDiff, DateSeasons
-from lightautoml.spark.transformers.base import LAMLTransformer, SequentialTransformer, ColumnsSelector, ChangeRoles
+from lightautoml.spark.transformers.base import SequentialTransformer, ColumnsSelector, ChangeRoles, \
+    UnionTransformer, SparkTransformer
 from lightautoml.transformers.numeric import QuantileBinning
+from lightautoml.pipelines.utils import map_pipeline_names
+
+
+class FeaturesPipeline:
+    """Abstract class.
+
+    Analyze train dataset and create composite transformer
+    based on subset of features.
+    Instance can be interpreted like Transformer
+    (look for :class:`~lightautoml.transformers.base.LAMLTransformer`)
+    with delayed initialization (based on dataset metadata)
+    Main method, user should define in custom pipeline is ``.create_pipeline``.
+    For example, look at
+    :class:`~lightautoml.pipelines.features.lgb_pipeline.LGBSimpleFeatures`.
+    After FeaturePipeline instance is created, it is used like transformer
+    with ``.fit_transform`` and ``.transform`` method.
+
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.pipes: List[Callable[[SparkDataset], SparkTransformer]] = [self.create_pipeline]
+        self.sequential = False
+
+    # TODO: visualize pipeline ?
+    @property
+    def input_features(self) -> List[str]:
+        """Names of input features of train data."""
+        return self._input_features
+
+    @input_features.setter
+    def input_features(self, val: List[str]):
+        """Setter for input_features.
+
+        Args:
+            val: List of strings.
+
+        """
+        self._input_features = deepcopy(val)
+
+    @property
+    def output_features(self) -> List[str]:
+        """List of feature names that produces _pipeline."""
+        return self._pipeline.features
+
+    @property
+    def used_features(self) -> List[str]:
+        """List of feature names from original dataset that was used to produce output."""
+        mapped = map_pipeline_names(self.input_features, self.output_features)
+        return list(set(mapped))
+
+    def create_pipeline(self, train: SparkDataset) -> SparkTransformer:
+        """Analyse dataset and create composite transformer.
+
+        Args:
+            train: Dataset with train data.
+
+        Returns:
+            Composite transformer (pipeline).
+
+        """
+        raise NotImplementedError
+
+    def fit_transform(self, train: SparkDataset) -> SparkDataset:
+        """Create pipeline and then fit on train data and then transform.
+
+        Args:
+            train: Dataset with train data.n
+
+        Returns:
+            Dataset with new features.
+
+        """
+        # TODO: Think about input/output features attributes
+        self._input_features = train.features
+        self._pipeline = self._merge_seq(train) if self.sequential else self._merge(train)
+
+        # TODO: LAMA-SPARK a place with potential duplicate computations
+        #        need to think carefully about it
+
+        return self._pipeline.fit_transform(train)
+
+    def transform(self, test: SparkDataset) -> SparkDataset:
+        """Apply created pipeline to new data.
+
+        Args:
+            test: Dataset with test data.
+
+        Returns:
+            Dataset with new features.
+
+        """
+        return self._pipeline.transform(test)
+
+    def set_sequential(self, val: bool = True):
+        self.sequential = val
+        return self
+
+    def append(self, pipeline):
+        if isinstance(pipeline, FeaturesPipeline):
+            pipeline = [pipeline]
+
+        for _pipeline in pipeline:
+            self.pipes.extend(_pipeline.pipes)
+
+        return self
+
+    def prepend(self, pipeline):
+        if isinstance(pipeline, FeaturesPipeline):
+            pipeline = [pipeline]
+
+        for _pipeline in reversed(pipeline):
+            self.pipes = _pipeline.pipes + self.pipes
+
+        return self
+
+    def pop(self, i: int = -1) -> Optional[Callable[[SparkDataset], SparkTransformer]]:
+        if len(self.pipes) > 1:
+            return self.pipes.pop(i)
+
+    def _merge(self, data: SparkDataset) -> SparkTransformer:
+        pipes = []
+        for pipe in self.pipes:
+            pipes.append(pipe(data))
+
+        return UnionTransformer(pipes) if len(pipes) > 1 else pipes[-1]
+
+    def _merge_seq(self, data: SparkDataset) -> SparkTransformer:
+        pipes = []
+        for pipe in self.pipes:
+            _pipe = pipe(data)
+            data = _pipe.fit_transform(data)
+            pipes.append(_pipe)
+
+        return SequentialTransformer(pipes) if len(pipes) > 1 else pipes[-1]
 
 
 # The class is almost identical to what we have in regular LAMA
@@ -78,7 +214,7 @@ class TabularDataFeatures:
 
         return base_dates, datetimes
 
-    def get_datetime_diffs(self, train: SparkDataset) -> Optional[LAMLTransformer]:
+    def get_datetime_diffs(self, train: SparkDataset) -> Optional[SparkTransformer]:
         """Difference for all datetimes with base date.
 
         Args:
@@ -102,7 +238,7 @@ class TabularDataFeatures:
 
     def get_datetime_seasons(
         self, train: SparkDataset, outp_role: Optional[ColumnRole] = None
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Get season params from dates.
 
         Args:
@@ -137,7 +273,7 @@ class TabularDataFeatures:
         train: SparkDataset,
         feats_to_select: Optional[List[str]] = None,
         prob: Optional[bool] = None,
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Select numeric features.
 
         Args:
@@ -173,7 +309,7 @@ class TabularDataFeatures:
     @staticmethod
     def get_freq_encoding(
         train: SparkDataset, feats_to_select: Optional[List[str]] = None
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Get frequency encoding part.
 
         Args:
@@ -200,7 +336,7 @@ class TabularDataFeatures:
 
     def get_ordinal_encoding(
         self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Get order encoded part.
 
         Args:
@@ -227,7 +363,7 @@ class TabularDataFeatures:
 
     def get_categorical_raw(
         self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Get label encoded categories data.
 
         Args:
@@ -277,7 +413,7 @@ class TabularDataFeatures:
 
     def get_binned_data(
         self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Get encoded quantiles of numeric features.
 
         Args:
@@ -304,7 +440,7 @@ class TabularDataFeatures:
 
     def get_categorical_intersections(
         self, train: SparkDataset, feats_to_select: Optional[List[str]] = None
-    ) -> Optional[LAMLTransformer]:
+    ) -> Optional[SparkTransformer]:
         """Get transformer that implements categorical intersections.
 
         Args:

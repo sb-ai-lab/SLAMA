@@ -14,7 +14,6 @@ from lightautoml.dataset.roles import CategoryRole
 from lightautoml.spark.transformers.base import SequentialTransformer, SparkTransformer, UnionTransformer, ChangeRoles
 from lightautoml.spark.transformers.categorical import LabelEncoder, OHEEncoder
 from lightautoml.spark.transformers.numeric import FillInf, FillnaMedian, LogOdds, StandardScaler, NaNFlags
-from lightautoml.transformers.base import LAMLTransformer
 
 
 class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
@@ -76,7 +75,7 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
             multiclass_te_co,
         )
 
-    def _merge_seq(self, data: LAMLDataset) -> LAMLTransformer:
+    def _merge_seq(self, data: LAMLDataset) -> SparkTransformer:
         data = cast(SparkDataset, data)
         pipes = []
         for pipe in self.pipes:
@@ -90,7 +89,7 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
 
         return SequentialTransformer(pipes, is_already_fitted=True) if len(pipes) > 1 else pipes[-1]
 
-    def create_pipeline(self, train: SparkDataset) -> LAMLTransformer:
+    def create_pipeline(self, train: SparkDataset) -> SparkTransformer:
         """Create linear pipeline.
 
         Args:

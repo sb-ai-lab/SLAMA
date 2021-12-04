@@ -18,11 +18,15 @@ from . import DatasetForTest, spark, compare_obtained_datasets
 
 from lightautoml.pipelines.features.linear_pipeline import LinearFeatures
 from lightautoml.spark.pipelines.features.linear_pipeline import LinearFeatures as SparkLinearFeatures
+
+from lightautoml.pipelines.features.lgb_pipeline import LGBSimpleFeatures
+from lightautoml.spark.pipelines.features.lgb_pipeline import LGBSimpleFeatures as SparkLGBSimpleFeatures
+
 from lightautoml.spark.dataset.base import SparkDataset
 
 DATASETS = [
 
-    DatasetForTest("test_transformers/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
+    # DatasetForTest("test_transformers/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
 
     DatasetForTest("test_transformers/resources/datasets/house_prices.csv",
                    columns=["Id", "MSSubClass", "MSZoning", "LotFrontage", "WoodDeckSF"],
@@ -36,8 +40,8 @@ DATASETS = [
 ]
 
 
-@pytest.mark.parametrize("dataset", [DATASETS[1]])
-def test_linear_feature(spark: SparkSession, dataset: DatasetForTest):
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_linear_features(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
     sds = SparkDataset.from_lama(ds, spark)
@@ -70,3 +74,20 @@ def test_linear_feature(spark: SparkSession, dataset: DatasetForTest):
     compare_obtained_datasets(lama_ds, spark_ds)
 
 
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_lgb_simple_features(spark: SparkSession, dataset: DatasetForTest):
+
+    ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
+    sds = SparkDataset.from_lama(ds, spark)
+
+    lgb_features = LGBSimpleFeatures()
+
+    lama_transformer = lgb_features.create_pipeline(ds)
+    lama_ds = lama_transformer.fit_transform(ds)
+
+    spark_lgb_features = SparkLGBSimpleFeatures()
+
+    spark_transformer = spark_lgb_features.create_pipeline(sds)
+    spark_ds = spark_transformer.fit_transform(sds)
+
+    compare_obtained_datasets(lama_ds, spark_ds)
