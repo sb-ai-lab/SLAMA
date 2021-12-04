@@ -1,46 +1,40 @@
 import numpy as np
 import pandas as pd
 import pytest
+import pickle
 from pyspark.sql import SparkSession
 
-from lightautoml.dataset.np_pd_dataset import PandasDataset
-from lightautoml.dataset.roles import CategoryRole
+from lightautoml.tasks.base import Task
+from lightautoml.validation.base import DummyIterator
+from lightautoml.dataset.np_pd_dataset import NumpyDataset
 from lightautoml.spark.ml_algo.boost_lgbm import BoostLGBM
-from lightautoml.spark.validation.base import DummyIterator as SparkDummyIterator
-from . import DatasetForTest, spark
+from lightautoml.spark.dataset.base import SparkDataset
+
+from . import spark
 from ..test_transformers import from_pandas_to_spark
 
-DATASETS = [
 
-    # DatasetForTest("test_transformers/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
+def test_smoke_boost_lgbm_v2(spark: SparkSession):
 
-    DatasetForTest("test_transformers/resources/datasets/house_prices.csv",
-                   columns=["Id",
-                            "MSSubClass",
-                            # "MSZoning",
-                            "LotFrontage"],
-                   roles={
-                       "Id": CategoryRole(np.int32),
-                       "MSSubClass": CategoryRole(np.int32),
-                       # "MSZoning": CategoryRole(str),
-                       "LotFrontage": CategoryRole(np.float32)
-                   })
-]
+    with open("unit/test_ml_algo/datasets/Lvl_0_Pipe_0_apply_selector.pickle", "rb") as f:
+        data, target, features, roles = pickle.load(f)
 
+    nds = NumpyDataset(data[4000:, :], features, roles, task=Task("binary"))
+    pds = nds.to_pandas()
+    target = pd.Series(target[4000:])
 
-@pytest.mark.parametrize("dataset", DATASETS)
-def test_smoke_boost_lgbm(spark: SparkSession, dataset: DatasetForTest):
+    sds = from_pandas_to_spark(pds, spark, target)
+    iterator = DummyIterator(train=sds)
 
-    ds = PandasDataset(dataset.dataset, roles=dataset.roles)
+    ml_algo = BoostLGBM()
+    pred_ds = ml_algo.fit_predict(iterator)
 
-    iterator = SparkDummyIterator(train=from_pandas_to_spark(ds, spark))
+    predicted_sdf = pred_ds.data
+    ppdf = predicted_sdf.toPandas()
 
-    lgbm = BoostLGBM()
-
-    predicted = lgbm.fit_predict(iterator).data
-
-    predicted.show(10)
-
-
+    assert SparkDataset.ID_COLUMN in predicted_sdf.columns
+    assert len(pred_ds.features) == 1
+    assert pred_ds.features[0].endswith("_prediction")
+    assert pred_ds.features[0] in predicted_sdf.columns
 
 

@@ -1,8 +1,10 @@
 import logging
-from typing import Tuple, cast, List, Optional
+from typing import Tuple, cast, List, Optional, Union
 
 import numpy as np
-from pyspark.ml import Model
+from pyspark.ml import Model as SparkMLModel
+from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
+
 from pyspark.ml.functions import vector_to_array, array_to_vector
 from pyspark.sql import functions as F, Column
 
@@ -14,6 +16,15 @@ from lightautoml.utils.timer import TaskTimer
 from lightautoml.validation.base import TrainValidIterator
 
 logger = logging.getLogger(__name__)
+
+Model = Union[SparkMLModel, LightGBMClassifier, LightGBMRegressor]
+
+
+def get_pred_column(model: Model) -> str:
+    if isinstance(model, SparkMLModel):
+        return model.prediction_column
+    elif isinstance(model, (LightGBMRegressor, LightGBMClassifier)):
+        return model.getPredictionCol()
 
 
 class TabularMLAlgo(MLAlgo):
@@ -171,7 +182,7 @@ class TabularMLAlgo(MLAlgo):
         preds_dfs = [
             self.predict_single_fold(model, dataset).select(
                 SparkDataset.ID_COLUMN,
-                F.col(model.prediction_column).alias(f"{pred_col_prefix}_{i}")
+                F.col(get_pred_column(model)).alias(f"{pred_col_prefix}_{i}")
             ) for i, model in enumerate(self.models)
         ]
 

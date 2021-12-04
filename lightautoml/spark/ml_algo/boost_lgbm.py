@@ -1,37 +1,21 @@
-"""Wrapped LightGBM for tabular datasets."""
-
 import logging
-
-from contextlib import redirect_stdout
 from copy import copy
 from typing import Callable, Dict, Optional, Tuple, List, Union
-
-import lightgbm as lgb
-import numpy as np
-
-from pandas import Series
-
-from dataset.roles import CategoryRole
-from lightautoml.utils.logging import LoggerStream
-from lightautoml.ml_algo.tuning.base import Distribution, SearchSpace
-
-# TODO SPARK-LAMA: How to understand which of these we have to use?
 from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
-
-from lightautoml.spark.pipelines.selection.base import SparkImportanceEstimator
-from lightautoml.spark.validation.base import TrainValidIterator
-from lightautoml.spark.ml_algo.base import SparkTabularDataset, SparkTabularMLAlgo
-
 from pyspark.ml.feature import VectorAssembler
-import pyspark.sql.functions as F
 
+from lightautoml.ml_algo.tuning.base import Distribution, SearchSpace
+from lightautoml.spark.validation.base import TrainValidIterator
+from lightautoml.spark.ml_algo.base import TabularMLAlgo
+from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 
 logger = logging.getLogger(__name__)
 
 
-class BoostLGBM(SparkTabularMLAlgo, SparkImportanceEstimator):
+LightGBM = Union[LightGBMClassifier, LightGBMRegressor]
 
-    models: List[Union[LightGBMClassifier, LightGBMRegressor]]
+
+class BoostLGBM(TabularMLAlgo):
 
     _name: str = "LightGBM"
 
@@ -55,6 +39,12 @@ class BoostLGBM(SparkTabularMLAlgo, SparkImportanceEstimator):
         "early_stopping_rounds": 100,
         "random_state": 42,
     }
+
+    def __init__(self, params: Optional[dict] = None):
+        super().__init__()
+        self._prediction_col = f"prediction_{self._name}"
+        self.params = {} if params is None else params
+        self.task = None
 
     def _infer_params(self) -> Tuple[dict, int, int, int, Optional[Callable], Optional[Callable]]:
         """Infer all parameters in lightgbm format.
@@ -171,87 +161,20 @@ class BoostLGBM(SparkTabularMLAlgo, SparkImportanceEstimator):
 
         return optimization_search_space
 
-    # def fit_predict_single_fold(self,
-    #                             train: SparkTabularDataset,
-    #                             valid: SparkTabularDataset) -> Tuple[lgb.Booster, np.ndarray]:
-    #
-    #     (
-    #         params,
-    #         num_trees,
-    #         early_stopping_rounds,
-    #         verbose_eval,
-    #         fobj,
-    #         feval,
-    #     ) = self._infer_params()
-    #
-    #     train_target, train_weight = self.task.losses["lgb"].fw_func(train.target, train.weights)
-    #     valid_target, valid_weight = self.task.losses["lgb"].fw_func(valid.target, valid.weights)
-    #
-    #     lgb_train = lgb.Dataset(train.data, label=train_target, weight=train_weight)
-    #     lgb_valid = lgb.Dataset(valid.data, label=valid_target, weight=valid_weight)
-    #
-    #     with redirect_stdout(LoggerStream(logger, verbose_eval=100)):
-    #         model = lgb.train(
-    #             params,
-    #             lgb_train,
-    #             num_boost_round=num_trees,
-    #             valid_sets=[lgb_valid],
-    #             valid_names=["valid"],
-    #             fobj=fobj,
-    #             feval=feval,
-    #             early_stopping_rounds=early_stopping_rounds,
-    #             verbose_eval=verbose_eval,
-    #         )
-    #
-    #     val_pred = model.predict(valid.data)
-    #     val_pred = self.task.losses["lgb"].bw_func(val_pred)
-    #
-    #     return model, val_pred
+    def predict_single_fold(self,
+                            dataset: SparkDataset,
+                            model: Union[LightGBMRegressor, LightGBMClassifier]) -> SparkDataFrame:
 
-    # def predict_single_fold(self,
-    #                         model: Union[LightGBMRegressor, LightGBMClassifier],
-    #                         dataset: SparkTabularDataset) -> np.ndarray:
-    #
-    #     # TODO SPARK-LAMA: Set target columns and so on.
-    #     pred = self.task.losses["lgb"].bw_func(model.predict(dataset.data))
-    #
-    #     return pred
+        pred = model.transform(dataset.data)
 
-    # def get_features_score(self) -> Series:
-    #     """Computes feature importance as mean values of feature importance provided by lightgbm per all models.
-    #
-    #     Returns:
-    #         Series with feature importances.
-    #
-    #     """
-    #
-    #     imp = 0
-    #     for model in self.models:
-    #         imp = imp + model.getFeatureImportance(importance_type="gain")
-    #
-    #     imp = imp / len(self.models)
-    #
-    #     return Series(imp, index=self.features).sort_values(ascending=False)
+        return pred
 
-    def fit_predict(self, train_valid_iterator: TrainValidIterator) -> SparkTabularDataset:
+    def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[LightGBM, SparkDataFrame, str]:
 
-        # TODO SPARK-LAMA: Only for smoke test
-        try:
-            is_reg = train_valid_iterator.train.task.name == "reg"
-        except AttributeError:
-            is_reg = False
+        if self.task is None:
+            self.task = train.task
 
-        # TODO SPARK-LAMA: Fix column names
-        train = train_valid_iterator.train.data.withColumn("label", F.lit(0).cast("int")).fillna(0)
-        valid = train_valid_iterator.valid.data.withColumn("label", F.lit(0).cast("int")).fillna(0)
-
-        feature_cols = train.columns[1:]
-        featurizer = VectorAssembler(
-            inputCols=feature_cols,
-            outputCol='features'
-        )
-        train_data = featurizer.transform(train)
-        test_data = featurizer.transform(train)
+        is_reg = self.task.name == "reg"
 
         (
             params,
@@ -262,11 +185,22 @@ class BoostLGBM(SparkTabularMLAlgo, SparkImportanceEstimator):
             feval,
         ) = self._infer_params()
 
+        train_sdf = self._make_sdf_with_target(train)
+        valid_sdf = valid.data
+
+        assembler = VectorAssembler(
+            inputCols=train.features,
+            outputCol=f"{self._name}_vassembler_features"
+        )
+
         LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
 
         lgbm = LGBMBooster(
             # fobj=fobj,  # TODO SPARK-LAMA: Commented only for smoke test
             # feval=feval,
+            featuresCol=assembler.getOutputCol(),
+            labelCol=train.target_column,
+            predictionCol=self._prediction_col,
             learningRate=params["learning_rate"],
             numLeaves=params["num_leaves"],
             featureFraction=params["feature_fraction"],
@@ -283,27 +217,11 @@ class BoostLGBM(SparkTabularMLAlgo, SparkImportanceEstimator):
         if is_reg:
             lgbm.setAlpha(params["reg_alpha"]).setLambdaL1(params["reg_lambda"]).setLambdaL2(params["reg_lambda"])
 
+        ml_model = lgbm.fit(assembler.transform(train_sdf))
 
-        predicted = lgbm.fit(train_data).transform(test_data)
+        val_pred = ml_model.transform(assembler.transform(valid_sdf))
 
-        predicted.show(10)
-
-        output = train_valid_iterator.train.empty()
-        new_roles = train_valid_iterator.valid.roles
-        new_roles["label"] = CategoryRole(np.int32)
-
-        cols = train_valid_iterator.valid.data.columns
-        cols.extend(["label"])
-
-        output.set_data(data=predicted.select(cols), features=train_valid_iterator.valid.features, roles=new_roles)
-        return output
-
+        return ml_model, val_pred, self._prediction_col
 
     def fit(self, train_valid: TrainValidIterator):
-        """Just to be compatible with :class:`~lightautoml.pipelines.selection.base.ImportanceEstimator`.
-
-        Args:
-            train_valid: Classic cv-iterator.
-
-        """
         self.fit_predict(train_valid)
