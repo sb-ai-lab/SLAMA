@@ -89,6 +89,15 @@ class SparkDataset(LAMLDataset):
         assert SparkDataset.ID_COLUMN in target_sdf.columns, \
             f"id column {SparkDataset.ID_COLUMN} should be presented in the target spark dataframe"
 
+        self._folds_column = None
+        if "folds" in kwargs:
+            folds_sdf = kwargs["folds"]
+            assert isinstance(folds_sdf, pyspark.sql.DataFrame), "Folds should be a spark dataframe"
+            assert len(folds_sdf.columns) == 2, "Only 2 columns should be in the folds spark dataframe"
+            assert SparkDataset.ID_COLUMN in folds_sdf.columns, \
+                f"id column {SparkDataset.ID_COLUMN} should be presented in the folds spark dataframe"
+            self._folds_column: str = next(c for c in folds_sdf.columns if c != SparkDataset.ID_COLUMN)
+
         # TODO: SPARK-LAMA there is a clear problem with this target
         #       we either need to bring this column through all datasets(e.g. duplication)
         #       or really save it as a separate dataframe
@@ -187,6 +196,10 @@ class SparkDataset(LAMLDataset):
     @property
     def target_column(self) -> str:
         return self._target_column
+
+    @property
+    def folds_column(self) -> str:
+        return self._folds_column
 
     @property
     def dependencies(self) -> Optional[List['SparkDataset']]:
@@ -347,6 +360,8 @@ class SparkDataset(LAMLDataset):
             target = self.target
             if isinstance(target, pd.Series):
                 target = target.to_numpy()
+            elif isinstance(target, SparkDataFrame):
+                target = target.toPandas().to_numpy()
         except AttributeError:
             target = None
 
@@ -354,6 +369,8 @@ class SparkDataset(LAMLDataset):
             folds = self.folds
             if isinstance(folds, pd.Series):
                 folds = folds.to_numpy()
+            elif isinstance(folds, SparkDataFrame):
+                folds = folds.toPandas().to_numpy()
         except AttributeError:
             folds = None
 

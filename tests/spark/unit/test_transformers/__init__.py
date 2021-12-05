@@ -177,7 +177,10 @@ class DatasetForTest:
             self.roles = roles
 
 
-def from_pandas_to_spark(p: PandasDataset, spark: SparkSession, target: Optional[pd.Series] = None) -> SparkDataset:
+def from_pandas_to_spark(p: PandasDataset,
+                         spark: SparkSession,
+                         target: Optional[pd.Series] = None,
+                         folds: Optional[pd.Series] = None) -> SparkDataset:
     pdf = cast(pd.DataFrame, p.data)
     pdf = pdf.copy()
     pdf[SparkDataset.ID_COLUMN] = pdf.index
@@ -187,13 +190,27 @@ def from_pandas_to_spark(p: PandasDataset, spark: SparkSession, target: Optional
         tpdf = target.to_frame("target")
         tpdf[SparkDataset.ID_COLUMN] = pdf.index
     else:
-        # dummy target
-        tpdf = pd.DataFrame({SparkDataset.ID_COLUMN: pdf.index, "target": np.zeros(pdf.shape[0])})
+        try:
+            tpdf = p.target.to_frame("target")
+            tpdf[SparkDataset.ID_COLUMN] = pdf.index
+        except AttributeError:
+            tpdf = pd.DataFrame({SparkDataset.ID_COLUMN: pdf.index, "target": np.zeros(pdf.shape[0])})
+
+    if folds is not None:
+        fpdf = folds.to_frame("folds")
+        fpdf[SparkDataset.ID_COLUMN] = pdf.index
+    else:
+        try:
+            fpdf = p.folds.to_frame("folds")
+            fpdf[SparkDataset.ID_COLUMN] = pdf.index
+        except AttributeError:
+            fpdf = pd.DataFrame({SparkDataset.ID_COLUMN: pdf.index, "folds": np.zeros(pdf.shape[0])})
 
     target_sdf = spark.createDataFrame(data=tpdf)
+    folds_sdf = spark.createDataFrame(data=fpdf)
 
     sdf = spark.createDataFrame(data=pdf)
-    return SparkDataset(sdf, roles=p.roles, target=target_sdf, task=p.task)
+    return SparkDataset(sdf, roles=p.roles, target=target_sdf, folds=folds_sdf, task=p.task)
 
 
 def compare_obtained_datasets(lama_ds: NumpyDataset, spark_ds: SparkDataset):

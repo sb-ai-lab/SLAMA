@@ -13,10 +13,11 @@ from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabe
     CatIntersectstions as SparkCatIntersectstions, OHEEncoder as SparkOHEEncoder, \
     TargetEncoder as SparkTargetEncoder, MultiClassTargetEncoder as SparkMultiClassTargetEncoder
 from lightautoml.transformers.categorical import LabelEncoder, FreqEncoder, OrdinalEncoder, CatIntersectstions, \
-    OHEEncoder
+    OHEEncoder, TargetEncoder, MultiClassTargetEncoder
 from lightautoml.tasks import Task
 
-from . import compare_by_content, compare_by_metadata, DatasetForTest, spark, NumpyTransformable, compare_obtained_datasets
+from . import compare_by_content, compare_by_metadata, DatasetForTest, spark, NumpyTransformable, \
+    compare_obtained_datasets, from_pandas_to_spark
 from lightautoml.spark.dataset.base import SparkDataset
 
 
@@ -95,9 +96,7 @@ def test_ohe(spark: SparkSession):
 
 
 @pytest.mark.parametrize("dataset", [DATASETS[1]])
-def test_mock_target_encoder(spark: SparkSession, dataset: DatasetForTest):
-    from lightautoml.transformers.categorical import TargetEncoder
-    from lightautoml.spark.transformers.categorical import MockTargetEncoder
+def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
 
@@ -105,76 +104,30 @@ def test_mock_target_encoder(spark: SparkSession, dataset: DatasetForTest):
     label_encoder.fit(ds)
     labeled_ds = label_encoder.transform(ds)
 
+    cols = ["le__Id", "le__MSSubClass", "le__LotFrontage"]
+    folds_col = "le__MSZoning"
+    target_col = "le__WoodDeckSF"
+
+    lpds = labeled_ds.to_pandas()
+
     n_ds = NumpyDataset(
-        data=labeled_ds.data,
-        features=labeled_ds.features,
-        roles=labeled_ds.roles,
+        data=lpds.data[cols].to_numpy(),
+        features=cols,
+        roles=[labeled_ds.roles[col] for col in cols],
         task=labeled_ds.task,
-        target=labeled_ds.data[:, -1],
-        folds=labeled_ds.data[:, 2]
+        target=lpds.data[target_col].to_numpy(),
+        folds=lpds.data[folds_col].to_numpy()
     )
 
-    sds = SparkDataset.from_lama(n_ds, spark)
+    sds = from_pandas_to_spark(n_ds.to_pandas(), spark)
 
     target_encoder = TargetEncoder()
     lama_output = target_encoder.fit_transform(n_ds)
 
-    mock_encoder = MockTargetEncoder()
-    mock_output = mock_encoder.fit_transform(sds)
+    spark_encoder = SparkTargetEncoder()
+    spark_output = spark_encoder.fit_transform(sds)
 
-    compare_obtained_datasets(lama_output, mock_output)
-
-
-# def test_target_encoder(spark: SparkSession):
-#     df = pd.read_csv("test_transformers/resources/datasets/house_prices.csv")[
-#         ["Id", 'MSSubClass', 'MSZoning', 'LotFrontage', 'WoodDeckSF']
-#     ]
-
-#     ds = PandasDataset(df.head(50),
-#                        roles={
-#                            "Id": CategoryRole(np.int32),
-#                            "MSSubClass": CategoryRole(np.int32),
-#                            "MSZoning": CategoryRole(str),
-#                            "LotFrontage": CategoryRole(np.float32),
-#                            "WoodDeckSF": CategoryRole(bool)
-#                        },
-#                        task=Task("binary")
-#                        )
-
-#     lt = LabelEncoder()
-#     lt.fit(ds)
-#     labeled_ds = lt.transform(ds)
-
-#     ds = NumpyDataset(
-#         data=labeled_ds.data,
-#         features=labeled_ds.features,
-#         roles=labeled_ds.roles,
-#         task=labeled_ds.task,
-#         target=labeled_ds.data[:, -1],
-#         folds=labeled_ds.data[:, 2]
-#     )
-
-#     lama_transformer = TargetEncoder()
-#     lama_result = lama_transformer.fit_transform(ds)
-
-#     spark_data = from_pandas_to_spark(ds.to_pandas(), spark)
-#     spark_data.task = Task("binary")
-#     spark_transformer = SparkTargetEncoder()
-#     spark_result = spark_transformer.fit_transform(spark_data, target_column='le__WoodDeckSF', folds_column='le__MSZoning')
-
-#     lama_np_ds = lama_result.to_numpy()
-#     spark_np_ds = spark_result.to_numpy()
-
-#     assert list(sorted(lama_np_ds.features)) == list(sorted(spark_np_ds.features)), \
-#         f"List of features are not equal\n" \
-#         f"LAMA: {sorted(lama_np_ds.features)}\n" \
-#         f"SPARK: {sorted(spark_np_ds.features)}"
-
-#     # compare roles equality for the columns
-#     assert lama_np_ds.roles == spark_np_ds.roles, "Roles are not equal"
-
-#     # compare shapes
-#     assert lama_np_ds.shape == spark_np_ds.shape, "Shapes are not equals"
+    compare_obtained_datasets(lama_output, spark_output)
 
 
 # def test_multiclass_target_encoder(spark: SparkSession):
