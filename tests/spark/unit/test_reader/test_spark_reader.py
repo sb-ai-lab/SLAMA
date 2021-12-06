@@ -10,7 +10,7 @@ import pandas as pd
 
 
 def test_spark_reader(spark: SparkSession):
-    df = spark.read.csv("../../../examples/data/sampled_app_train.csv", header=True)
+    df = spark.read.csv("../../examples/data/sampled_app_train.csv", header=True)
     sreader = SparkToSparkReader(task=Task("binary"))
     sds = sreader.fit_read(df)
 

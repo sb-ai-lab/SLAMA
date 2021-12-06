@@ -89,6 +89,14 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
 
         return SequentialTransformer(pipes, is_already_fitted=True) if len(pipes) > 1 else pipes[-1]
 
+    def _merge(self, data: SparkDataset) -> SparkTransformer:
+        pipes = [cast(SparkTransformer, pipe(data))
+                 for pipe in self.pipes]
+
+        union = UnionTransformer(pipes) if len(pipes) > 1 else pipes[0]
+        print(f"Producing union: {type(union)}")
+        return union
+
     def create_pipeline(self, train: SparkDataset) -> SparkTransformer:
         """Create linear pipeline.
 

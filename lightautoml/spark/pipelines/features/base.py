@@ -19,8 +19,8 @@ from lightautoml.spark.transformers.categorical import FreqEncoder, OrdinalEncod
 from lightautoml.spark.transformers.datetime import BaseDiff, DateSeasons
 from lightautoml.spark.transformers.base import SequentialTransformer, ColumnsSelector, ChangeRoles, \
     UnionTransformer, SparkTransformer
-from lightautoml.transformers.numeric import QuantileBinning
 from lightautoml.pipelines.utils import map_pipeline_names
+from lightautoml.spark.transformers.numeric import QuantileBinning
 
 
 class FeaturesPipeline:
@@ -497,7 +497,7 @@ class TabularDataFeatures:
 
         # TODO: LAMA-SPARK: should be conditioned on a global setting
         #       producing either an error or warning
-        assert not train.data.is_cached, "The train dataset should be cached before executing this operation"
+        # assert not train.data.is_cached, "The train dataset should be cached before executing this operation"
 
         sdf = train.data.select(feats)
 

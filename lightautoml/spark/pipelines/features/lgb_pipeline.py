@@ -70,6 +70,26 @@ class LGBSimpleFeatures(FeaturesPipeline):
 
         return union_all
 
+    def _merge(self, data: SparkDataset) -> SparkTransformer:
+        pipes = [cast(SparkTransformer, pipe(data))
+                 for pipe in self.pipes]
+
+        union = UnionTransformer(pipes) if len(pipes) > 1 else pipes[0]
+        print(f"Producing union: {type(union)}")
+        return union
+
+    def _merge_seq(self, data: SparkDataset) -> SparkTransformer:
+        pipes = [cast(SparkTransformer, pipe(data))
+                 for pipe in self.pipes]
+        # pipes = []
+        # for pipe in self.pipes:
+        #     _pipe = pipe(data)
+        #     data = _pipe.fit_transform(data)
+        #     pipes.append(_pipe)
+
+        seq = SequentialTransformer(pipes) if len(pipes) > 1 else pipes[0]
+        return seq
+
 
 # we don't inherit from LAMALGBAdvancedPipeline
 # because his method 'create_pipeline' contains direct

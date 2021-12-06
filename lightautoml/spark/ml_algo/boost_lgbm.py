@@ -2,13 +2,16 @@ import logging
 from copy import copy
 from typing import Callable, Dict, Optional, Tuple, Union
 
+from pandas import Series
 from pyspark.ml.feature import VectorAssembler
 from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
 
 from lightautoml.ml_algo.tuning.base import Distribution, SearchSpace
+from lightautoml.pipelines.selection.base import ImportanceEstimator
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.ml_algo.base import TabularMLAlgo, SparkMLModel
 from lightautoml.spark.validation.base import TrainValidIterator
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,7 @@ logger = logging.getLogger(__name__)
 # LightGBM = Union[LightGBMClassifier, LightGBMRegressor]
 
 
-class BoostLGBM(TabularMLAlgo):
+class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
 
     _name: str = "LightGBM"
 
@@ -46,6 +49,8 @@ class BoostLGBM(TabularMLAlgo):
         self._prediction_col = f"prediction_{self._name}"
         self.params = {} if params is None else params
         self.task = None
+
+        self._features_importance = None
 
     def _infer_params(self) -> Tuple[dict, int, int, int, Optional[Callable], Optional[Callable]]:
         """Infer all parameters in lightgbm format.
@@ -189,9 +194,11 @@ class BoostLGBM(TabularMLAlgo):
         train_sdf = self._make_sdf_with_target(train)
         valid_sdf = valid.data
 
+        # TODO: reconsider using of 'keep' as a handleInvalid value
         assembler = VectorAssembler(
             inputCols=train.features,
-            outputCol=f"{self._name}_vassembler_features"
+            outputCol=f"{self._name}_vassembler_features",
+            handleInvalid="keep"
         )
 
         LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
@@ -222,7 +229,16 @@ class BoostLGBM(TabularMLAlgo):
 
         val_pred = ml_model.transform(assembler.transform(valid_sdf))
 
+        # TODO: dummy feature importance, need to be replaced
+        self._features_importance = pd.Series(
+            [1.0 / len(train.features) for _ in train.features],
+            index=list(train.features)
+        )
+
         return ml_model, val_pred, self._prediction_col
 
     def fit(self, train_valid: TrainValidIterator):
         self.fit_predict(train_valid)
+
+    def get_features_score(self) -> Series:
+        return self._features_importance

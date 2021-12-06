@@ -159,7 +159,7 @@ class UnionTransformer(SparkTransformer):
             ds = trf.transform(dataset)
             res.append(ds)
 
-        union_res = cast(SparkDataset, concatenate(res))
+        union_res = SparkDataset.concatenate(res)
 
         return union_res
 
