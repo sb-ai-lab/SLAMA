@@ -1,7 +1,7 @@
 """Basic classes for transformers."""
 
 from copy import deepcopy
-from typing import Callable
+from typing import Callable, Set
 from typing import ClassVar
 from typing import List
 from typing import Sequence
@@ -101,6 +101,24 @@ class LAMLTransformer:
             check_func(dataset)
 
         return self.transform(dataset)
+
+    def print_structure(self, indent: str = "") -> str:
+        content = ''
+        if "transformer_list" in self.__dict__:
+            content = '\n'.join([tr.print_structure(indent + "  ") for tr in self.transformer_list])
+        name = self._fname_prefix if self._fname_prefix else str(type(self))
+
+        return f"{indent}{name}\n{content}\n" if len(content) > 0 else f"{indent}{name}"
+
+    def print_tr_types(self) -> Set[str]:
+        name = self._fname_prefix if self._fname_prefix else str(type(self))
+
+        trs = {name}
+        if "transformer_list" in self.__dict__:
+            for tr in self.transformer_list:
+                trs.update(tr.print_tr_types())
+
+        return trs
 
 
 class SequentialTransformer(LAMLTransformer):

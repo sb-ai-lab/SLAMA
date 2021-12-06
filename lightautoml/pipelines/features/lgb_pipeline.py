@@ -118,6 +118,7 @@ class LGBAdvancedPipeline(FeaturesPipeline, TabularDataFeatures):
             auto_unique_co: Switch to target encoding if high cardinality.
 
         """
+        print("lama advanced pipeline ctr")
         super().__init__(
             multiclass_te_co=multiclass_te_co,
             top_intersections=top_intersections,

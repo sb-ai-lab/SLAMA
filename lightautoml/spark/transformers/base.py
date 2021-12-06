@@ -1,7 +1,8 @@
-from typing import cast, Sequence
+from typing import cast, Sequence, List, Set
 
 from lightautoml.dataset.utils import concatenate
 from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import print_exec_time
 from lightautoml.transformers.base import LAMLTransformer, ColumnsSelector as LAMAColumnsSelector, \
     ChangeRoles as LAMAChangeRoles
 
@@ -58,6 +59,7 @@ class SequentialTransformer(SparkTransformer):
     """
     Transformer that contains the list of transformers and apply one by one sequentially.
     """
+    _fname_prefix = "seq"
 
     def __init__(self, transformer_list: Sequence[SparkTransformer], is_already_fitted: bool = False):
         """
@@ -117,6 +119,8 @@ class SequentialTransformer(SparkTransformer):
 
 class UnionTransformer(SparkTransformer):
     """Transformer that apply the sequence on transformers in parallel on dataset and concatenate the result."""
+
+    _fname_prefix = "union"
 
     def __init__(self, transformer_list: Sequence[SparkTransformer], n_jobs: int = 1):
         """
@@ -190,9 +194,11 @@ class UnionTransformer(SparkTransformer):
 
 
 class ColumnsSelector(LAMAColumnsSelector, SparkTransformer):
+    _fname_prefix = "colsel"
     _can_unwind_parents = False
 
 
 class ChangeRoles(LAMAChangeRoles, SparkTransformer):
+    _fname_prefix = "changeroles"
     _can_unwind_parents = False
 

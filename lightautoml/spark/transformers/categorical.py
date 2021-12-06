@@ -65,6 +65,7 @@ class LabelEncoder(SparkTransformer):
 
     def __init__(self, *args, **kwargs):
         self._output_role = CategoryRole(np.int32, label_encoded=True)
+        self.dicts = None
 
     def _fit(self, dataset: SparkDataset) -> "LabelEncoder":
 
@@ -73,7 +74,27 @@ class LabelEncoder(SparkTransformer):
         # cached_dataset = dataset.data.cache()
         dataset.cache()
 
-        self.dicts = {}
+        self.dicts = dict()
+
+        # all_feats_df: Optional[SparkDataFrame] = None
+        # for i in dataset.features:
+        #     co = roles[i].unknown
+        #     df = dataset.data \
+        #         .groupBy(i).count() \
+        #         .where(F.col("count") > co)\
+        #         .select(F.hash(i).alias("value_hash"), "count", F.lit(i).alias("feature_name"))
+        #
+        #     if not all_feats_df:
+        #         all_feats_df = df
+        #     else:
+        #         all_feats_df = all_feats_df.union(df)
+        #
+        # vals_pdf = all_feats_df.toPandas()
+        # for f in dataset.features:
+        #     pdf = vals_pdf[vals_pdf["feature_name"] == f].sort_values(by=['count'], ascending=True)
+        #     ps = pdf["value_hash"]
+        #     self.dicts[f] = Series(np.arange(len(ps), dtype=np.int32) + 1, index=ps)
+
         for i in dataset.features:
             role = roles[i]
 
@@ -519,7 +540,7 @@ class TargetEncoder(SparkTransformer):
                 .withColumn(
                     "_candidates",
                     F.array(
-                        [
+                        *[
                             (F.col("_oof_sum") + a * F.col("_folds_prior"))
                             / (F.col("_oof_count") + a)
                             for a in self.alphas

@@ -108,6 +108,7 @@ class FillnaMedian(SparkTransformer):
 
         """
 
+        print("I'm in fit")
         sdf = dataset.data
 
         rows = sdf\
@@ -133,7 +134,7 @@ class FillnaMedian(SparkTransformer):
             SparkDataset with replaced NaN with medians
 
         """
-
+        print("I'm in transform")
         sdf = dataset.data
 
         new_sdf = sdf.select(*dataset.service_columns, *[
@@ -173,15 +174,21 @@ class LogOdds(SparkTransformer):
         # # TODO: maybe np.exp and then cliping and logodds?
         # data = np.clip(data, 1e-7, 1 - 1e-7)
         # data = np.log(data / (1 - data))
-
-        new_sdf = sdf.select([
-            F.when(F.col(c) < 1e-7, 1e-7)
-            .when(F.col(c) > 1 - 1e-7, 1 - 1e-7)
-            .otherwise(F.col(c))
-            .alias(c)
-            for c in sdf.columns
-        ])\
-        .select([F.log(F.col(c) / (F.lit(1) - F.col(c))).alias(f"{self._fname_prefix}__{c}") for c in sdf.columns])
+        new_sdf = sdf.select(
+            SparkDataset.ID_COLUMN,
+            *[
+                F.when(F.col(c) < 1e-7, 1e-7)
+                .when(F.col(c) > 1 - 1e-7, 1 - 1e-7)
+                .otherwise(F.col(c))
+                .alias(c)
+                for c in dataset.features
+            ]
+        )\
+        .select(
+            SparkDataset.ID_COLUMN,
+            *[F.log(F.col(c) / (F.lit(1) - F.col(c))).alias(f"{self._fname_prefix}__{c}")
+              for c in dataset.features]
+        )
 
         # create resulted
         output = dataset.empty()

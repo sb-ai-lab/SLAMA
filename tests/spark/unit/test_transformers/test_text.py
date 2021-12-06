@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from lightautoml.transformers.text import AutoNLPWrap
-from . import smoke_check, compare_by_content, spark, from_pandas_to_spark
+from .. import from_pandas_to_spark, spark, smoke_check, compare_by_content
 
 
 @pytest.fixture

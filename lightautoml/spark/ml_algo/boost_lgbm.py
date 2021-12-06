@@ -1,18 +1,19 @@
 import logging
 from copy import copy
-from typing import Callable, Dict, Optional, Tuple, List, Union
-from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
+from typing import Callable, Dict, Optional, Tuple, Union
+
 from pyspark.ml.feature import VectorAssembler
+from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
 
 from lightautoml.ml_algo.tuning.base import Distribution, SearchSpace
-from lightautoml.spark.validation.base import TrainValidIterator
-from lightautoml.spark.ml_algo.base import TabularMLAlgo
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.ml_algo.base import TabularMLAlgo, SparkMLModel
+from lightautoml.spark.validation.base import TrainValidIterator
 
 logger = logging.getLogger(__name__)
 
 
-LightGBM = Union[LightGBMClassifier, LightGBMRegressor]
+# LightGBM = Union[LightGBMClassifier, LightGBMRegressor]
 
 
 class BoostLGBM(TabularMLAlgo):
@@ -169,7 +170,7 @@ class BoostLGBM(TabularMLAlgo):
 
         return pred
 
-    def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[LightGBM, SparkDataFrame, str]:
+    def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[SparkMLModel, SparkDataFrame, str]:
 
         if self.task is None:
             self.task = train.task

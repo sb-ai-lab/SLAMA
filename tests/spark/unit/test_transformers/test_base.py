@@ -1,27 +1,25 @@
+from typing import cast, List
+
 import numpy as np
-import pandas as pd
 import pytest
 from pyspark.sql import SparkSession
 
-from typing import cast, List
-from lightautoml.transformers.numeric import NumpyTransformable
-
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import CategoryRole
-from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabelEncoder, \
-    OrdinalEncoder as SparkOrdinalEncoder, CatIntersectstions as SparkCatIntersectstions
-from lightautoml.transformers.categorical import LabelEncoder, OrdinalEncoder, CatIntersectstions
-from lightautoml.transformers.base import SequentialTransformer, UnionTransformer, ColumnsSelector
 from lightautoml.spark.transformers.base import SequentialTransformer as SparkSequentialTransformer, \
     UnionTransformer as SparkUnionTransformer, ColumnsSelector as SparkColumnsSelector
-from . import compare_by_content, from_pandas_to_spark, DatasetForTest, spark, compare_obtained_datasets
-from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabelEncoder, \
+    OrdinalEncoder as SparkOrdinalEncoder, CatIntersectstions as SparkCatIntersectstions
+from lightautoml.transformers.base import SequentialTransformer, UnionTransformer, ColumnsSelector
+from lightautoml.transformers.categorical import LabelEncoder, OrdinalEncoder, CatIntersectstions
+from lightautoml.transformers.numeric import NumpyTransformable
+from .. import DatasetForTest, from_pandas_to_spark, spark
 
 DATASETS = [
 
-    DatasetForTest("test_transformers/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
+    DatasetForTest("unit/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
 
-    DatasetForTest("test_transformers/resources/datasets/house_prices.csv",
+    DatasetForTest("unit/resources/datasets/house_prices.csv",
                    columns=["Id", "MSSubClass", "MSZoning", "LotFrontage", "WoodDeckSF"],
                    roles={
                        "Id": CategoryRole(np.int32),
@@ -33,7 +31,7 @@ DATASETS = [
 ]
 
 
-@pytest.mark.parametrize("dataset", DATASETS)
+@pytest.mark.parametrize("dataset", [DATASETS[1]])
 def test_seq_transformer(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
@@ -137,7 +135,8 @@ def test_union_transformer(spark: SparkSession, dataset: DatasetForTest):
 @pytest.mark.parametrize("dataset", [DATASETS[1]])
 def test_column_selector(spark: SparkSession, dataset: DatasetForTest):
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
-    sds = SparkDataset.from_lama(ds, spark)
+    # sds = SparkDataset.from_lama(ds, spark)
+    sds = from_pandas_to_spark(ds, spark, ds.target)
 
     selector = ColumnsSelector(ds.features)
     selector.fit(ds)

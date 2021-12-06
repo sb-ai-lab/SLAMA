@@ -1,5 +1,3 @@
-from typing import cast, List
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,25 +5,21 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
 from lightautoml.dataset.roles import CategoryRole
-from lightautoml.tasks.base import Task
 from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabelEncoder, \
     FreqEncoder as SparkFreqEncoder, OrdinalEncoder as SparkOrdinalEncoder, \
     CatIntersectstions as SparkCatIntersectstions, OHEEncoder as SparkOHEEncoder, \
-    TargetEncoder as SparkTargetEncoder, MultiClassTargetEncoder as SparkMultiClassTargetEncoder
-from lightautoml.transformers.categorical import LabelEncoder, FreqEncoder, OrdinalEncoder, CatIntersectstions, \
-    OHEEncoder, TargetEncoder, MultiClassTargetEncoder
+    TargetEncoder as SparkTargetEncoder
 from lightautoml.tasks import Task
-
-from . import compare_by_content, compare_by_metadata, DatasetForTest, spark, NumpyTransformable, \
-    compare_obtained_datasets, from_pandas_to_spark
-from lightautoml.spark.dataset.base import SparkDataset
-
+from lightautoml.transformers.categorical import LabelEncoder, FreqEncoder, OrdinalEncoder, CatIntersectstions, \
+    OHEEncoder, TargetEncoder
+from .. import DatasetForTest, from_pandas_to_spark, spark, compare_obtained_datasets, compare_by_metadata, \
+    compare_by_content
 
 DATASETS = [
 
-    DatasetForTest("test_transformers/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
+    # DatasetForTest("unit/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),
 
-    DatasetForTest("test_transformers/resources/datasets/house_prices.csv",
+    DatasetForTest("unit/resources/datasets/house_prices.csv",
                    columns=["Id", "MSSubClass", "MSZoning", "LotFrontage", "WoodDeckSF"],
                    roles={
                        "Id": CategoryRole(np.int32),
@@ -66,7 +60,8 @@ def test_cat_intersectstions(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
 
-    sds = SparkDataset.from_lama(ds, spark)
+    # sds = SparkDataset.from_lama(ds, spark)
+    sds = from_pandas_to_spark(ds, spark, ds.target)
 
     lama_transformer = CatIntersectstions()
     lama_transformer.fit(ds)
@@ -92,10 +87,12 @@ def test_ohe(spark: SparkSession):
         name: CategoryRole(dtype=np.int32, label_encoded=True)
         for name in source_data.columns
     })
+
+    # ds = PandasDataset(dataset.dataset, roles=dataset.roles)
     _, _ = compare_by_metadata(spark, ds, OHEEncoder(make_sparse), SparkOHEEncoder(make_sparse))
 
 
-@pytest.mark.parametrize("dataset", [DATASETS[1]])
+@pytest.mark.parametrize("dataset", DATASETS)
 def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
@@ -119,7 +116,7 @@ def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
         folds=lpds.data[folds_col].to_numpy()
     )
 
-    sds = from_pandas_to_spark(n_ds.to_pandas(), spark)
+    sds = from_pandas_to_spark(n_ds.to_pandas(), spark, fill_folds_with_zeros_if_not_present=True)
 
     target_encoder = TargetEncoder()
     lama_output = target_encoder.fit_transform(n_ds)

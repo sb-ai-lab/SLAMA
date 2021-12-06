@@ -1,10 +1,15 @@
-from lightautoml.spark.pipelines.features.base import FeaturesPipeline
-from lightautoml.pipelines.features.lgb_pipeline import LGBAdvancedPipeline as LAMALGBAdvancedPipeline
+from typing import cast, Optional, Union
+
+import numpy as np
+
+from lightautoml.dataset.roles import CategoryRole, NumericRole
+from lightautoml.pipelines.selection.base import ImportanceEstimator
 from lightautoml.pipelines.utils import get_columns_by_role
 from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.pipelines.features.base import FeaturesPipeline
 from lightautoml.spark.pipelines.features.base import TabularDataFeatures
 from lightautoml.spark.transformers.base import SparkTransformer, SequentialTransformer, UnionTransformer, \
-    ColumnsSelector
+    ColumnsSelector, ChangeRoles
 from lightautoml.spark.transformers.categorical import OrdinalEncoder
 from lightautoml.spark.transformers.datetime import TimeToNum
 
@@ -66,5 +71,161 @@ class LGBSimpleFeatures(FeaturesPipeline):
         return union_all
 
 
-class LGBAdvancedPipeline(TabularDataFeatures, LAMALGBAdvancedPipeline):
-    pass
+# we don't inherit from LAMALGBAdvancedPipeline
+# because his method 'create_pipeline' contains direct
+# calls to Sequential and Union transformers
+class LGBAdvancedPipeline(FeaturesPipeline, TabularDataFeatures):
+    """Create advanced pipeline for trees based models.
+
+        Includes:
+
+            - Different cats and numbers handling according to role params.
+            - Dates handling - extracting seasons and create datediffs.
+            - Create categorical intersections.
+
+        """
+
+    def __init__(
+            self,
+            feats_imp: Optional[ImportanceEstimator] = None,
+            top_intersections: int = 5,
+            max_intersection_depth: int = 3,
+            subsample: Optional[Union[int, float]] = None,
+            multiclass_te_co: int = 3,
+            auto_unique_co: int = 10,
+            output_categories: bool = False,
+            **kwargs
+    ):
+        """
+
+        Args:
+            feats_imp: Features importances mapping.
+            top_intersections: Max number of categories
+              to generate intersections.
+            max_intersection_depth: Max depth of cat intersection.
+            subsample: Subsample to calc data statistics.
+            multiclass_te_co: Cutoff if use target encoding in cat
+              handling on multiclass task if number of classes is high.
+            auto_unique_co: Switch to target encoding if high cardinality.
+
+        """
+        print("lama advanced pipeline ctr")
+        super().__init__(
+            multiclass_te_co=multiclass_te_co,
+            top_intersections=top_intersections,
+            max_intersection_depth=max_intersection_depth,
+            subsample=subsample,
+            feats_imp=feats_imp,
+            auto_unique_co=auto_unique_co,
+            output_categories=output_categories,
+            ascending_by_cardinality=False,
+        )
+
+    def create_pipeline(self, train: SparkDataset) -> SparkTransformer:
+        """Create tree pipeline.
+
+        Args:
+            train: Dataset with train features.
+
+        Returns:
+            Transformer.
+
+        """
+
+        transformer_list = []
+        target_encoder = self.get_target_encoder(train)
+
+        output_category_role = (
+            CategoryRole(np.float32, label_encoded=True) if self.output_categories else NumericRole(np.float32)
+        )
+
+        # handle categorical feats
+        # split categories by handling type. This pipe use 3 encodings - freq/label/target/ordinal
+        # 1 - separate freqs. It does not need label encoding
+        transformer_list.append(self.get_freq_encoding(train))
+
+        # 2 - check different target encoding parts and split (ohe is the same as auto - no ohe in gbm)
+        auto = get_columns_by_role(train, "Category", encoding_type="auto") + get_columns_by_role(
+            train, "Category", encoding_type="ohe"
+        )
+
+        if self.output_categories:
+            le = (
+                    auto
+                    + get_columns_by_role(train, "Category", encoding_type="oof")
+                    + get_columns_by_role(train, "Category", encoding_type="int")
+            )
+            te = []
+            ordinal = None
+
+        else:
+            le = get_columns_by_role(train, "Category", encoding_type="int")
+            ordinal = get_columns_by_role(train, "Category", ordinal=True)
+
+            if target_encoder is not None:
+                te = get_columns_by_role(train, "Category", encoding_type="oof")
+                # split auto categories by unique values cnt
+                un_values = self.get_uniques_cnt(train, auto)
+                te = te + [x for x in un_values.index if un_values[x] > self.auto_unique_co]
+                ordinal = ordinal + list(set(auto) - set(te))
+
+            else:
+                te = []
+                ordinal = ordinal + auto + get_columns_by_role(train, "Category", encoding_type="oof")
+
+            ordinal = sorted(list(set(ordinal)))
+
+        # get label encoded categories
+        le_part = self.get_categorical_raw(train, le)
+        if le_part is not None:
+            le_part = SequentialTransformer([le_part, ChangeRoles(output_category_role)])
+            transformer_list.append(le_part)
+
+        # get target encoded part
+        te_part = self.get_categorical_raw(train, te)
+        if te_part is not None:
+            te_part = SequentialTransformer([te_part, target_encoder()])
+            transformer_list.append(te_part)
+
+        # get intersection of top categories
+        intersections = self.get_categorical_intersections(train)
+        if intersections is not None:
+            if target_encoder is not None:
+                ints_part = SequentialTransformer([intersections, target_encoder()])
+            else:
+                ints_part = SequentialTransformer([intersections, ChangeRoles(output_category_role)])
+
+            transformer_list.append(ints_part)
+
+        # add numeric pipeline
+        transformer_list.append(self.get_numeric_data(train))
+        transformer_list.append(self.get_ordinal_encoding(train, ordinal))
+        # add difference with base date
+        transformer_list.append(self.get_datetime_diffs(train))
+        # add datetime seasonality
+        transformer_list.append(self.get_datetime_seasons(train, NumericRole(np.float32)))
+
+        # final pipeline
+        union_all = UnionTransformer([x for x in transformer_list if x is not None])
+
+        return union_all
+
+    def _merge(self, data: SparkDataset) -> SparkTransformer:
+        pipes = [cast(SparkTransformer, pipe(data))
+                 for pipe in self.pipes]
+
+        union = UnionTransformer(pipes) if len(pipes) > 1 else pipes[0]
+        print(f"Producing union: {type(union)}")
+        return union
+
+    def _merge_seq(self, data: SparkDataset) -> SparkTransformer:
+        pipes = [cast(SparkTransformer, pipe(data))
+                 for pipe in self.pipes]
+        # pipes = []
+        # for pipe in self.pipes:
+        #     _pipe = pipe(data)
+        #     data = _pipe.fit_transform(data)
+        #     pipes.append(_pipe)
+
+        seq = SequentialTransformer(pipes) if len(pipes) > 1 else pipes[0]
+        return seq

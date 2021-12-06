@@ -10,7 +10,7 @@ from lightautoml.dataset.roles import DatetimeRole
 from lightautoml.spark.transformers.datetime import TimeToNum as SparkTimeToNum, BaseDiff as SparkBaseDiff, \
     DateSeasons as SparkDateSeasons
 from lightautoml.transformers.datetime import TimeToNum, BaseDiff, DateSeasons
-from . import compare_by_content, DatasetForTest, spark
+from .. import DatasetForTest, from_pandas_to_spark, spark, compare_by_content
 
 DATASETS = [
 

@@ -13,6 +13,8 @@ class SparkMetric(LAMLMetric):
         self,
         name: str,
         evaluator: Evaluator,
+        target_col: str,
+        prediction_col: str,
         greater_is_better: bool = True,
         metric_params: Optional[Dict] = None
     ):
@@ -30,16 +32,33 @@ class SparkMetric(LAMLMetric):
         """
         self._name = name
         self._evaluator = evaluator
+        self._target_col = target_col
+        self._prediction_col = prediction_col
         self.greater_is_better = greater_is_better
         self._metric_params = metric_params
 
     def __call__(self, dataset: SparkDataset, dropna: bool = False):
-        # TODO: params processing and dropna
+        assert len(dataset.features) == 1, \
+            f"Dataset should contain only one feature that would be interpretated as a prediction"
+
+        prediction_column = dataset.features[0]
+
         sdf = dataset.data.dropna() if dropna else dataset.data
+        sdf = (
+            sdf.join(dataset.target, SparkDataset.ID_COLUMN)
+                .withColumnRenamed(dataset.target_column, self._target_col)
+                .withColumnRenamed(prediction_column, self._prediction_col)
+        )
+
         return self._evaluator.evaluate(sdf, params=self._metric_params)
 
 
 class Task(LAMATask):
+
+    _default_metrics = {"binary": "areaUnderROC", "reg": "mse", "multiclass": "logLoss"}
+    _target_col = "target"
+    _prediction_col = "prediction"
+
     def __init__(
         self,
         name: str,
@@ -49,6 +68,7 @@ class Task(LAMATask):
         metric_params: Optional[Dict] = None,
         greater_is_better: Optional[bool] = None,
     ):
+        super().__init__(name, loss, loss_params, metric, metric_params, greater_is_better)
         assert name in _valid_task_names, "Invalid task name: {}, allowed task names: {}".format(
             name, _valid_task_names
         )
@@ -69,25 +89,25 @@ class Task(LAMATask):
         # set callback metric for loss
         # if no metric - infer from task
         if metric is None:
-            metric = _default_metrics[self.name]
+            metric = self._default_metrics[self.name]
 
         self.metric_params = metric_params if metric_params else dict()
 
         # TODO: real column names?
         if self._name == "binary":
             self._evaluator = BinaryClassificationEvaluator(metricName=metric,
-                                                            rawPredictionCol="prediction",
-                                                            labelCol="target")
+                                                            rawPredictionCol=self._prediction_col,
+                                                            labelCol=self._target_col)
         elif self._name == "reg":
             self._evaluator = RegressionEvaluator(metricName=metric,
-                                                  predictionCol="prediction",
-                                                  labelCol="target")
+                                                  predictionCol=self._prediction_col,
+                                                  labelCol=self._target_col)
         else:
             self._evaluator = MulticlassClassificationEvaluator(metricName=metric,
-                                                                predictionCol="prediction",
-                                                                labelCol="label")
+                                                                predictionCol=self._prediction_col,
+                                                                labelCol=self._target_col)
 
         self.metric_name = metric
 
     def get_dataset_metric(self) -> LAMLMetric:
-        return SparkMetric(self.name, self._evaluator, self.greater_is_better)
+        return SparkMetric(self.name, self._evaluator, self._target_col, self._prediction_col, self.greater_is_better)

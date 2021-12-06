@@ -10,14 +10,14 @@ from lightautoml.image.utils import pil_loader
 from lightautoml.spark.transformers.image import ImageFeaturesTransformer as SparkImageFeaturesTransformer, \
     PathBasedAutoCVWrap as SparkPathBasedAutoCVWrap
 from lightautoml.transformers.image import ImageFeaturesTransformer
-from . import smoke_check, compare_by_content, spark
+from .. import spark, smoke_check, compare_by_content
 
 
 @pytest.fixture
 def image_dataset() -> PandasDataset:
     source_data = pd.DataFrame(data={
-        "path_a": [f"test_transformers/resources/images/cat_{i + 1}.jpg" for i in range(3)],
-        "path_b": [f"test_transformers/resources/images/cat_{i + 1}.jpg" for i in range(3)]
+        "path_a": [f"unit/resources/images/cat_{i + 1}.jpg" for i in range(3)],
+        "path_b": [f"unit/resources/images/cat_{i + 1}.jpg" for i in range(3)]
     })
 
     ds = PandasDataset(source_data, roles={name: PathRole() for name in source_data.columns})

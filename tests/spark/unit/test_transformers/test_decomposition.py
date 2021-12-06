@@ -6,7 +6,7 @@ from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.spark.transformers.decomposition import PCATransformer as SparkPCATransformer
 from lightautoml.transformers.decomposition import PCATransformer
-from . import compare_by_metadata, spark
+from .. import spark, compare_by_metadata
 
 
 def test_pca(spark: SparkSession):

@@ -5,12 +5,12 @@ from copy import copy
 from typing import Tuple
 from typing import Union
 
-from pyspark.ml import Pipeline, Model
+from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
 from pyspark.ml.feature import VectorAssembler, OneHotEncoder
 from pyspark.ml.regression import LinearRegression, LinearRegressionModel
 
-from .base import TabularMLAlgo
+from .base import TabularMLAlgo, SparkMLModel
 from ..dataset.base import SparkDataset, SparkDataFrame
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class LinearLBFGS(TabularMLAlgo):
 
     def fit_predict_single_fold(
         self, train: SparkDataset, valid: SparkDataset
-    ) -> Tuple[Model, SparkDataFrame, str]:
+    ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
         """Train on train dataset and predict on holdout dataset.
 
         Args:
@@ -89,7 +89,7 @@ class LinearLBFGS(TabularMLAlgo):
 
         return ml_model, val_pred, self._prediction_col
 
-    def predict_single_fold(self, dataset: SparkDataset, model: Model) -> SparkDataFrame:
+    def predict_single_fold(self, dataset: SparkDataset, model: SparkMLModel) -> SparkDataFrame:
         """Implements prediction on single fold.
 
         Args:

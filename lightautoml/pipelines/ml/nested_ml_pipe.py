@@ -220,6 +220,7 @@ class NestedTabularMLPipeline(MLPipeline):
               loop with ``inner_tune==True``.
 
         """
+
         if cv > 1:
             new_ml_algos = []
 

@@ -58,6 +58,7 @@ class FeaturesPipeline:
     """
 
     def __init__(self, **kwargs):
+        print("features pipeline ctr")
         super().__init__(**kwargs)
         self.pipes: List[Callable[[LAMLDataset], LAMLTransformer]] = [self.create_pipeline]
         self.sequential = False
@@ -117,6 +118,8 @@ class FeaturesPipeline:
 
         # TODO: LAMA-SPARK a place with potential duplicate computations
         #        need to think carefully about it
+
+        print(type(self._pipeline))
 
         return self._pipeline.fit_transform(train)
 
@@ -205,6 +208,7 @@ class TabularDataFeatures:
             **kwargs: Additional parameters.
 
         """
+        print("tdf ctr")
         self.multiclass_te_co = 3
         self.top_intersections = 5
         self.max_intersection_depth = 3

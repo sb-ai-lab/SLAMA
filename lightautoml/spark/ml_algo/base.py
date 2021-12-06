@@ -2,9 +2,7 @@ import logging
 from typing import Tuple, cast, List, Optional, Union
 
 import numpy as np
-from pyspark.ml import Model as SparkMLModel
-from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
-
+from pyspark.ml import PredictionModel, PipelineModel
 from pyspark.ml.functions import vector_to_array, array_to_vector
 from pyspark.sql import functions as F, Column
 
@@ -15,16 +13,19 @@ from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.utils.timer import TaskTimer
 from lightautoml.validation.base import TrainValidIterator
 
+# from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
+
 logger = logging.getLogger(__name__)
 
-Model = Union[SparkMLModel, LightGBMClassifier, LightGBMRegressor]
+SparkMLModel = Union[PredictionModel, PipelineModel]
+# Model = Union[SparkMLModel, LightGBMClassifier, LightGBMRegressor]
 
-
-def get_pred_column(model: Model) -> str:
-    if isinstance(model, SparkMLModel):
-        return model.prediction_column
-    elif isinstance(model, (LightGBMRegressor, LightGBMClassifier)):
-        return model.getPredictionCol()
+#
+# def get_pred_column(model: Model) -> str:
+#     if isinstance(model, SparkMLModel):
+#         return model.prediction_column
+#     elif isinstance(model, (LightGBMRegressor, LightGBMClassifier)):
+#         return model.getPredictionCol()
 
 
 class TabularMLAlgo(MLAlgo):
@@ -140,7 +141,7 @@ class TabularMLAlgo(MLAlgo):
             logger.info("\x1b[1m{}\x1b[0m fitting and predicting completed".format(self._name))
         return preds_ds
 
-    def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[Model, SparkDataFrame, str]:
+    def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[SparkMLModel, SparkDataFrame, str]:
         """Train on train dataset and predict on holdout dataset.
 
         Args:
@@ -153,7 +154,7 @@ class TabularMLAlgo(MLAlgo):
         """
         raise NotImplementedError
 
-    def predict_single_fold(self, model: Model, dataset: SparkDataset) -> SparkDataFrame:
+    def predict_single_fold(self, model: SparkMLModel, dataset: SparkDataset) -> SparkDataFrame:
         """Implements prediction on single fold.
 
         Args:
@@ -182,7 +183,7 @@ class TabularMLAlgo(MLAlgo):
         preds_dfs = [
             self.predict_single_fold(model, dataset).select(
                 SparkDataset.ID_COLUMN,
-                F.col(get_pred_column(model)).alias(f"{pred_col_prefix}_{i}")
+                F.col(self._get_predict_column(model)).alias(f"{pred_col_prefix}_{i}")
             ) for i, model in enumerate(self.models)
         ]
 
@@ -270,6 +271,9 @@ class TabularMLAlgo(MLAlgo):
         )
 
         return full_preds_df
+
+    def _get_predict_column(self, model: SparkMLModel) -> str:
+        return model.getPredictionCol()
 
     def _predict_feature_name(self):
         return f"{self._name}_prediction"
