@@ -44,6 +44,16 @@ dtype2Stype ={
     "float128": "double"
 }
 
+stype2dtype = {
+    "string": "str",
+    "boolean": "bool",
+    "int": "int",
+    "bigint": "longlong",
+    "long": "long",
+    "float": "float",
+    "double": "float64"
+}
+
 
 class SparkToSparkReader(Reader):
     """
@@ -174,18 +184,19 @@ class SparkToSparkReader(Reader):
                 # TODO: Think, what if multilabel or multitask? Multiple column target ..
                 # TODO: Maybe for multilabel/multitask make target only avaliable in kwargs??
                 self._used_array_attrs[attrs_dict[r.name]] = feat
-                kwargs[attrs_dict[r.name]] = train_data[feat]
+                kwargs[attrs_dict[r.name]] = feat
                 r = DropRole()
 
             # add new role
             parsed_roles[feat] = r
 
         if "target" in kwargs:
-            assert isinstance(kwargs["target"], (str, Column)), \
+            assert isinstance(kwargs["target"], str), \
                 f"Target must be a column or column name, but it is {type(kwargs['target'])}"
-            assert str(kwargs["target"]) in train_data.columns, "Target must be a part of dataframe"
+            assert kwargs["target"] in train_data.columns, \
+                f"Target must be a part of dataframe. Target: {kwargs['target']}"
             # self.target = kwargs["target"]
-            self.target_col = str(kwargs["target"])
+            self.target_col = kwargs["target"]
         elif "target" in train_data.columns:
             # self.target = "target"
             self.target_col = "target"
@@ -283,22 +294,9 @@ class SparkToSparkReader(Reader):
         # assert len(self.used_array_attrs) > 0, 'At least target should be defined in train dataset'
         # create folds
 
-        # TODO: LAMA-SPARK remove it from here
-        # we will use CrossValidation from Spark
-        # folds = set_sklearn_folds(
-        #     self.task,
-        #     kwargs["target"].values,
-        #     cv=self.cv,
-        #     random_state=self.random_state,
-        #     group=None if "group" not in kwargs else kwargs["group"],
-        # )
-        # if folds is not None:
-        #     kwargs["folds"] = Series(folds, index=train_data.index)
-
+        kwargs["folds"] = self._create_folds(train_data, kwargs)
         # get dataset
-
         # replace data target with freshly created spark dataframe
-        kwargs = copy(kwargs)
         kwargs["target"] = self.target
 
         # TODO: SPARK-LAMA send parent for unwinding
@@ -326,6 +324,57 @@ class SparkToSparkReader(Reader):
         #     )
 
         return dataset
+
+    def _create_folds(self, sdf: SparkDataFrame, kwargs: dict) -> SparkDataFrame:
+        if "folds" in kwargs:
+            folds_col = kwargs["folds"]
+
+            assert isinstance(folds_col, str), \
+                f"If kwargs contains 'folds' it should be of type str and contain folds column." \
+                f"But kwargs['folds'] has type {type(folds_col)} and contains {folds_col}"
+
+            assert folds_col in sdf.columns, \
+                f"Folds column ({folds_col}) should be presented in the train dataframe," \
+                f"but it is not possible to find the column among {sdf.columns}"
+
+            cols_dtypes = dict(sdf.dtypes)
+            assert cols_dtypes[folds_col] == 'int', \
+                f"Folds column should be of integer type, but it is {cols_dtypes[folds_col]}"
+
+            folds_sdf = sdf.select(SparkDataset.ID_COLUMN, folds_col)
+            return folds_sdf
+
+            # # TODO: need to validate the column
+            # df = sdf
+            # datasets = []
+            # for i in range(self.cv):
+            #     condition = sdf[folds_col] == i
+            #     # filtering and dropping folds col
+            #     validation = df.filter(condition).drop(folds_col)
+            #     train = df.filter(~condition).drop(folds_col)
+            #     datasets.append((train, validation))
+            # return datasets
+
+        h = 1.0 / self.cv
+        folds_sdf = sdf.select(
+            SparkDataset.ID_COLUMN,
+            F.floor(F.rand(self.random_state) * h).alias("reader_fold_num")
+        )
+        return folds_sdf
+        # h = 1.0 / self.cv
+        # rands_col = "fold_random_num"
+        # df = sdf.select('*', F.rand(self.random_state).alias(rands_col))
+        # datasets = []
+        # for i in range(self.cv):
+        #     validateLB = i * h
+        #     validateUB = (i + 1) * h
+        #     condition = (df[rands_col] >= validateLB) & (df[rands_col] < validateUB)
+        #     # filtering and dropping rand num col
+        #     validation = df.filter(condition).drop(rands_col)
+        #     train = df.filter(~condition).drop(rands_col)
+        #     datasets.append((train, validation))
+        #
+        # return datasets
 
     def _create_target(self, sdf: SparkDataFrame, target_col: str = "target"):
         """Validate target column and create class mapping is needed
@@ -369,11 +418,13 @@ class SparkToSparkReader(Reader):
                     assert srtd.shape[0] == 2, "Binary task and more than 2 values in target"
                 return sdf
 
-            self.class_mapping = {x: i for i, x in enumerate(uniques)}
+            mapping = {x: i for i, x in enumerate(uniques)}
 
-            remap = F.udf(lambda x: self.class_mapping[x], returnType=IntegerType())
+            remap = F.udf(lambda x: mapping[x], returnType=IntegerType())
             rest_cols = [c for c in sdf.columns if c != target_col]
             sdf_with_proc_target = sdf.select(*rest_cols, remap(target_col).alias(target_col))
+
+            self.class_mapping = mapping
 
             return sdf_with_proc_target
 
@@ -414,13 +465,15 @@ class SparkToSparkReader(Reader):
         guessed_cols = dict()
         cols_to_check = []
         check_columns = []
+
+        feat2dtype = dict(data.dtypes)
+
         for feature, ok in features:
             if not ok:
                 guessed_cols[feature] = DropRole()
-            inferred_dtype = next(dtyp for fname, dtyp in data.dtypes if fname == feature)
+            inferred_dtype = feat2dtype[feature]
             # numpy doesn't understand 'string' but 'str' is ok
-            inferred_dtype = 'str' if inferred_dtype == 'string' else inferred_dtype
-            inferred_dtype = np.dtype(inferred_dtype)
+            inferred_dtype = np.dtype(stype2dtype[inferred_dtype])
 
             # testing if it can be numeric or not
             num_dtype = self._get_default_role_from_str("numeric").dtype

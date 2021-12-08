@@ -44,7 +44,7 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
         "random_state": 42,
     }
 
-    def __init__(self, params: Optional[dict] = None):
+    def __init__(self, **params: Optional[dict]):
         super().__init__()
         self._prediction_col = f"prediction_{self._name}"
         self.params = {} if params is None else params

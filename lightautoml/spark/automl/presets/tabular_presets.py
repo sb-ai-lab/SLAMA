@@ -1,18 +1,21 @@
 import logging
 import os
 from copy import deepcopy, copy
-from typing import Optional, Sequence, Iterable, cast, Union, Tuple
+from typing import Optional, Sequence, Iterable, cast, Union, Tuple, Callable
 
-from pyspark.sql import SparkSession, DataFrame
+import numpy as np
+import pandas as pd
+from pyspark.sql import SparkSession
 
 from lightautoml.automl.presets.base import AutoMLPreset, upd_params
-from lightautoml.dataset.base import RolesDict
+from lightautoml.dataset.base import RolesDict, LAMLDataset
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
 from lightautoml.pipelines.selection.base import SelectionPipeline
 from lightautoml.pipelines.selection.importance_based import ModelBasedImportanceEstimator, ImportanceCutoffSelector
 from lightautoml.reader.tabular_batch_generator import ReadableToDf, read_data
 from lightautoml.spark.automl.blend import WeightedBlender
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
+from lightautoml.spark.ml_algo.boost_lgbm import BoostLGBM
 from lightautoml.spark.ml_algo.linear_pyspark import LinearLBFGS
 from lightautoml.spark.pipelines.features.lgb_pipeline import LGBSimpleFeatures, LGBAdvancedPipeline
 from lightautoml.spark.pipelines.features.linear_pipeline import LinearFeatures
@@ -20,18 +23,10 @@ from lightautoml.spark.pipelines.ml.nested_ml_pipe import NestedTabularMLPipelin
 from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.tasks import Task
 
-import numpy as np
-import pandas as pd
-
 logger = logging.getLogger(__name__)
 
 # Either path/full url, or pyspark.sql.DataFrame, or dict with data
 ReadableIntoSparkDf = Union[str, SparkDataFrame, dict, pd.DataFrame]
-
-
-class BoostLGBM:
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError("I'm just a mock. Replace me.")
 
 
 class TabularAutoML(AutoMLPreset):
@@ -688,3 +683,15 @@ class TabularAutoML(AutoMLPreset):
         #     top_n_classes,
         #     datetime_level,
         # )
+
+    def _concatenate_datasets(self, datasets: Sequence[LAMLDataset]) -> LAMLDataset:
+        assert all(isinstance(ds, SparkDataset) for ds in datasets)
+        sdss = [cast(SparkDataset, ds) for ds in datasets]
+        return SparkDataset.concatenate(sdss)
+
+    def _create_validation_iterator(self, train: LAMLDataset, valid: Optional[LAMLDataset], n_folds: Optional[int],
+                                    cv_iter: Optional[Callable]):
+        return super()._create_validation_iterator(train, valid, n_folds, cv_iter)
+
+
+

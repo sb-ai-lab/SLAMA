@@ -1,3 +1,4 @@
+import pickle
 from collections import defaultdict
 from itertools import chain, combinations
 from typing import Optional, Sequence, List, Tuple, Dict, Union, cast
@@ -15,6 +16,7 @@ from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.transformers.base import SparkTransformer
+from lightautoml.spark.utils import get_cached_df_through_rdd
 from lightautoml.transformers.categorical import categorical_check, encoding_check, oof_task_check, \
     multiclass_task_check
 from lightautoml.transformers.base import LAMLTransformer
@@ -472,7 +474,8 @@ class TargetEncoder(SparkTransformer):
             .join(dataset.target, SparkDataset.ID_COLUMN) \
             .join(dataset.folds, SparkDataset.ID_COLUMN)
 
-        cached_df = df.cache()
+        # cached_df = df.cache()
+        cached_df = get_cached_df_through_rdd(df)
 
         _fc = F.col(dataset.folds_column)
         _tc = F.col(dataset.target_column)
@@ -484,158 +487,97 @@ class TargetEncoder(SparkTransformer):
             F.sum(_tc).cast("double")
         ).collect()[0]
 
-
-        # +-------------+------------------+
-        # | <folds_col> |      _folds_prior|
-        # +-------------+------------------+
-        # |            0|1.3777777777777778|
-        # |            1|1.5294117647058822|
-        # |            2| 1.263157894736842|
-        # +-------------+------------------+
-        folds_prior = cached_df.groupBy(_fc).agg(
+        # we assume that there is not many folds in our data
+        folds_prior_pdf = cached_df.groupBy(_fc).agg(
             ((total_target_sum - F.sum(_tc)) / (total_count - F.count(_tc))).alias("_folds_prior")
-        )
+        ).collect()
+
+        folds_prior_map = {fold: prior for fold, prior in folds_prior_pdf}
+        rest_features = dataset.features
+        new_features = []
+
+        score_df: Optional[SparkDataFrame] = None
 
         for col_name in dataset.features:
             _cur_col = F.col(col_name)
-            _cur_col_spec = Window.partitionBy(_cur_col)
 
-            # Считаем значения векторов для кандидатов.
-            # В оригинальной ламе за это отвечает фрагмент кода и всё ему предшествующее:
-            #
-            # candidates = (
-            #         (oof_sum[vec, folds, np.newaxis] + alphas * folds_prior[folds, np.newaxis])
-            #         / (oof_count[vec, folds, np.newaxis] + alphas)
-            # ).astype(np.float32)
-            #
-            # Получаем примерно такой фрейм:
-            # +-------------+---------------+-----+-------+-----+-------+--------+----------+------------------+--------------------+
-            # | <folds_col> | <current_col> |_fsum|_fcount|_tsum|_tcount|_oof_sum|_oof_count|      _folds_prior|         _candidates|
-            # +-------------+---------------+-----+-------+-----+-------+--------+----------+------------------+--------------------+
-            # |            1|              0|    3|      2|    4|      3|       1|         1|1.5294117647058822|[1.17647058823529...|
-            # |            0|              0|    1|      1|    4|      3|       3|         2|1.3777777777777778|[1.47555555555555...|
-            # |            1|              1|   17|     13|   24|     18|       7|         5|1.5294117647058822|[1.41176470588235...|
-            # |            0|              1|    1|      1|   24|     18|      23|        17|1.3777777777777778|[1.35365079365079...|
-            # |            2|              1|    6|      4|   24|     18|      18|        14| 1.263157894736842|[1.28493647912885...|
-            # |            2|              2|    1|      1|   16|     14|      15|        13| 1.263157894736842|[1.15789473684210...|
-            # |            1|              2|   15|     13|   16|     14|       1|         1|1.5294117647058822|[1.17647058823529...|
-            # |            1|              3|    1|      1|   16|      9|      15|         8|1.5294117647058822|[1.85467128027681...|
-            # |            0|              3|    3|      2|   16|      9|      13|         7|1.3777777777777778|[1.82518518518518...|
-            # |            2|              3|   12|      6|   16|      9|       4|         3| 1.263157894736842|[1.32330827067669...|
-            # |            1|              4|    6|      4|    8|      6|       2|         2|1.5294117647058822|[1.10588235294117...|
-            # |            0|              4|    1|      1|    8|      6|       7|         5|1.3777777777777778|[1.39797979797979...|
-            # |            2|              4|    1|      1|    8|      6|       7|         5| 1.263157894736842|[1.38755980861244...|
-            # +-------------+---------------+-----+-------+-----+-------+--------+----------+------------------+--------------------+
-            candidates_df = cached_df \
-                .groupBy(_fc, _cur_col) \
-                .agg(
-                    F.sum(_tc).alias("_fsum"),
-                    F.count(_fc).alias("_fcount")
-                ) \
-                .withColumn("_tsum", F.sum(F.col("_fsum")).over(_cur_col_spec)) \
-                .withColumn("_tcount", F.sum(F.col("_fcount")).over(_cur_col_spec)) \
-                .withColumn("_oof_sum", F.col("_tsum") - F.col("_fsum")) \
-                .withColumn("_oof_count", F.col("_tcount") - F.col("_fcount")) \
-                .join(F.broadcast(folds_prior), dataset.folds_column) \
-                .withColumn(
-                    "_candidates",
-                    F.array(
-                        *[
-                            (F.col("_oof_sum") + a * F.col("_folds_prior"))
-                            / (F.col("_oof_count") + a)
-                            for a in self.alphas
-                        ]
-                    )
-                )
+            candidates_pdf = (
+                cached_df
+                .groupBy(_fc, _cur_col)
+                .agg(F.sum(_tc).alias("_fsum"), F.count(_fc).alias("_fcount"))
+                .toPandas()
+            )
 
-            # А вот тут мы подготавливаем фрейм для подсчёта функции binary_score_func / reg_score_func
-            # для каждого target. Агрегации по folds_column и current_col необходимы, так как от их значений
-            # зависит то, какие коэффициенты получатся. Т.е. без них сджоинить результат не получится =)
-            #
-            # На выходе получим такой фрейм. _trg_count нам потребуется для дальнейшего вычисления коэффициентов.
-            # +-------------+---------------+--------------+----------+--------------------+
-            # | <folds_col> | <current_col> | <target_col> |_trg_count|         _candidates|
-            # +-------------+---------------+--------------+----------+--------------------+
-            # |            1|              0|             2|         9|[1.52941176470588...|
-            # |            2|              0|             2|         8|[1.26315789473684...|
-            # |            0|              0|             2|         1|[1.37777777777777...|
-            # |            2|              0|             1|         4|[1.26315789473684...|
-            # |            1|              0|             1|        24|[1.52941176470588...|
-            # |            0|              0|             1|         4|[1.37777777777777...|
-            # +-------------+---------------+--------------+----------+--------------------+
-            scores_df = cached_df \
-                .groupBy(_fc, _cur_col, _tc) \
-                .agg(
-                    F.count(_tc).alias("_trg_count")
-                ) \
-                .join(
-                    F.broadcast(candidates_df.select(_fc, _cur_col, "_candidates")), [dataset.folds_column, col_name]
-                )
+            if score_df is not None:
+                score_df.unpersist()
 
-            # Превращаем каждый элемент массива _candidates в отдельную колонку,
-            # сразу же высчитывая значение функции для каждого из них.
-            # В результате получаем точно такой же датасет, как и в предыдущем комменте,
-            # только имеем ещё и кучу приклеенных колонок (1 колонка = 1 элемент массива).
+            t_df = candidates_pdf.groupby(col_name).agg(_tsum=('_fsum', 'sum'), _tcount=('_fcount', 'sum')).reset_index()
+            candidates_pdf_2 = candidates_pdf.merge(t_df, on=col_name, how='inner')
+
+            def make_candidates(x):
+                cat_val, fold, fsum, tsum, fcount, tcount = x
+                oof_sum = tsum - fsum
+                oof_count = tcount - fcount
+                candidates = [(oof_sum + a * folds_prior_map[fold]) / (oof_count + a) for a in self.alphas]
+                return candidates
+
+            candidates_pdf_2['_candidates'] = candidates_pdf_2[[col_name, dataset.folds_column, '_fsum', '_tsum', '_fcount', '_tcount']] \
+                .apply(make_candidates, axis=1)
+
+            cand_sdf = dataset.spark_session.createDataFrame(candidates_pdf_2[[col_name, dataset.folds_column, '_candidates']])
+
+            score_df = (
+                cached_df.join(F.broadcast(cand_sdf), [dataset.folds_column, col_name]).cache()
+            )
+
             if dataset.task.name == "binary":
-                for i in range(0, len(self.alphas)):
-                    # Реализация binary_score_func из оригинальной ламы
-                    scores_df = scores_df.withColumn(
-                        f"_candidate_{i}",
-                        -(
-                                (_tc * F.log(F.col("_candidates").getItem(i)))
-                                +
-                                (F.lit(1) - _tc)
-                                *
-                                (F.log(F.lit(1) - F.col("_candidates").getItem(i)))
-                        ) * F.col("_trg_count")
-                    )
+                enc_candidates_cols =[
+                    (F.lit(-1) * ((_tc * F.log(F.col("_candidates").getItem(i)))
+                    + (F.lit(1) - _tc) * (F.log(F.lit(1) - F.col("_candidates").getItem(i)))
+                     )).alias(f"_candidate_{i}")
+                    for i in range(len(self.alphas))
+                ]
             else:
-                for i in range(0, len(self.alphas)):
-                    # Реализация reg_score_func из оригинальной ламы
-                    scores_df = scores_df.withColumn(
-                        f"_candidate_{i}",
-                        F.pow((_tc - F.col("_candidates").getItem(i)), F.lit(2)) * F.col("trg_count")
-                    )
+                enc_candidates_cols = [
+                    F.pow((_tc - F.col("_candidates").getItem(i)), F.lit(2)).alias(f"_candidate_{i}")
+                    for i in range(len(self.alphas))
+                ]
 
-            # Вычисляем среднее значение по каждому из кандидатов (среднее по итогу высчитывается в
-            # каждой из оригинальных функций ламы. Затем отбираем лучших кандидатов.
-            # Наиболее просто это сделать просто с помощью np.argmin()
-            best_candidate = np.array(list(
-                scores_df.agg(
-                    *[
-                        (F.sum(F.col(f"_candidate_{i}")) / total_count).alias(f"_mean_candidate_{i}")
-                        for i in range(0, len(self.alphas))
-                    ]
-                ).collect()[0]
-            ), dtype=np.float64).argmin()
+            mean_scores_candidates = [
+                F.mean(c).alias(f"_candidate_{i}") for i, c in enumerate(enc_candidates_cols)
+            ]
 
-            # "Приклеиваем" лучшего кандидата к исходному датафрейму и дропаем колонку со старыми значениями
-            df = df.join(
-                    F.broadcast(
-                        scores_df.select(
-                            _tc, _fc, _cur_col, F.col("_candidates").getItem(int(best_candidate)).alias("_best_candidate")
-                        )
-                    ),
-                    [dataset.target_column, dataset.folds_column, col_name]
-                ) \
-                .drop(_cur_col) \
-                .withColumnRenamed(f"_best_candidate", f"{self._fname_prefix}__{col_name}")
+            row = (
+                score_df
+                .select(*mean_scores_candidates)
+                .first()
+            )
 
-            enc = (total_target_sum + self.alphas[best_candidate] * prior) / (total_count + self.alphas[best_candidate])
+            cached_df.unpersist()
 
-            self.encodings.append(enc)
+            idx = int(np.array(row).argmin())
 
-        # Все join'ы с бродкастами, т.к. там только агрегаты.
-        # В целом можно многое ещё улучшить. Например, поиграть с window функциями.
-        # Также непонятно, насколько оправдано использование бродкастов. Возможно,
-        # простым collect'ом + columnMap всё будет гораздо быстрее работать
+            rest_features = [feat for feat in rest_features if feat != col_name]
+            new_col = f"{self._fname_prefix}__{col_name}"
+            score_df = score_df.select(
+                *dataset.service_columns,
+                _fc,
+                _tc,
+                *rest_features,
+                *new_features,
+                F.col("_candidates").getItem(idx).alias(new_col)
+            )
+            new_features.append(new_col)
+            cached_df = get_cached_df_through_rdd(score_df)
 
-        cached_df.unpersist()
-        df = df.drop(dataset.folds_column, dataset.target_column)
+        cached_df = cached_df.drop(dataset.folds_column, dataset.target_column)
 
         output = dataset.empty()
         self.output_role = NumericRole(np.float32, prob=output.task.name == "binary")
-        output.set_data(df, self.features, self.output_role)
+        output.set_data(cached_df, self.features, self.output_role)
+        # TODO: set score_df as a dependency if it is not None
+        output.dependencies = []
+
         return output
 
 

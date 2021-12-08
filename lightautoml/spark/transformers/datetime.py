@@ -30,6 +30,8 @@ def is_holiday(timestamp: int,
 
 
 def get_timestamp_attr(timestamp: int, attr: str) -> int:
+    if not timestamp:
+        return None
 
     date = pd.to_datetime(datetime.fromtimestamp(timestamp))
     at = getattr(date, attr)
@@ -200,7 +202,7 @@ class DateSeasons(SparkDatetimeTransformer):
                 df = df \
                     .withColumn(
                         f"{self._fname_prefix}_{seas}__{col}",
-                        F.when(F.isnan(F.col(col)), F.col(col))
+                        F.when(F.isnan(col) | F.isnull(col), None)
                         .otherwise(
                             get_timestamp_attr_udf(F.col(col), F.lit(date_attrs[seas]))
                         )

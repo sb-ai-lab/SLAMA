@@ -4,6 +4,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvalu
     Evaluator
 
 from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.tasks.losses.base import SparkLoss
 from lightautoml.tasks import Task as LAMATask
 from lightautoml.tasks.base import LAMLMetric, _default_losses, _default_metrics, _valid_task_names
 
@@ -83,6 +84,10 @@ class Task(LAMATask):
 
         if loss_params is None:
             loss_params = {}
+
+        # SparkLoss actualy does nothing, but it is there
+        # to male TabularAutoML work
+        self.losses = {'lgb': SparkLoss(),'linear_l2': SparkLoss()}
 
         # TODO: do something with loss, but check at first MLAlgo impl.
 

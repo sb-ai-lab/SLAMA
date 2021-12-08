@@ -246,7 +246,7 @@ def from_pandas_to_spark(p: PandasDataset,
         roles = {general_feat: NumericVectorOrArrayRole(len(cols), f"{general_feat}_{{}}", dtype=roles[cols[0]].dtype)}
 
     kwargs = dict()
-    if fpdf:
+    if fpdf is not None:
         folds_sdf = spark.createDataFrame(data=fpdf)
         kwargs["folds"] = folds_sdf
 

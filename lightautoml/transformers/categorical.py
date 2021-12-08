@@ -1,5 +1,5 @@
 """Categorical features transformerrs."""
-
+import pickle
 from itertools import combinations
 from typing import List
 from typing import Optional
@@ -488,6 +488,7 @@ class TargetEncoder(LAMLTransformer):
 
             # write best alpha
             oof_feats[:, n] = candidates[:, idx]
+
             # calc best encoding
             enc = ((t_sum[:, 0] + alphas[0, idx] * prior) / (t_count[:, 0] + alphas[0, idx])).astype(np.float32)
 

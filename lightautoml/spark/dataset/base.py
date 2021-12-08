@@ -30,7 +30,7 @@ class SparkDataset(LAMLDataset):
 
     def empty(self) -> "SparkDataset":
 
-        dataset = super().empty()
+        dataset = cast(SparkDataset, super().empty())
         dataset._dependencies = []
 
         return dataset
@@ -91,8 +91,18 @@ class SparkDataset(LAMLDataset):
 
         self._folds_column = None
         if "folds" in kwargs:
-            folds_sdf = kwargs["folds"]
-            assert isinstance(folds_sdf, pyspark.sql.DataFrame), "Folds should be a spark dataframe"
+            # folds = kwargs["folds"]
+            # assert isinstance(folds, list)
+            # correct_folds = (
+            #     (self.ID_COLUMN in train.columns) and (self.ID_COLUMN in val.columns)
+            #     for train, val in folds
+            # )
+            # assert all(correct_folds), "ID_COLUMN should be presented everywhere"
+
+            assert isinstance(kwargs["folds"], pyspark.sql.DataFrame), "Folds should be a spark dataframe"
+
+            folds_sdf = cast(SparkDataFrame, kwargs["folds"])
+
             assert len(folds_sdf.columns) == 2, "Only 2 columns should be in the folds spark dataframe"
             assert SparkDataset.ID_COLUMN in folds_sdf.columns, \
                 f"id column {SparkDataset.ID_COLUMN} should be presented in the folds spark dataframe"
@@ -199,6 +209,7 @@ class SparkDataset(LAMLDataset):
 
     @property
     def folds_column(self) -> str:
+        # raise NotImplementedError("It is unsupported now")
         return self._folds_column
 
     @property
@@ -424,3 +435,8 @@ class SparkDataset(LAMLDataset):
             target=target,
             folds=folds
         )
+
+    @staticmethod
+    def from_dataset(dataset: "LAMLDataset") -> "LAMLDataset":
+        assert isinstance(dataset, SparkDataset), "Can only convert from SparkDataset"
+        return dataset

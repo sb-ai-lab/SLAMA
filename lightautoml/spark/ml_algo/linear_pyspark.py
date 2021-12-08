@@ -23,8 +23,7 @@ class LinearLBFGS(TabularMLAlgo):
 
     _name: str = "LinearL2"
 
-    def __init__(self,
-                 params={}):
+    def __init__(self, **params):
         super().__init__()
 
         self._prediction_col = f"prediction_{self._name}"
