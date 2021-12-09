@@ -358,7 +358,7 @@ class SparkToSparkReader(Reader):
         h = 1.0 / self.cv
         folds_sdf = sdf.select(
             SparkDataset.ID_COLUMN,
-            F.floor(F.rand(self.random_state) * h).alias("reader_fold_num")
+            F.floor(F.rand(self.random_state) / h).alias("reader_fold_num")
         )
         return folds_sdf
         # h = 1.0 / self.cv

@@ -65,6 +65,8 @@ class TabularAutoML(AutoMLPreset):
     ):
         super().__init__(task, timeout, memory_limit, cpu_limit, gpu_ids, timing_params, config_path)
 
+        logger.info("I'm here")
+
         self._spark = spark
         # upd manual params
         for name, param in zip(
@@ -389,7 +391,7 @@ class TabularAutoML(AutoMLPreset):
             # TODO SPARK-LAMA: Fix schema inference
             object_cols = [c for c, dtype in dict(data.dtypes).items() if str(dtype) == 'object']
             for c in object_cols:
-                data[c] = data[c].replace(np.nan, None)
+                data[c].replace(np.nan, None, inplace=True)
             return self._spark.createDataFrame(data), None
 
         # case - dict of array args passed
