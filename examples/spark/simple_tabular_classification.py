@@ -26,7 +26,7 @@ formatter = logging.Formatter(
 )
 # set up logging to console
 console = logging.StreamHandler(sys.stdout)
-console.setLevel(logging.INFO)
+console.setLevel(logging.DEBUG)
 console.setFormatter(formatter)
 # # set a format which is simpler for console use
 # formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
@@ -58,7 +58,7 @@ import numpy as np
 #
 loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict if name.startswith('lightautoml')]
 for logger in loggers:
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     # logger.addHandler(console)
 
 if __name__ == "__main__":
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         automl = TabularAutoML(
             spark=spark,
             task=SparkTask("binary"),
-            general_params={"use_algos": ["gbm"]}
+            general_params={"use_algos": ["linear_l2"]}
         )
         with print_exec_time():
             oof_predictions = automl.fit_predict(train_data, roles={"target": "TARGET", "drop": ["SK_ID_CURR"]})

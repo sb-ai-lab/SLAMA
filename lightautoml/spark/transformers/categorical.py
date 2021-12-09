@@ -1,3 +1,4 @@
+import logging
 import pickle
 from collections import defaultdict
 from itertools import chain, combinations
@@ -20,6 +21,9 @@ from lightautoml.spark.utils import get_cached_df_through_rdd
 from lightautoml.transformers.categorical import categorical_check, encoding_check, oof_task_check, \
     multiclass_task_check
 from lightautoml.transformers.base import LAMLTransformer
+
+
+logger = logging.getLogger(__name__)
 
 
 # FIXME SPARK-LAMA: np.nan in str representation is 'nan' while Spark's NaN is 'NaN'. It leads to different hashes.
@@ -117,6 +121,8 @@ class LabelEncoder(SparkTransformer):
         cols_to_select = []
 
         for i in dataset.features:
+            logger.debug(f"_transform col {i} in {type(self)}")
+            logger
 
             _ic = F.col(i)
 
@@ -125,7 +131,6 @@ class LabelEncoder(SparkTransformer):
             elif len(self.dicts[i]) == 0:
                 col = F.lit(self._fillna_val)
             else:
-
                 vals: dict = self.dicts[i].to_dict()
 
                 null_value = self._fillna_val
@@ -133,35 +138,47 @@ class LabelEncoder(SparkTransformer):
                     null_value = vals[None]
                     _ = vals.pop(None, None)
 
-                nan_value = self._fillna_val
+                logger.debug(f"vals: {vals}")
 
-                # if np.isnan(list(vals.keys())).any():  # not working
-                # Вот этот кусок кода тут по сути из-за OrdinalEncoder, который
-                # в КАЖДЫЙ dicts пихает nan. И вот из-за этого приходится его отсюда чистить.
-                # Нужно подумать, как это всё зарефакторить.
-                new_dict = {}
-                for key, value in vals.items():
-                    try:
-                        if np.isnan(key):
-                            nan_value = value
-                        else:
-                            new_dict[key] = value
-                    except TypeError:
-                        new_dict[key] = value
-
-                vals = new_dict
-
-                labels = F.create_map([F.lit(x) for x in chain(*vals.items())])
-
-                if type(df.schema[i].dataType) in self._spark_numeric_types:
-                    col = F.when(_ic.isNull(), null_value) \
-                           .otherwise(
-                                F.when(F.isnan(_ic), nan_value)
-                                 .otherwise(labels[F.col(i)])
-                           )
+                if len(vals) == 0:
+                    col = F.when(_ic.isNull(), null_value).otherwise(None)
                 else:
-                    col = F.when(_ic.isNull(), null_value) \
-                        .otherwise(labels[F.col(i)])
+
+                    nan_value = self._fillna_val
+
+                    # if np.isnan(list(vals.keys())).any():  # not working
+                    # Вот этот кусок кода тут по сути из-за OrdinalEncoder, который
+                    # в КАЖДЫЙ dicts пихает nan. И вот из-за этого приходится его отсюда чистить.
+                    # Нужно подумать, как это всё зарефакторить.
+                    new_dict = {}
+                    for key, value in vals.items():
+                        try:
+                            if np.isnan(key):
+                                nan_value = value
+                            else:
+                                new_dict[key] = value
+                        except TypeError:
+                            new_dict[key] = value
+
+                    vals = new_dict
+
+                    logger.debug(f"vals after nan processing: {vals}")
+
+                    if len(vals) == 0:
+                        # col = F.when(F.isnan(_ic), nan_value).otherwise(float('nan'))
+                        col = F.when(F.isnan(_ic), nan_value).otherwise(None)
+                    else:
+                        labels = F.create_map(*[F.lit(x) for x in chain(*vals.items())])
+
+                        if type(df.schema[i].dataType) in self._spark_numeric_types:
+                            col = F.when(_ic.isNull(), null_value) \
+                                   .otherwise(
+                                        F.when(F.isnan(_ic), nan_value)
+                                         .otherwise(labels[F.col(i)])
+                                   )
+                        else:
+                            col = F.when(_ic.isNull(), null_value) \
+                                .otherwise(labels[F.col(i)])
 
             cols_to_select.append(col.alias(f"{self._fname_prefix}__{i}"))
 

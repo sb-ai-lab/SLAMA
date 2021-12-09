@@ -1,3 +1,4 @@
+import logging
 from typing import cast, Sequence, List, Set
 
 from lightautoml.dataset.utils import concatenate
@@ -5,6 +6,9 @@ from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.utils import print_exec_time
 from lightautoml.transformers.base import LAMLTransformer, ColumnsSelector as LAMAColumnsSelector, \
     ChangeRoles as LAMAChangeRoles
+
+
+logger = logging.getLogger(__name__)
 
 
 class SparkTransformer(LAMLTransformer):
@@ -37,6 +41,8 @@ class SparkTransformer(LAMLTransformer):
         # TODO: SPARK-LAMA probably we should assume
         #  that fit_transform executes with cache by default
         #  e.g fit_transform returns a cached and materialized dataset
+        logger.info(f"fit_transform in {self._fname_prefix}: {type(self)}")
+
         dataset.cache()
         self.fit(dataset)
 

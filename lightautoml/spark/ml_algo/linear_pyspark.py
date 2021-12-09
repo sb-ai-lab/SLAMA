@@ -31,6 +31,7 @@ class LinearLBFGS(TabularMLAlgo):
         self.task = None
 
     def _infer_params(self, train: SparkDataset) -> Pipeline:
+        logger.debug("Building pipeline in linear lGBFS")
         params = copy(self.params)
 
         # categorical features
@@ -74,6 +75,7 @@ class LinearLBFGS(TabularMLAlgo):
             Target predictions for valid dataset.
 
         """
+        logger.info(f"predict single fold in LinearLBGFS")
         if self.task is None:
             self.task = train.task
 
