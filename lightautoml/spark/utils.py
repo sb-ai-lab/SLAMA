@@ -1,7 +1,9 @@
 import time
 from datetime import datetime
+from typing import Optional, Tuple
 
 from decorator import contextmanager
+from pyspark import RDD
 from pyspark.sql import SparkSession
 
 from lightautoml.spark.dataset.base import SparkDataFrame
@@ -37,7 +39,8 @@ def print_exec_time():
     print(f"Exec time: {duration}")
 
 
-def get_cached_df_through_rdd(df: SparkDataFrame) -> SparkDataFrame:
-    cached_rdd = df.rdd.cache()
+def get_cached_df_through_rdd(df: SparkDataFrame, name: Optional[str] = None) -> Tuple[SparkDataFrame, RDD]:
+    rdd = df.rdd
+    cached_rdd = rdd.setName(name).cache() if name else rdd.cache()
     cached_df = df.sql_ctx.createDataFrame(cached_rdd, df.schema)
-    return cached_df
+    return cached_df, cached_rdd

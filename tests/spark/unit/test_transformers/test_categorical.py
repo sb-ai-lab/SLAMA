@@ -3,19 +3,23 @@ import pickle
 import numpy as np
 import pandas as pd
 import pytest
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Window
+
+from pyspark.sql import functions as F
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.pipelines.utils import get_columns_by_role
+from lightautoml.reader.base import PandasToPandasReader
 from lightautoml.spark.reader.base import SparkToSparkReader
-from lightautoml.spark.transformers.base import ColumnsSelector
+from lightautoml.spark.transformers.base import ColumnsSelector as SparkColumnsSelector
 from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabelEncoder, \
     FreqEncoder as SparkFreqEncoder, OrdinalEncoder as SparkOrdinalEncoder, \
     CatIntersectstions as SparkCatIntersectstions, OHEEncoder as SparkOHEEncoder, \
     TargetEncoder as SparkTargetEncoder
 from lightautoml.spark.utils import print_exec_time
 from lightautoml.tasks import Task
+from lightautoml.transformers.base import ColumnsSelector
 from lightautoml.transformers.categorical import LabelEncoder, FreqEncoder, OrdinalEncoder, CatIntersectstions, \
     OHEEncoder, TargetEncoder
 from .. import DatasetForTest, from_pandas_to_spark, spark, compare_obtained_datasets, compare_by_metadata, \
@@ -152,6 +156,118 @@ def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
 
     compare_obtained_datasets(lama_output, spark_output)
 
+
+def test_target_encoder_2(spark: SparkSession):
+    df = pd.read_csv("../../examples/data/sampled_app_train.csv")
+
+    with print_exec_time():
+        sreader = PandasToPandasReader(task=Task("binary"), cv=5)
+        sds = sreader.fit_read(df, roles={"target": "TARGET"})
+
+    feats_to_select = get_columns_by_role(sds, "Category")
+    with print_exec_time():
+        cs = ColumnsSelector(keys=feats_to_select)
+        cs_sds = cs.fit_transform(sds)
+
+    with print_exec_time():
+        slabel_encoder = LabelEncoder()
+        labeled_sds = slabel_encoder.fit_transform(cs_sds)
+
+    sds = from_pandas_to_spark(labeled_sds.to_pandas(), spark)
+
+    with print_exec_time():
+        spark_encoder = SparkTargetEncoder()
+        spark_output = spark_encoder.fit_transform(sds)
+
+    res = spark_output.to_pandas()
+    res.data.to_csv("res_SPARK.csv")
+
+
+# def test_just_a_test(spark: SparkSession):
+#     df = spark.createDataFrame(data=[
+#         {"_id": i, "a": i * 10, "b": i * 100, "c": i * 1000} for i in range(20)
+#     ])
+#
+#     df.write.bucketBy(3, '_id').sortBy('_id').saveAsTable("data")
+#     # df.write.saveAsTable("data")
+#
+#     df = spark.table("data")
+#
+#     target = df.select("_id", "a")#.cache()
+#     # target = df.sql_ctx.createDataFrame(target.rdd, target.schema)
+#     #target.count()
+#
+#     trans_df = df.select("_id", "b").groupby('_id').count()#.cache()
+#     # trans_df = df.sql_ctx.createDataFrame(trans_df.rdd, trans_df.schema)
+#     #trans_df.count()
+#
+#     res_df = trans_df.join(target, '_id')
+#     res_df.count()
+#
+#     pass
+#
+#
+# class NewLabelEncoder:
+#     min_count = 5
+#
+#     _fillna_val = 0
+#     _fname_prefix = "le"
+#
+#     def fit(self, df):
+#         self.dicts = {}
+#
+#         df = df.drop('').cache()
+#
+#         w = Window.orderBy(F.col("_fcount"))
+#
+#         for i in df.columns:
+#             print(f"Fitting on column {i}")
+#             res = df \
+#                 .groupBy(i) \
+#                 .agg(F.count(i).alias("_fcount")) \
+#                 .where(F.col("_fcount") > self.min_count) \
+#                 .select(i, F.row_number().over(w).alias("_label"))
+#
+#             self.dicts[i] = res.toPandas()
+#
+#     def transform(self, df):
+#
+#         cached_rdd = df.rdd.cache()
+#         cached_df = df.sql_ctx.createDataFrame(cached_rdd, df.schema)
+#
+#         for i in df.columns:
+#             print(f"Transforming on column {i}")
+#             _i = f"_label"
+#             labeled = self.dicts[i]
+#             labeled = df.sql_ctx.createDataFrame(labeled)
+#             cached_df = cached_df \
+#                 .join(F.broadcast(labeled), i, "left_outer")
+#
+#             k =0
+#
+#             cached_df = cached_df \
+#                 .drop(F.col(_i)) \
+#                 .drop(labeled[i]) \
+#                 # .fillna(self._fillna_val, subset=[i])
+#             cached_df = cached_df.sql_ctx.createDataFrame(cached_df.rdd.cache(), cached_df.schema)
+#
+#         return cached_df
+#
+#
+# def test_new_label_encoder(spark: SparkSession):
+#     data = pd.read_csv("../../examples/data/sampled_app_train.csv")
+#     data = data.fillna(np.nan).replace([np.nan], [None])
+#     spark = SparkSession.builder.appName("LAMA-test-LE").master("local[1]").getOrCreate()
+#     spark.sparkContext.setLogLevel("ERROR")
+#     sdf = spark.createDataFrame(data)
+#
+#     sdf = sdf.drop('SK_ID_CURR', 'EXT_SOURCE_1')
+#
+#     nole = NewLabelEncoder()
+#     nole.fit(sdf)
+#     nresult = nole.transform(sdf)
+#     nresult.printSchema()
+#     # v = nresult.collect()
 
 # def test_target_encoder_2(spark: SparkSession):
 #     df = spark.read.csv("../../examples/data/sampled_app_train.csv", header=True)

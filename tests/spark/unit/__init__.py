@@ -26,7 +26,14 @@ from lightautoml.transformers.numeric import NumpyTransformable
 @pytest.fixture(scope="session")
 def spark() -> SparkSession:
 
-    spark = SparkSession.builder.appName("LAMA-test-app").master("local[1]").getOrCreate()
+    spark = (
+        SparkSession
+        .builder
+        .appName("LAMA-test-app")
+        .master("local[1]")
+        # .config("spark.sql.autoBroadcastJoinThreshold", "-1")
+        .getOrCreate()
+    )
 
     print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
 

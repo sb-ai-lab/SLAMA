@@ -456,7 +456,7 @@ class TargetEncoder(SparkTransformer):
             .join(dataset.folds, SparkDataset.ID_COLUMN)
 
         # cached_df = df.cache()
-        cached_df = get_cached_df_through_rdd(df)
+        cached_df, cached_rdd = get_cached_df_through_rdd(df, name=f"{self._fname_prefix}_ft_entry")
 
         _fc = F.col(dataset.folds_column)
         _tc = F.col(dataset.target_column)
@@ -466,7 +466,7 @@ class TargetEncoder(SparkTransformer):
             F.mean(_tc.cast("double")),
             F.count(_tc),
             F.sum(_tc).cast("double")
-        ).collect()[0]
+        ).first()
 
         # we assume that there is not many folds in our data
         folds_prior_pdf = cached_df.groupBy(_fc).agg(
@@ -477,7 +477,7 @@ class TargetEncoder(SparkTransformer):
         rest_features = dataset.features
         new_features = []
 
-        score_df: Optional[SparkDataFrame] = None
+        join_score_df: Optional[SparkDataFrame] = None
 
         for col_name in dataset.features:
             _cur_col = F.col(col_name)
@@ -489,8 +489,8 @@ class TargetEncoder(SparkTransformer):
                 .toPandas()
             )
 
-            if score_df is not None:
-                score_df.unpersist()
+            if join_score_df is not None:
+                join_score_df.unpersist()
 
             t_df = candidates_pdf.groupby(col_name).agg(_tsum=('_fsum', 'sum'), _tcount=('_fcount', 'sum')).reset_index()
             candidates_pdf_2 = candidates_pdf.merge(t_df, on=col_name, how='inner')
@@ -507,7 +507,7 @@ class TargetEncoder(SparkTransformer):
 
             cand_sdf = dataset.spark_session.createDataFrame(candidates_pdf_2[[col_name, dataset.folds_column, '_candidates']])
 
-            score_df = (
+            join_score_df = (
                 cached_df.join(F.broadcast(cand_sdf), [dataset.folds_column, col_name]).cache()
             )
 
@@ -529,18 +529,18 @@ class TargetEncoder(SparkTransformer):
             ]
 
             row = (
-                score_df
+                join_score_df
                 .select(*mean_scores_candidates)
                 .first()
             )
 
-            cached_df.unpersist()
+            cached_rdd.unpersist(blocking=True)
 
             idx = int(np.array(row).argmin())
 
             rest_features = [feat for feat in rest_features if feat != col_name]
             new_col = f"{self._fname_prefix}__{col_name}"
-            score_df = score_df.select(
+            score_df = join_score_df.select(
                 *dataset.service_columns,
                 _fc,
                 _tc,
@@ -549,14 +549,18 @@ class TargetEncoder(SparkTransformer):
                 F.col("_candidates").getItem(idx).alias(new_col)
             )
             new_features.append(new_col)
-            cached_df = get_cached_df_through_rdd(score_df)
+            cached_df, cached_rdd = get_cached_df_through_rdd(score_df, name=f"{self._fname_prefix}_ft_{col_name}")
 
         cached_df = cached_df.drop(dataset.folds_column, dataset.target_column)
+
+        if join_score_df is not None:
+            join_score_df.unpersist()
 
         output = dataset.empty()
         self.output_role = NumericRole(np.float32, prob=output.task.name == "binary")
         output.set_data(cached_df, self.features, self.output_role)
-        # TODO: set score_df as a dependency if it is not None
+
+        # TODO: set cached_rdd as a dependency if it is not None
         output.dependencies = []
 
         return output
