@@ -72,14 +72,15 @@ if __name__ == "__main__":
         automl = TabularAutoML(
             spark=spark,
             task=SparkTask("binary"),
-            general_params={"use_algos": ["linear_l2"]}
+            general_params={"use_algos": ["lgb", "linear_l2"]}
         )
         with print_exec_time():
             oof_predictions = automl.fit_predict(train_data, roles={"target": "TARGET", "drop": ["SK_ID_CURR"]})
-        # raise
-        raise NotImplementedError()
-        te_pred = automl.predict(test_data)
 
-        # calculate scores
-        print(f"Score for out-of-fold predictions: {roc_auc_score(train_data['TARGET'].values, oof_predictions.data[:, 0])}")
-        print(f"Score for hold-out: {roc_auc_score(test_data['TARGET'].values, te_pred.data[:, 0])}")
+        # TODO: SPARK-LAMA fix bug in SparkToSparkReader with nans processing to make it working on test data
+        # # raise
+        # te_pred = automl.predict(test_data)
+        #
+        # # calculate scores
+        # print(f"Score for out-of-fold predictions: {roc_auc_score(train_data['TARGET'].values, oof_predictions.data[:, 0])}")
+        # print(f"Score for hold-out: {roc_auc_score(test_data['TARGET'].values, te_pred.data[:, 0])}")
