@@ -65,7 +65,7 @@ def tune_and_fit_predict(
     try:
         preds = ml_algo.fit_predict(train_valid)
     except Exception as e:
-        logger.info2("Model {0} failed during ml_algo.fit_predict call.\n\n{1}".format(ml_algo.name, e))
+        logger.info("Model {0} failed during ml_algo.fit_predict call.\n\n{1}".format(ml_algo.name, e))
         return None, None
 
     return ml_algo, preds

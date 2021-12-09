@@ -525,8 +525,10 @@ class SparkToSparkReader(Reader):
         """
 
         row = train_data.select(
-            *[F.mean(F.isnan(feature).astype(IntegerType())).alias(f"{feature}_nan_rate")
-              for feature in features],
+            *[F.mean((F.isnull(feature) | F.isnan(feature)).astype(IntegerType())).alias(f"{feature}_nan_rate")
+              for feature in features if isinstance(train_data.schema[feature].dataType, NumericType)],
+            *[F.mean((F.isnull(feature)).astype(IntegerType())).alias(f"{feature}_nan_rate")
+              for feature in features if not isinstance(train_data.schema[feature].dataType, NumericType)],
             *[(F.approx_count_distinct(feature) / F.count(feature)).alias(f"{feature}_constant_rate")
               for feature in features]
         ).first()

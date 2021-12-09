@@ -391,7 +391,7 @@ class TabularAutoML(AutoMLPreset):
             # TODO SPARK-LAMA: Fix schema inference
             object_cols = [c for c, dtype in dict(data.dtypes).items() if str(dtype) == 'object']
             for c in object_cols:
-                data[c].replace(np.nan, None, inplace=True)
+                data[c] = data[c].where(pd.notnull(data[c]), None)
             return self._spark.createDataFrame(data), None
 
         # case - dict of array args passed
