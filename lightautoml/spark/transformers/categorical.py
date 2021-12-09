@@ -7,7 +7,7 @@ import numpy as np
 from pandas import Series
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder
-from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window
+from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window, Column
 from pyspark.sql.functions import udf, array, monotonically_increasing_id
 from pyspark.sql.types import FloatType, DoubleType, IntegerType
 from sklearn.utils.murmurhash import murmurhash3_32
@@ -59,6 +59,15 @@ class LabelEncoder(SparkTransformer):
         }
     )
 
+    _spark_numeric_types = (
+        SparkTypes.ShortType,
+        SparkTypes.IntegerType,
+        SparkTypes.LongType,
+        SparkTypes.FloatType,
+        SparkTypes.DoubleType,
+        SparkTypes.DecimalType
+    )
+
     _fit_checks = (categorical_check,)
     _transform_checks = ()
     _fname_prefix = "le"
@@ -73,29 +82,10 @@ class LabelEncoder(SparkTransformer):
 
         roles = dataset.roles
 
-        # cached_dataset = dataset.data.cache()
         dataset.cache()
+        df = dataset.data
 
         self.dicts = dict()
-
-        # all_feats_df: Optional[SparkDataFrame] = None
-        # for i in dataset.features:
-        #     co = roles[i].unknown
-        #     df = dataset.data \
-        #         .groupBy(i).count() \
-        #         .where(F.col("count") > co)\
-        #         .select(F.hash(i).alias("value_hash"), "count", F.lit(i).alias("feature_name"))
-        #
-        #     if not all_feats_df:
-        #         all_feats_df = df
-        #     else:
-        #         all_feats_df = all_feats_df.union(df)
-        #
-        # vals_pdf = all_feats_df.toPandas()
-        # for f in dataset.features:
-        #     pdf = vals_pdf[vals_pdf["feature_name"] == f].sort_values(by=['count'], ascending=True)
-        #     ps = pdf["value_hash"]
-        #     self.dicts[f] = Series(np.arange(len(ps), dtype=np.int32) + 1, index=ps)
 
         for i in dataset.features:
             role = roles[i]
@@ -107,18 +97,15 @@ class LabelEncoder(SparkTransformer):
             # TODO SPARK-LAMA: Can be implemented without multiple groupby and thus shuffling using custom UDAF.
             # May be an alternative it there would be performance problems.
             # https://github.com/fonhorst/LightAutoML/pull/57/files/57c15690d66fbd96f3ee838500de96c4637d59fe#r749539901
-            vals = dataset.data \
+            vals = df \
                 .groupBy(i).count() \
                 .where(F.col("count") > co) \
-                .orderBy(["count", i], ascending=[False, True]) \
-                .select(i) \
+                .select(i, F.col("count")) \
                 .toPandas()
 
-            # FIXME SPARK-LAMA: Do we really need collecting this data? It is used in transform method and
-            # it may be joined. I propose to keep this variable as a spark dataframe. Discuss?
+            vals = vals.sort_values(["count", i], ascending=[False, True])
             self.dicts[i] = Series(np.arange(vals.shape[0], dtype=np.int32) + 1, index=vals[i])
 
-        # cached_dataset.unpersist()
         dataset.uncache()
 
         return self
@@ -127,58 +114,66 @@ class LabelEncoder(SparkTransformer):
 
         df = dataset.data
 
+        cols_to_select = []
+
         for i in dataset.features:
 
-            # FIXME SPARK-LAMA: Dirty hot-fix
-            # TODO SPARK-LAMA: It can be done easier with only one select and without withColumn but a single select.
-            # https://github.com/fonhorst/LightAutoML/pull/57/files/57c15690d66fbd96f3ee838500de96c4637d59fe#r749506973
+            _ic = F.col(i)
 
-            role = dataset.roles[i]
+            if i not in self.dicts:
+                col = _ic
+            elif len(self.dicts[i]) == 0:
+                col = F.lit(self._fillna_val)
+            else:
 
-            df = df.withColumn(i, F.col(i).cast(self._ad_hoc_types_mapper[role.dtype.__name__]))
+                vals: dict = self.dicts[i].to_dict()
 
-            if i in self.dicts:
+                null_value = self._fillna_val
+                if None in vals:
+                    null_value = vals[None]
+                    _ = vals.pop(None, None)
 
-                if len(self.dicts[i]) > 0:
+                nan_value = self._fillna_val
 
-                    # TODO SPARK-LAMA: The related issue is in _fit
-                    # Moreover, dict keys should be the same type. I.e. {true, false, nan} raises an exception.
-                    if type(df.schema[i].dataType) == SparkTypes.BooleanType:
-                        _s = self.dicts[i].reset_index().dropna()
-                        try:
-                            _s = _s.set_index("index")
-                        except KeyError:
-                            _s = _s.set_index(i)
-                        self.dicts[i] = _s.iloc[:, 0]
-
-                    labels = F.create_map([F.lit(x) for x in chain(*self.dicts[i].to_dict().items())])
-
-                    if np.issubdtype(role.dtype, np.number):
-                        df = df \
-                            .withColumn(i, F.when(F.col(i).isNull(), np.nan)
-                                            .otherwise(F.col(i))
-                                        ) \
-                            .withColumn(i, labels[F.col(i)])
-                    else:
-                        if None in self.dicts[i].index:
-                            df = df \
-                                .withColumn(i, F.when(F.col(i).isNull(), self.dicts[i][None])
-                                                .otherwise(labels[F.col(i)])
-                                            )
+                # if np.isnan(list(vals.keys())).any():  # not working
+                # Вот этот кусок кода тут по сути из-за OrdinalEncoder, который
+                # в КАЖДЫЙ dicts пихает nan. И вот из-за этого приходится его отсюда чистить.
+                # Нужно подумать, как это всё зарефакторить.
+                new_dict = {}
+                for key, value in vals.items():
+                    try:
+                        if np.isnan(key):
+                            nan_value = value
                         else:
-                            df = df \
-                                .withColumn(i, labels[F.col(i)])
-                else:
-                    df = df \
-                        .withColumn(i, F.lit(self._fillna_val))
+                            new_dict[key] = value
+                    except TypeError:
+                        new_dict[key] = value
 
-            df = df.fillna(self._fillna_val, subset=[i]) \
-                .withColumn(i, F.col(i).cast(self._ad_hoc_types_mapper[self._output_role.dtype.__name__])) \
-                .withColumnRenamed(i, f"{self._fname_prefix}__{i}")
-                # FIXME SPARK-LAMA: Probably we have to write a converter numpy/python/pandas types => spark types?
+                vals = new_dict
+
+                labels = F.create_map([F.lit(x) for x in chain(*vals.items())])
+
+                if type(df.schema[i].dataType) in self._spark_numeric_types:
+                    col = F.when(_ic.isNull(), null_value) \
+                           .otherwise(
+                                F.when(F.isnan(_ic), nan_value)
+                                 .otherwise(labels[F.col(i)])
+                           )
+                else:
+                    col = F.when(_ic.isNull(), null_value) \
+                        .otherwise(labels[F.col(i)])
+
+            cols_to_select.append(col.alias(f"{self._fname_prefix}__{i}"))
 
         output: SparkDataset = dataset.empty()
-        output.set_data(df, self.features, self._output_role)
+        output.set_data(
+            df.select(
+                *dataset.service_columns,
+                *cols_to_select
+            ).fillna(self._fillna_val),
+            self.features,
+            self._output_role
+        )
 
         return output
 
@@ -197,20 +192,21 @@ class FreqEncoder(LabelEncoder):
 
     def _fit(self, dataset: SparkDataset) -> "FreqEncoder":
 
-        cached_dataset = dataset.data.cache()
+        dataset.cache()
+
+        df = dataset.data
 
         self.dicts = {}
-        for i in cached_dataset.columns:
-            vals = cached_dataset \
+        for i in dataset.features:
+            vals = df \
                 .groupBy(i).count() \
                 .where(F.col("count") > 1) \
-                .orderBy(["count", i], ascending=[False, True]) \
-                .select([i, "count"]) \
+                .select(i, F.col("count")) \
                 .toPandas()
 
             self.dicts[i] = vals.set_index(i)["count"]
 
-        cached_dataset.unpersist()
+        dataset.uncache()
 
         return self
 
@@ -220,16 +216,6 @@ class OrdinalEncoder(LabelEncoder):
     _fit_checks = (categorical_check,)
     _transform_checks = ()
     _fname_prefix = "ord"
-
-    _spark_numeric_types = [
-        SparkTypes.ByteType,
-        SparkTypes.ShortType,
-        SparkTypes.IntegerType,
-        SparkTypes.LongType,
-        SparkTypes.FloatType,
-        SparkTypes.DoubleType,
-        SparkTypes.DecimalType
-    ]
 
     _fillna_val = np.nan
 
@@ -288,7 +274,7 @@ class CatIntersectstions(LabelEncoder):
         self.max_depth = max_depth
 
     @staticmethod
-    def _make_category(df: SparkDataFrame, cols: Sequence[str]) -> SparkDataFrame:
+    def _make_category(cols: Sequence[str]) -> Column:
         lit = F.lit("_")
         col_name = f"({'__'.join(cols)})"
         columns_for_concat = []
@@ -297,12 +283,7 @@ class CatIntersectstions(LabelEncoder):
             columns_for_concat.append(lit)
         columns_for_concat = columns_for_concat[:-1]
 
-        return df.withColumn(
-            col_name,
-            murmurhash3_32_udf(
-                F.concat(*columns_for_concat)
-            )
-        )
+        return murmurhash3_32_udf(F.concat(*columns_for_concat)).alias(col_name)
 
     def _build_df(self, dataset: SparkDataset) -> SparkDataset:
 
@@ -310,20 +291,20 @@ class CatIntersectstions(LabelEncoder):
 
         roles = {}
 
+        columns_to_select = []
+
         for comb in self.intersections:
-            df = self._make_category(df, comb)
+            columns_to_select.append(self._make_category(comb))
             roles[f"({'__'.join(comb)})"] = CategoryRole(
                 object,
                 unknown=max((dataset.roles[x].unknown for x in comb)),
                 label_encoded=True,
             )
 
-        df = df.select(
-            *dataset.service_columns, *[f"({'__'.join(comb)})" for comb in self.intersections]
-        )
+        result = df.select(*dataset.service_columns, *columns_to_select)
 
         output = dataset.empty()
-        output.set_data(df, df.columns, roles)
+        output.set_data(result, result.columns, roles)
 
         return output
 
