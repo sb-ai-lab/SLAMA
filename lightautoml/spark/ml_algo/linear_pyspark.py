@@ -2,7 +2,7 @@
 
 import logging
 from copy import copy
-from typing import Tuple
+from typing import Tuple, Optional
 from typing import Union
 
 from pyspark.ml import Pipeline
@@ -12,6 +12,7 @@ from pyspark.ml.regression import LinearRegression, LinearRegressionModel
 
 from .base import TabularMLAlgo, SparkMLModel
 from ..dataset.base import SparkDataset, SparkDataFrame
+from ...utils.timer import TaskTimer
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,13 @@ class LinearLBFGS(TabularMLAlgo):
 
     _name: str = "LinearL2"
 
-    def __init__(self, **params):
+    def __init__(self, timer: Optional[TaskTimer] = None, **params):
         super().__init__()
 
         self._prediction_col = f"prediction_{self._name}"
         self.params = params
         self.task = None
+        self._timer = timer
 
     def _infer_params(self, train: SparkDataset) -> Pipeline:
         logger.debug("Building pipeline in linear lGBFS")
@@ -44,22 +46,24 @@ class LinearLBFGS(TabularMLAlgo):
             outputCol=f"{self._name}_vassembler_features"
         )
 
+        # TODO: SPARK-LAMA add params processing later
         if self.task.name in ["binary", "multiclass"]:
             model = LogisticRegression(featuresCol=assembler.getOutputCol(),
                                        labelCol=train.target_column,
-                                       predictionCol=self._prediction_col,
-                                       **params)
+                                       predictionCol=self._prediction_col)
+                                       # **params)
         elif self.task.name == "reg":
             model = LinearRegression(featuresCol=assembler.getOutputCol(),
                                      labelCol=train.target_column,
-                                     predictionCol=self._prediction_col,
-                                     **params)
+                                     predictionCol=self._prediction_col)
+                                     # **params)
             model.setSolver("l-bfgs")
         else:
             raise ValueError("Task not supported")
 
         pipeline = Pipeline(stages=[ohe, assembler, model])
 
+        logger.debug("The pipeline is completed in linear lGBFS")
         return pipeline
 
     def fit_predict_single_fold(
