@@ -76,7 +76,7 @@ class FillInf(SparkTransformer):
                 .withColumn(i,
                             F.when(
                                 F.col(i).isin([F.lit("+Infinity").cast("double"), F.lit("-Infinity").cast("double")]),
-                                np.nan)
+                                None)
                             .otherwise(F.col(i))
                             ) \
                 .withColumnRenamed(i, f"{self._fname_prefix}__{i}")

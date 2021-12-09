@@ -47,6 +47,7 @@ dtype2Stype ={
 stype2dtype = {
     "string": "str",
     "boolean": "bool",
+    "bool": "bool",
     "int": "int",
     "bigint": "longlong",
     "long": "long",
@@ -479,8 +480,12 @@ class SparkToSparkReader(Reader):
             num_dtype = self._get_default_role_from_str("numeric").dtype
             date_format = self._get_default_role_from_str("datetime").format
             # TODO: can it be really converted?
-            if np.issubdtype(inferred_dtype, np.number):
+            if np.issubdtype(inferred_dtype, bool):
+                guessed_cols[feature] = CategoryRole(dtype=np.bool8)
+                continue
+            elif np.issubdtype(inferred_dtype, np.number):
                 guessed_cols[feature] = NumericRole(num_dtype)
+                continue
 
             can_cast_to_numeric = (
                 F.col(feature)

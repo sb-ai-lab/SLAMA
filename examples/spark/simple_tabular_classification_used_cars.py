@@ -28,6 +28,7 @@ if __name__ == "__main__":
             spark=spark,
             task=task,
             general_params={"use_algos": ["lgb", "linear_l2"]}
+            # general_params={"use_algos": ["linear_l2"]}
             # general_params={"use_algos": ["lgb"]}
         )
 
@@ -39,7 +40,7 @@ if __name__ == "__main__":
 
         # TODO: SPARK-LAMA fix bug in SparkToSparkReader with nans processing to make it working on test data
         # te_pred = automl.predict(test_data)
-        #
+
         # # calculate scores
         # # TODO: replace with mse
         # #  https://scikit-learn.org/stable/modules/generated/sklearn.metrics.mean_squared_error.html#sklearn.metrics.mean_squared_error
