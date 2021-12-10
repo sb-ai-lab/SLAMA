@@ -156,6 +156,11 @@ def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
 
     compare_obtained_datasets(lama_output, spark_output)
 
+    transformed_lama = target_encoder.transform(n_ds)
+    transformed_spark = spark_encoder.transform(sds)
+
+    compare_obtained_datasets(transformed_lama, transformed_spark)
+
 
 def test_target_encoder_2(spark: SparkSession):
     df = pd.read_csv("../../examples/data/sampled_app_train.csv")
@@ -180,7 +185,7 @@ def test_target_encoder_2(spark: SparkSession):
         spark_output = spark_encoder.fit_transform(sds)
 
     res = spark_output.to_pandas()
-    res.data.to_csv("res_SPARK.csv")
+    # res.data.to_csv("res_SPARK.csv")
 
 
 # def test_just_a_test(spark: SparkSession):
