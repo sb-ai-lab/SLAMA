@@ -1,13 +1,9 @@
 import logging
-from collections import defaultdict
-from copy import copy
-from itertools import chain
 from typing import Optional, Any, List, Dict, Tuple
 
 import numpy as np
-from bidict import bidict
-from pyspark.sql import functions as F, Column
-from pyspark.sql.types import IntegerType, NumericType, StringType
+from pyspark.sql import functions as F
+from pyspark.sql.types import IntegerType, NumericType, DoubleType
 
 from lightautoml.dataset.base import array_attr_roles, valid_array_attributes
 from lightautoml.dataset.roles import ColumnRole, DropRole, NumericRole, DatetimeRole, CategoryRole
@@ -428,6 +424,9 @@ class SparkToSparkReader(Reader):
             self.class_mapping = mapping
 
             return sdf_with_proc_target
+        else:
+            rest_cols = [c for c in sdf.columns if c != target_col]
+            sdf = sdf.select(*rest_cols, F.col(target_col).astype(DoubleType()).alias(target_col))
 
         return sdf
 

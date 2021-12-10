@@ -3,7 +3,9 @@ from copy import copy
 from typing import Callable, Dict, Optional, Tuple, Union
 
 from pandas import Series
+from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import GBTRegressor
 from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
 
 from lightautoml.ml_algo.tuning.base import Distribution, SearchSpace
@@ -201,31 +203,50 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             handleInvalid="keep"
         )
 
-        LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
+        # LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
+        #
+        # lgbm = LGBMBooster(
+        #     # fobj=fobj,  # TODO SPARK-LAMA: Commented only for smoke test
+        #     # feval=feval,
+        #     featuresCol=assembler.getOutputCol(),
+        #     labelCol=train.target_column,
+        #     predictionCol=self._prediction_col,
+        #     learningRate=params["learning_rate"],
+        #     numLeaves=params["num_leaves"],
+        #     featureFraction=params["feature_fraction"],
+        #     baggingFraction=params["bagging_fraction"],
+        #     baggingFreq=params["bagging_freq"],
+        #     maxDepth=params["max_depth"],
+        #     verbosity=params["verbosity"],
+        #     minGainToSplit=params["min_split_gain"],
+        #     numThreads=params["num_threads"],
+        #     maxBin=params["max_bin"],
+        #     minDataInLeaf=params["min_data_in_bin"],
+        #     earlyStoppingRound=early_stopping_rounds
+        # )
+        #
+        # if is_reg:
+        #     lgbm.setAlpha(params["reg_alpha"]).setLambdaL1(params["reg_lambda"]).setLambdaL2(params["reg_lambda"])
 
+        LGBMBooster = GBTRegressor if is_reg else GBTClassifier
         lgbm = LGBMBooster(
-            # fobj=fobj,  # TODO SPARK-LAMA: Commented only for smoke test
-            # feval=feval,
             featuresCol=assembler.getOutputCol(),
             labelCol=train.target_column,
             predictionCol=self._prediction_col,
-            learningRate=params["learning_rate"],
-            numLeaves=params["num_leaves"],
-            featureFraction=params["feature_fraction"],
-            baggingFraction=params["bagging_fraction"],
-            baggingFreq=params["bagging_freq"],
-            maxDepth=params["max_depth"],
-            verbosity=params["verbosity"],
-            minGainToSplit=params["min_split_gain"],
-            numThreads=params["num_threads"],
-            maxBin=params["max_bin"],
-            minDataInLeaf=params["min_data_in_bin"],
-            earlyStoppingRound=early_stopping_rounds
+            maxDepth=5,
+            maxBins=32,
+            minInstancesPerNode=1,
+            minInfoGain=0.0,
+            cacheNodeIds=False,
+            subsamplingRate=1.0,
+            checkpointInterval=10,
+            maxIter=5,
+            impurity='variance',
+            featureSubsetStrategy='all'
         )
-        if is_reg:
-            lgbm.setAlpha(params["reg_alpha"]).setLambdaL1(params["reg_lambda"]).setLambdaL2(params["reg_lambda"])
 
-        ml_model = lgbm.fit(assembler.transform(train_sdf))
+        temp_sdf = assembler.transform(train_sdf)
+        ml_model = lgbm.fit(temp_sdf)
 
         val_pred = ml_model.transform(assembler.transform(valid_sdf))
 

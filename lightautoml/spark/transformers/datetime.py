@@ -33,9 +33,13 @@ def get_timestamp_attr(timestamp: int, attr: str) -> int:
     if not timestamp:
         return None
 
-    date = pd.to_datetime(datetime.fromtimestamp(timestamp))
-    at = getattr(date, attr)
     try:
+        date = pd.to_datetime(datetime.fromtimestamp(timestamp))
+    except:
+        date = datetime.now()
+
+    try:
+        at = getattr(date, attr)
         return at()
     except TypeError:
         return at

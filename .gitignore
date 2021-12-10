@@ -149,10 +149,13 @@ cython_debug/
 
 .idea/
 lama_venv/
-poetry.lock
+poetry.lock.backup
 *.db
 
 temp/
 
 
 *.pickle
+
+ivy2_jars
+ivy2_cache

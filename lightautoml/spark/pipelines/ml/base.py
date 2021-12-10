@@ -26,31 +26,31 @@ class SparkMLPipelineMixin(LAMAMLPipeline):
             train_valid = train_valid.apply_selector(self.pre_selection)
 
         # apply features pipeline
-        with cast(SparkDataset, train_valid.train).applying_temporary_caching():
+        # with cast(SparkDataset, train_valid.train).applying_temporary_caching():
             train_valid = train_valid.apply_feature_pipeline(self.features_pipeline)
 
         # train and apply post selection
-        with cast(SparkDataset, train_valid.train).applying_temporary_caching():
+        # with cast(SparkDataset, train_valid.train).applying_temporary_caching():
             train_valid = train_valid.apply_selector(self.post_selection)
 
-        predictions = []
+            predictions = []
 
-        train_ds = cast(SparkDataset, train_valid.train)
-        with train_ds.applying_temporary_caching():
-            for ml_algo, param_tuner, force_calc in zip(self._ml_algos, self.params_tuners, self.force_calc):
-                ml_algo, preds = tune_and_fit_predict(ml_algo, param_tuner, train_valid, force_calc)
-                if ml_algo is not None:
-                    self.ml_algos.append(ml_algo)
-                    preds = cast(SparkDataset, preds)
-                    predictions.append(preds)
+            train_ds = cast(SparkDataset, train_valid.train)
+            with train_ds.applying_temporary_caching():
+                for ml_algo, param_tuner, force_calc in zip(self._ml_algos, self.params_tuners, self.force_calc):
+                    ml_algo, preds = tune_and_fit_predict(ml_algo, param_tuner, train_valid, force_calc)
+                    if ml_algo is not None:
+                        self.ml_algos.append(ml_algo)
+                        preds = cast(SparkDataset, preds)
+                        predictions.append(preds)
 
-            assert (
-                len(predictions) > 0
-            ), "Pipeline finished with 0 models for some reason.\nProbably one or more models failed"
+                assert (
+                    len(predictions) > 0
+                ), "Pipeline finished with 0 models for some reason.\nProbably one or more models failed"
 
-            predictions = SparkDataset.concatenate(predictions)
-            predictions.cache_and_materialize()
-        # TODO: clean anything that can be cached in tune_and_fit_predict
+                predictions = SparkDataset.concatenate(predictions)
+                predictions.cache_and_materialize()
+            # TODO: clean anything that can be cached in tune_and_fit_predict
 
         del self._ml_algos
         return predictions

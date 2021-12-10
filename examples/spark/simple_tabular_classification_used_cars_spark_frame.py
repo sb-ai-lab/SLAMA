@@ -3,6 +3,7 @@
 """
 Simple example for binary classification on tabular data.
 """
+import os
 import time
 
 import logging
@@ -41,12 +42,9 @@ for logger in loggers:
     logger.setLevel(logging.INFO)
     # logger.addHandler(console)
 
-data = pd.read_csv("examples/data/tiny_used_cars_data.csv")
-train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
-
 
 @contextmanager
-def spark_session(parallelism: int = 1) -> SparkSession:
+def spark_session() -> SparkSession:
     spark = (
         SparkSession
         .builder
@@ -78,8 +76,13 @@ def spark_session(parallelism: int = 1) -> SparkSession:
 
 # run automl
 if __name__ == "__main__":
-    with spark_session(parallelism=4) as spark:
+    with spark_session() as spark:
         task = SparkTask("reg")
+
+        # data = spark.read.csv(os.path.join("file://", os.getcwd(), "../data/tiny_used_cars_data.csv"), header=True, escape="\"")
+        data = spark.read.csv(os.path.join("file:///spark_data/tiny_used_cars_data.csv"), header=True, escape="\"")
+        data = data.cache()
+        train_data, test_data = data.randomSplit([0.8, 0.2], seed=42)
 
         automl = TabularAutoML(
             spark=spark,

@@ -1,5 +1,4 @@
-from collections import Sequence
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple, Optional, Sequence
 
 from lightautoml.ml_algo.tuning.base import ParamsTuner
 from lightautoml.pipelines.ml.nested_ml_pipe import NestedTabularMLPipeline as LAMANestedTabularMLPipeline
