@@ -96,8 +96,11 @@ class SequentialTransformer(SparkTransformer):
             Dataset with new features.
 
         """
+        logger.info(f"[{type(self)} (SEQ)] transform is started")
         for trf in self.transformer_list:
             dataset = trf.transform(dataset)
+
+        logger.info(f"[{type(self)} (SEQ)] transform is finished")
 
         return dataset
 
@@ -113,6 +116,7 @@ class SequentialTransformer(SparkTransformer):
             Dataset with new features.
 
         """
+        logger.info(f"[{type(self)} (SEQ)] fit_transform is started")
         if not self._is_fitted:
             for trf in self.transformer_list:
                 dataset = trf.fit_transform(dataset)
@@ -120,6 +124,7 @@ class SequentialTransformer(SparkTransformer):
             dataset = self.transform(dataset)
 
         self.features = self.transformer_list[-1].features
+        logger.info(f"[{type(self)} (SEQ)] fit_transform is finished")
         return dataset
 
 
@@ -146,27 +151,27 @@ class UnionTransformer(SparkTransformer):
         assert self.n_jobs == 1, f"Number of parallel jobs is now limited to only 1"
 
         fnames = []
-
+        logger.info(f"[{type(self)} (UNI)] fit is started")
         with dataset.applying_temporary_caching():
             for trf in self.transformer_list:
                 trf.fit(dataset)
                 fnames.append(trf.features)
 
         self.features = fnames
-
+        logger.info(f"[{type(self)} (UNI)] fit is finished")
         return self
 
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
         assert self.n_jobs == 1, f"Number of parallel jobs is now limited to only 1"
 
         res = []
-
+        logger.info(f"[{type(self)} (UNI)] transform is started")
         for trf in self.transformer_list:
             ds = trf.transform(dataset)
             res.append(ds)
 
         union_res = SparkDataset.concatenate(res)
-
+        logger.info(f"[{type(self)} (UNI)] transform is finished")
         return union_res
 
     def fit_transform(self, dataset: SparkDataset) -> SparkDataset:
@@ -182,6 +187,7 @@ class UnionTransformer(SparkTransformer):
         """
         res = []
         actual_transformers = []
+        logger.info(f"[{type(self)} (UNI)] fit_transform is started")
 
         with dataset.applying_temporary_caching():
             for trf in self.transformer_list:
@@ -191,11 +197,13 @@ class UnionTransformer(SparkTransformer):
                 actual_transformers.append(trf)
 
         # this concatenate operations also propagates all dependencies
+        logger.info(f"[{type(self)} (UNI)] fit_transform: concat is started")
         result = SparkDataset.concatenate(res) if len(res) > 0 else None
+        logger.info(f"[{type(self)} (UNI)] fit_transform: concat is finished")
 
         self.transformer_list = actual_transformers
         self.features = result.features
-
+        logger.info(f"[{type(self)} (UNI)] fit_transform is finished")
         return result
 
 

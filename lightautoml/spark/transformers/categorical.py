@@ -8,7 +8,7 @@ import numpy as np
 from pandas import Series
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder
-from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window, Column
+from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window, Column, SparkSession
 from pyspark.sql.functions import udf, array, monotonically_increasing_id
 from pyspark.sql.types import FloatType, DoubleType, IntegerType
 from sklearn.utils.murmurhash import murmurhash3_32
@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 # "if murmurhash3_32 can be applied to a whole pandas Series, it would be better to make it via pandas_udf"
 # https://github.com/fonhorst/LightAutoML/pull/57/files/57c15690d66fbd96f3ee838500de96c4637d59fe#r749534669
 murmurhash3_32_udf = F.udf(lambda value: murmurhash3_32(value.replace("NaN", "nan"), seed=42) if value is not None else None, SparkTypes.IntegerType())
+
+
+def dict_udf(broadcasted_dict):
+    def f(value):
+        return broadcasted_dict.value.get(value, None)
+    return F.udf(f)
 
 
 class LabelEncoder(SparkTransformer):
@@ -84,6 +90,8 @@ class LabelEncoder(SparkTransformer):
 
     def _fit(self, dataset: SparkDataset) -> "LabelEncoder":
 
+        logger.info(f"[{type(self)} (LE)] fit is started")
+
         roles = dataset.roles
 
         dataset.cache()
@@ -92,6 +100,9 @@ class LabelEncoder(SparkTransformer):
         self.dicts = dict()
 
         for i in dataset.features:
+
+            logger.info(f"[{type(self)} (LE)] fit column {i}")
+
             role = roles[i]
 
             # TODO: think what to do with this warning
@@ -107,22 +118,29 @@ class LabelEncoder(SparkTransformer):
                 .select(i, F.col("count")) \
                 .toPandas()
 
+            logger.info(f"[{type(self)} (LE)] toPandas is completed")
+
             vals = vals.sort_values(["count", i], ascending=[False, True])
             self.dicts[i] = Series(np.arange(vals.shape[0], dtype=np.int32) + 1, index=vals[i])
+            logger.info(f"[{type(self)} (LE)] pandas processing is completed")
 
         dataset.uncache()
+
+        logger.info(f"[{type(self)} (LE)] fit is finished")
 
         return self
 
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
+        logger.info(f"[{type(self)} (LE)] transform is started")
+
         df = dataset.data
+        sc = df.sql_ctx.sparkSession.sparkContext
 
         cols_to_select = []
 
         for i in dataset.features:
-            logger.debug(f"_transform col {i} in {type(self)}")
-            logger
+            logger.info(f"[{type(self)} (LE)] transform col {i}")
 
             _ic = F.col(i)
 
@@ -137,8 +155,6 @@ class LabelEncoder(SparkTransformer):
                 if None in vals:
                     null_value = vals[None]
                     _ = vals.pop(None, None)
-
-                logger.debug(f"vals: {vals}")
 
                 if len(vals) == 0:
                     col = F.when(_ic.isNull(), null_value).otherwise(None)
@@ -162,12 +178,23 @@ class LabelEncoder(SparkTransformer):
 
                     vals = new_dict
 
-                    logger.debug(f"vals after nan processing: {vals}")
-
                     if len(vals) == 0:
-                        # col = F.when(F.isnan(_ic), nan_value).otherwise(float('nan'))
                         col = F.when(F.isnan(_ic), nan_value).otherwise(None)
                     else:
+                        logger.info(f"[{type(self)} (LE)] map size: {len(vals)}")
+
+                        # labels = sc.broadcast(vals)
+                        #
+                        # if type(df.schema[i].dataType) in self._spark_numeric_types:
+                        #     col = F.when(_ic.isNull(), null_value) \
+                        #         .otherwise(
+                        #             F.when(F.isnan(_ic), nan_value)
+                        #              .otherwise(dict_udf(labels)(_ic)).cast("float")
+                        #         )
+                        # else:
+                        #     col = F.when(_ic.isNull(), null_value) \
+                        #            .otherwise(dict_udf(labels)(_ic)).cast("float")
+
                         labels = F.create_map(*[F.lit(x) for x in chain(*vals.items())])
 
                         if type(df.schema[i].dataType) in self._spark_numeric_types:
@@ -192,6 +219,8 @@ class LabelEncoder(SparkTransformer):
             self._output_role
         )
 
+        logger.info(f"[{type(self)} (LE)] Transform is finished")
+
         return output
 
 
@@ -209,21 +238,32 @@ class FreqEncoder(LabelEncoder):
 
     def _fit(self, dataset: SparkDataset) -> "FreqEncoder":
 
+        logger.info(f"[{type(self)} (FE)] fit is started")
+
         dataset.cache()
 
         df = dataset.data
 
         self.dicts = {}
         for i in dataset.features:
+
+            logger.info(f"[{type(self)} (FE)] fit column {i}")
+
             vals = df \
                 .groupBy(i).count() \
                 .where(F.col("count") > 1) \
                 .select(i, F.col("count")) \
                 .toPandas()
 
+            logger.info(f"[{type(self)} (FE)] toPandas is completed")
+
             self.dicts[i] = vals.set_index(i)["count"]
 
+            logger.info(f"[{type(self)} (LE)] pandas processing is completed")
+
         dataset.uncache()
+
+        logger.info(f"[{type(self)} (FE)] fit is finished")
 
         return self
 
@@ -242,6 +282,8 @@ class OrdinalEncoder(LabelEncoder):
 
     def _fit(self, dataset: SparkDataset) -> "OrdinalEncoder":
 
+        logger.info(f"[{type(self)} (ORD)] fit is started")
+
         roles = dataset.roles
 
         dataset.cache()
@@ -249,6 +291,9 @@ class OrdinalEncoder(LabelEncoder):
 
         self.dicts = {}
         for i in dataset.features:
+
+            logger.info(f"[{type(self)} (ORD)] fit column {i}")
+
             role = roles[i]
 
             if not type(cached_dataset.schema[i].dataType) in self._spark_numeric_types:
@@ -268,10 +313,15 @@ class OrdinalEncoder(LabelEncoder):
                     .select(i) \
                     .toPandas()
 
+                logger.info(f"[{type(self)} (ORD)] toPandas is completed")
+
                 cnts = Series(cnts[i].astype(str).rank().values, index=cnts[i])
                 self.dicts[i] = cnts.append(Series([cnts.shape[0] + 1], index=[np.nan])).drop_duplicates()
+                logger.info(f"[{type(self)} (ORD)] pandas processing is completed")
 
         dataset.uncache()
+
+        logger.info(f"[{type(self)} (ORD)] fit is finished")
 
         return self
 
@@ -304,6 +354,8 @@ class CatIntersectstions(LabelEncoder):
 
     def _build_df(self, dataset: SparkDataset) -> SparkDataset:
 
+        logger.info(f"[{type(self)} (CI)] build df is started")
+
         df = dataset.data
 
         roles = {}
@@ -322,6 +374,8 @@ class CatIntersectstions(LabelEncoder):
 
         output = dataset.empty()
         output.set_data(result, result.columns, roles)
+
+        logger.info(f"[{type(self)} (CI)] build df is finished")
 
         return output
 
@@ -476,6 +530,8 @@ class TargetEncoder(SparkTransformer):
     def _fit_transform(self, dataset: SparkDataset) -> SparkDataset:
         LAMLTransformer.fit(self, dataset)
 
+        logger.info(f"[{type(self)} (TE)] fit_transform is started")
+
         self.encodings = []
 
         df = dataset.data \
@@ -495,10 +551,14 @@ class TargetEncoder(SparkTransformer):
             F.sum(_tc).cast("double")
         ).first()
 
+        logger.info(f"[{type(self)} (TE)] statistics is calculated")
+
         # we assume that there is not many folds in our data
         folds_prior_pdf = cached_df.groupBy(_fc).agg(
             ((total_target_sum - F.sum(_tc)) / (total_count - F.count(_tc))).alias("_folds_prior")
         ).collect()
+
+        logger.info(f"[{type(self)} (TE)] folds_prior is calculated")
 
         folds_prior_map = {fold: prior for fold, prior in folds_prior_pdf}
 
@@ -507,6 +567,9 @@ class TargetEncoder(SparkTransformer):
         cols_to_select = []
 
         for col_name in dataset.features:
+
+            logger.info(f"[{type(self)} (TE)] column {col_name}")
+
             _cur_col = F.col(col_name)
 
             _agg = (
@@ -515,6 +578,8 @@ class TargetEncoder(SparkTransformer):
                     .agg(F.sum(_tc).alias("_psum"), F.count(_tc).alias("_pcount"))
                     .toPandas()
             )
+
+            logger.info(f"[{type(self)} (TE)] _agg is calculated")
 
             candidates_pdf = _agg.groupby(
                 by=[dataset.folds_column, col_name]
@@ -571,6 +636,8 @@ class TargetEncoder(SparkTransformer):
                 [dataset.folds_column, col_name, "_candidates"]
             ].drop_duplicates(subset=[dataset.folds_column, col_name]).apply(create_mapping, axis=1)
 
+            logger.info(f"[{type(self)} (TE)] Statistics in pandas have been calculated. Map size: {len(mapping)}")
+
             best_candidate = F.create_map(*[F.lit(x) for x in chain(*mapping.items())])
 
             col_select = best_candidate[F.concat(_fc, F.lit("_"), _cur_col)]
@@ -589,6 +656,8 @@ class TargetEncoder(SparkTransformer):
                 }
             )
 
+            logger.info(f"[{type(self)} (TE)] Encodings have been calculated")
+
         output = dataset.empty()
         self.output_role = NumericRole(np.float32, prob=output.task.name == "binary")
         output.set_data(
@@ -605,11 +674,15 @@ class TargetEncoder(SparkTransformer):
         # TODO: set cached_rdd as a dependency if it is not None
         output.dependencies = []
 
+        logger.info(f"[{type(self)} (TE)] fit_transform is finished")
+
         return output
 
     def _transform(self, dataset: SparkDataset) -> SparkDataset:
 
         cols_to_select = []
+        logger.info(f"[{type(self)} (TE)] transform is started")
+
         # TODO SPARK-LAMA: Нужно что-то придумать, чтобы ориентироваться по именам колонок, а не их индексу
         # Просто взять и забираться из dataset.features е вариант, т.к. в transform может прийти другой датасет
         # В оригинальной ламе об этом не парились, т.к. сразу переходили в numpy. Если прислали датасет не с тем
@@ -617,6 +690,7 @@ class TargetEncoder(SparkTransformer):
         # этой логики?
         for i, col_name in enumerate(dataset.features):
             _cur_col = F.col(col_name)
+            logger.info(f"[{type(self)} (TE)] transform map size for column {col_name}: {len(self.encodings[i])}")
             labels = F.create_map(*[F.lit(x) for x in chain(*self.encodings[i].items())])
             cols_to_select.append(labels[_cur_col].alias(f"{self._fname_prefix}__{col_name}"))
 
@@ -629,6 +703,9 @@ class TargetEncoder(SparkTransformer):
             self.features,
             self.output_role
         )
+
+        logger.info(f"[{type(self)} (TE)] transform is finished")
+
         return output
 
 

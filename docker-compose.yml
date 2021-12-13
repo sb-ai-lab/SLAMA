@@ -35,3 +35,17 @@ services:
       - /mnt/ess_storage/DN_1/storage/sber_LAMA/code:/lama:ro
       - /mnt/ess_storage/DN_1/storage/sber_LAMA/jars/ivy2_jars:/root/.ivy2/jars:ro
       - /mnt/ess_storage/DN_1/storage/sber_LAMA/spark_output:/spark_output:z
+
+  lama-spark-shell:
+    container_name: lama-spark-shell
+    image: node2.bdcl:5000/spark-lama:42014ed
+    command: ["bash"]
+    network_mode: "host"
+    environment:
+      - PYTHONPATH=/lama
+    volumes:
+      - /mnt/ess_storage/DN_1/storage/sber_LAMA/kaggle_used_cars_dataset:/spark_data:ro
+      - /mnt/ess_storage/DN_1/storage/sber_LAMA/code:/lama:ro
+      - /mnt/ess_storage/DN_1/storage/sber_LAMA/jars/ivy2_jars:/root/.ivy2/jars:ro
+      - /mnt/ess_storage/DN_1/storage/sber_LAMA/spark_output:/spark_output:z
+      - /mnt/ess_storage/DN_1/storage/sber_LAMA/scripts:/scripts:z

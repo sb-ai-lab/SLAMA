@@ -22,5 +22,7 @@ RUN pip install poetry && poetry config virtualenvs.create false
 COPY pyproject.toml /lama/pyproject.toml
 RUN cd /lama && poetry install && pip install bidict
 RUN pip install lightautoml --no-deps
+RUN pip install synapseml
+RUN pip install pyarrow
 COPY lightautoml /lama/lightautoml
 COPY tests /lama/tests
