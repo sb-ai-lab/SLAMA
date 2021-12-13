@@ -13,6 +13,8 @@ RUN tar -xvf openjdk-11+28_linux-x64_bin.tar.gz
 RUN mv jdk-11 /usr/local/lib/jdk-11
 RUN ln -s /usr/local/lib/jdk-11/bin/java /usr/local/bin/java
 
+RUN pip install pyarrow
+
 COPY . /code
 RUN poetry build
 RUN pip install dist/LightAutoML-0.3.0-py3-none-any.whl
