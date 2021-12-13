@@ -15,6 +15,8 @@ from pyspark.ml.feature import VectorAssembler
 from skimage.metrics import mean_squared_error
 from synapse.ml.lightgbm import LightGBMRegressor, LightGBMClassifier
 
+from pyspark.sql import functions as F
+
 from lightautoml.dataset.np_pd_dataset import NumpyDataset
 
 formatter = logging.Formatter(
@@ -105,6 +107,13 @@ if __name__ == "__main__":
         train_data_pdf.data['price'] = train_data_pdf.target
         temp_data = train_data_pdf.data
         train_data = spark.createDataFrame(temp_data).drop('Unnamed: 0')
+        cols = train_data.columns
+        train_data = (
+            train_data
+            .withColumn("dummy", F.explode(F.array(*[F.lit(i) for i in range(2)])))
+            .select(cols)
+            .cache()
+        )
 
         logger.info("Starting to train")
 
@@ -115,7 +124,7 @@ if __name__ == "__main__":
         valid_data_pdf = data.to_pandas()
         valid_data_pdf.data['price'] = valid_data_pdf.target
         temp_data = valid_data_pdf.data
-        valid_data = spark.createDataFrame(temp_data).drop('Unnamed: 0')
+        valid_data = spark.createDataFrame(temp_data).drop('Unnamed: 0').cache()
 
         is_reg = True
         LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
@@ -136,8 +145,8 @@ if __name__ == "__main__":
             predictionCol="predict",
             learningRate=0.05,
             numLeaves=128,
-            featureFraction=0.7,
-            baggingFraction=0.7,
+            featureFraction=0.9,
+            baggingFraction=0.9,
             baggingFreq=1,
             maxDepth=-1,
             verbosity=-1,
@@ -146,7 +155,8 @@ if __name__ == "__main__":
             maxBin=255,
             minDataInLeaf=3,
             earlyStoppingRound=100,
-            metric="mse"
+            metric="mse",
+            numIterations=1
         )
 
         if is_reg:
