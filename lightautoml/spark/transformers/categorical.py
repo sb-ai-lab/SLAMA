@@ -183,29 +183,17 @@ class LabelEncoder(SparkTransformer):
                     else:
                         logger.info(f"[{type(self)} (LE)] map size: {len(vals)}")
 
-                        # labels = sc.broadcast(vals)
-                        #
-                        # if type(df.schema[i].dataType) in self._spark_numeric_types:
-                        #     col = F.when(_ic.isNull(), null_value) \
-                        #         .otherwise(
-                        #             F.when(F.isnan(_ic), nan_value)
-                        #              .otherwise(dict_udf(labels)(_ic)).cast("float")
-                        #         )
-                        # else:
-                        #     col = F.when(_ic.isNull(), null_value) \
-                        #            .otherwise(dict_udf(labels)(_ic)).cast("float")
-
-                        labels = F.create_map(*[F.lit(x) for x in chain(*vals.items())])
+                        labels = sc.broadcast(vals)
 
                         if type(df.schema[i].dataType) in self._spark_numeric_types:
                             col = F.when(_ic.isNull(), null_value) \
-                                   .otherwise(
-                                        F.when(F.isnan(_ic), nan_value)
-                                         .otherwise(labels[F.col(i)])
-                                   )
+                                .otherwise(
+                                    F.when(F.isnan(_ic), nan_value)
+                                     .otherwise(dict_udf(labels)(_ic)).cast("float")
+                                )
                         else:
                             col = F.when(_ic.isNull(), null_value) \
-                                .otherwise(labels[F.col(i)])
+                                   .otherwise(dict_udf(labels)(_ic)).cast("float")
 
             cols_to_select.append(col.alias(f"{self._fname_prefix}__{i}"))
 
