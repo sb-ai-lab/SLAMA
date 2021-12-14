@@ -33,10 +33,12 @@ logger = logging.getLogger(__name__)
 murmurhash3_32_udf = F.udf(lambda value: murmurhash3_32(value.replace("NaN", "nan"), seed=42) if value is not None else None, SparkTypes.IntegerType())
 
 
-def dict_udf(broadcasted_dict):
-    def f(value):
-        return broadcasted_dict.value.get(value, None)
-    return F.udf(f)
+def pandas_dict_udf(broadcasted_dict):
+
+    def f(s: Series) -> Series:
+        values_dict = broadcasted_dict.value
+        return s.map(values_dict)
+    return F.pandas_udf(f, "double")
 
 
 class LabelEncoder(SparkTransformer):
@@ -189,11 +191,11 @@ class LabelEncoder(SparkTransformer):
                             col = F.when(_ic.isNull(), null_value) \
                                 .otherwise(
                                     F.when(F.isnan(_ic), nan_value)
-                                     .otherwise(dict_udf(labels)(_ic)).cast("float")
+                                     .otherwise(pandas_dict_udf(labels)(_ic))
                                 )
                         else:
                             col = F.when(_ic.isNull(), null_value) \
-                                   .otherwise(dict_udf(labels)(_ic)).cast("float")
+                                   .otherwise(pandas_dict_udf(labels)(_ic))
 
             cols_to_select.append(col.alias(f"{self._fname_prefix}__{i}"))
 
