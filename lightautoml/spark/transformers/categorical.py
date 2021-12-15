@@ -2,7 +2,7 @@ import logging
 import pickle
 from collections import defaultdict
 from itertools import chain, combinations
-from typing import Optional, Sequence, List, Tuple, Dict, Union, cast
+from typing import Optional, Sequence, List, Tuple, Dict, Union, cast, Iterator
 
 import numpy as np
 from pandas import Series
@@ -486,6 +486,16 @@ class OHEEncoder(SparkTransformer):
         return output
 
 
+def te_mapping_udf(broadcasted_dict):
+    def f(folds, current_column):
+        values_dict = broadcasted_dict.value
+        try:
+            return values_dict[f"{folds}_{current_column}"]
+        except KeyError:
+            return np.nan
+    return F.udf(f, "double")
+
+
 class TargetEncoder(SparkTransformer):
 
     _fit_checks = (categorical_check, oof_task_check, encoding_check)
@@ -528,8 +538,8 @@ class TargetEncoder(SparkTransformer):
             .join(dataset.target, SparkDataset.ID_COLUMN) \
             .join(dataset.folds, SparkDataset.ID_COLUMN)
 
-        # cached_df = df.cache()
-        cached_df, cached_rdd = get_cached_df_through_rdd(df, name=f"{self._fname_prefix}_ft_entry")
+        cached_df = df.cache()
+        sc = cached_df.sql_ctx.sparkSession.sparkContext
 
         _fc = F.col(dataset.folds_column)
         _tc = F.col(dataset.target_column)
@@ -628,11 +638,9 @@ class TargetEncoder(SparkTransformer):
 
             logger.info(f"[{type(self)} (TE)] Statistics in pandas have been calculated. Map size: {len(mapping)}")
 
-            best_candidate = F.create_map(*[F.lit(x) for x in chain(*mapping.items())])
+            values = sc.broadcast(mapping)
 
-            col_select = best_candidate[F.concat(_fc, F.lit("_"), _cur_col)]
-
-            cols_to_select.append(col_select.alias(f"{self._fname_prefix}__{col_name}"))
+            cols_to_select.append(te_mapping_udf(values)(_fc, _cur_col).alias(f"{self._fname_prefix}__{col_name}"))
 
             _column_agg_dicts: dict = candidates_pdf.groupby(by=[col_name]).agg(
                 _csum=("_fsum", "sum"), _ccount=("_fcount", "sum")
@@ -673,6 +681,8 @@ class TargetEncoder(SparkTransformer):
         cols_to_select = []
         logger.info(f"[{type(self)} (TE)] transform is started")
 
+        sc = dataset.data.sql_ctx.sparkSession.sparkContext
+
         # TODO SPARK-LAMA: Нужно что-то придумать, чтобы ориентироваться по именам колонок, а не их индексу
         # Просто взять и забираться из dataset.features е вариант, т.к. в transform может прийти другой датасет
         # В оригинальной ламе об этом не парились, т.к. сразу переходили в numpy. Если прислали датасет не с тем
@@ -681,8 +691,10 @@ class TargetEncoder(SparkTransformer):
         for i, col_name in enumerate(dataset.features):
             _cur_col = F.col(col_name)
             logger.info(f"[{type(self)} (TE)] transform map size for column {col_name}: {len(self.encodings[i])}")
-            labels = F.create_map(*[F.lit(x) for x in chain(*self.encodings[i].items())])
-            cols_to_select.append(labels[_cur_col].alias(f"{self._fname_prefix}__{col_name}"))
+
+            values = sc.broadcast(self.encodings[i])
+
+            cols_to_select.append(pandas_dict_udf(values)(_cur_col).alias(f"{self._fname_prefix}__{col_name}"))
 
         output = dataset.empty()
         output.set_data(
