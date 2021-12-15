@@ -3,7 +3,7 @@ from typing import Optional, Any, List, Dict, Tuple
 
 import numpy as np
 from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType, NumericType, DoubleType
+from pyspark.sql.types import IntegerType, NumericType, DoubleType, FloatType
 
 from lightautoml.dataset.base import array_attr_roles, valid_array_attributes
 from lightautoml.dataset.roles import ColumnRole, DropRole, NumericRole, DatetimeRole, CategoryRole
@@ -297,8 +297,18 @@ class SparkToSparkReader(Reader):
         kwargs["target"] = self.target
 
         # TODO: SPARK-LAMA send parent for unwinding
+        ff = [
+            F.when(F.isnull(f), float('nan')).otherwise(F.col(f).astype(FloatType())).alias(f) if isinstance(self.roles[f], NumericRole) else f
+            for f in self.used_features
+        ]
+
+        train_data = (
+            train_data
+            .select(SparkDataset.ID_COLUMN, *ff)
+        )
+
         dataset = SparkDataset(
-            train_data.select(SparkDataset.ID_COLUMN, *self.used_features),
+            train_data,
             self.roles,
             task=self.task,
             **kwargs

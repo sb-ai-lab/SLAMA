@@ -196,6 +196,16 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
         train_sdf = self._make_sdf_with_target(train)
         valid_sdf = valid.data
 
+        # from pyspark.sql import functions as F
+        # dump_sdf = train_sdf.select([F.col(c).alias(c.replace('(', '___').replace(')', '___')) for c in train.data.columns])
+        # # dump_sdf.coalesce(1).write.parquet("file:///spark_data/tmp_selector_lgbm_0125l.parquet", mode="overwrite")
+        # dump_pdf = dump_sdf.toPandas()#.write.parquet("file:///spark_data/tmp_selector_lgbm_0125l.parquet", mode="overwrite")
+        #
+        # import pickle
+        # with open("/spark_data/dump_selector_lgbm_0125l.pickle", "wb") as f:
+        #     pickle.dump(dump_pdf, f)
+
+        logger.info(f"Input cols for the vector assembler: {train.features}")
         # TODO: reconsider using of 'keep' as a handleInvalid value
         assembler = VectorAssembler(
             inputCols=train.features,
@@ -203,47 +213,65 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             handleInvalid="keep"
         )
 
-        # LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
-        #
-        # lgbm = LGBMBooster(
-        #     # fobj=fobj,  # TODO SPARK-LAMA: Commented only for smoke test
-        #     # feval=feval,
-        #     featuresCol=assembler.getOutputCol(),
-        #     labelCol=train.target_column,
-        #     predictionCol=self._prediction_col,
-        #     learningRate=params["learning_rate"],
-        #     numLeaves=params["num_leaves"],
-        #     featureFraction=params["feature_fraction"],
-        #     baggingFraction=params["bagging_fraction"],
-        #     baggingFreq=params["bagging_freq"],
-        #     maxDepth=params["max_depth"],
-        #     verbosity=params["verbosity"],
-        #     minGainToSplit=params["min_split_gain"],
-        #     numThreads=params["num_threads"],
-        #     maxBin=params["max_bin"],
-        #     minDataInLeaf=params["min_data_in_bin"],
-        #     earlyStoppingRound=early_stopping_rounds
-        # )
-        #
-        # if is_reg:
-        #     lgbm.setAlpha(params["reg_alpha"]).setLambdaL1(params["reg_lambda"]).setLambdaL2(params["reg_lambda"])
+        LGBMBooster = LightGBMRegressor if is_reg else LightGBMClassifier
 
-        LGBMBooster = GBTRegressor if is_reg else GBTClassifier
         lgbm = LGBMBooster(
+            # fobj=fobj,  # TODO SPARK-LAMA: Commented only for smoke test
+            # feval=feval,
             featuresCol=assembler.getOutputCol(),
             labelCol=train.target_column,
             predictionCol=self._prediction_col,
-            maxDepth=5,
-            maxBins=32,
-            minInstancesPerNode=1,
-            minInfoGain=0.0,
-            cacheNodeIds=False,
-            subsamplingRate=1.0,
-            checkpointInterval=10,
-            maxIter=5,
-            impurity='variance',
-            featureSubsetStrategy='all'
+            # learningRate=params["learning_rate"],
+            # numLeaves=params["num_leaves"],
+            # featureFraction=params["feature_fraction"],
+            # baggingFraction=params["bagging_fraction"],
+            # baggingFreq=params["bagging_freq"],
+            # maxDepth=params["max_depth"],
+            # verbosity=params["verbosity"],
+            # minGainToSplit=params["min_split_gain"],
+            # numThreads=params["num_threads"],
+            # maxBin=params["max_bin"],
+            # minDataInLeaf=params["min_data_in_bin"],
+            # earlyStoppingRound=early_stopping_rounds
+            learningRate=0.05,
+            numLeaves=128,
+            featureFraction=0.9,
+            baggingFraction=0.9,
+            baggingFreq=1,
+            maxDepth=-1,
+            verbosity=-1,
+            minGainToSplit=0.0,
+            numThreads=1,
+            maxBin=255,
+            minDataInLeaf=3,
+            earlyStoppingRound=100,
+            metric="mse",
+            numIterations=2000
+            # numIterations=1
         )
+
+        logger.info(f"In GBM with params: {lgbm.params}")
+
+        if is_reg:
+            # lgbm.setAlpha(params["reg_alpha"]).setLambdaL1(params["reg_lambda"]).setLambdaL2(params["reg_lambda"])
+            lgbm.setAlpha(1.0).setLambdaL1(0.0).setLambdaL2(0.0)
+
+        # LGBMBooster = GBTRegressor if is_reg else GBTClassifier
+        # lgbm = LGBMBooster(
+        #     featuresCol=assembler.getOutputCol(),
+        #     labelCol=train.target_column,
+        #     predictionCol=self._prediction_col,
+        #     maxDepth=5,
+        #     maxBins=32,
+        #     minInstancesPerNode=1,
+        #     minInfoGain=0.0,
+        #     cacheNodeIds=False,
+        #     subsamplingRate=1.0,
+        #     checkpointInterval=10,
+        #     maxIter=5,
+        #     impurity='variance',
+        #     featureSubsetStrategy='all'
+        # )
 
         temp_sdf = assembler.transform(train_sdf)
         ml_model = lgbm.fit(temp_sdf)

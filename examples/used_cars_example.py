@@ -15,9 +15,9 @@ from lightautoml.tasks import Task
 
 # load and prepare data
 # TODO: put a correct path for used_cars dataset
-cols = list(pd.read_csv("/opt/05x_dataset.csv", nrows =1))
+cols = list(pd.read_csv("/opt/small_used_cars_data_cleaned.csv", nrows =1))
 
-data = pd.read_csv("/opt/05x_dataset.csv", usecols = [i for i in cols if i not in ["dealer_zip", "description"]])
+data = pd.read_csv("/opt/small_used_cars_data_cleaned.csv", usecols = [i for i in cols if i not in ["dealer_zip", "description"]])
 #data = pd.read_csv("./data/used_cars_data.csv", usecols = [i for i in cols if i in ["daysonmarket", "front_legroom", "fuel_tank_volume", "height", "price"]])
 #data = pd.read_csv("./data/used_cars_data.csv", usecols = [i for i in cols if i in ["horsepower", "latitude", "length", "listed_date", "listing_id", "longitude",  "price"]])
 #data = pd.read_csv("./data/used_cars_data.csv", usecols = [i for i in cols if i in ["maximum_seating", "mileage", "owner_count", "power", "savings_amount", "seller_rating",  "price"]])
