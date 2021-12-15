@@ -80,14 +80,18 @@ class SparkDataset(LAMLDataset):
                  dependencies: Optional[List['SparkDataset']] = None,
                  **kwargs: Any):
 
-        assert "target" in kwargs, "Arguments should contain 'target'"
-        assert isinstance(kwargs["target"], pyspark.sql.DataFrame), "Target should be a spark dataframe"
+        if "target" in kwargs:
+            # assert "target" in kwargs, "Arguments should contain 'target'"
+            assert isinstance(kwargs["target"], pyspark.sql.DataFrame), "Target should be a spark dataframe"
 
-        target_sdf = cast(pyspark.sql.DataFrame, kwargs["target"])
+            target_sdf = cast(pyspark.sql.DataFrame, kwargs["target"])
 
-        assert len(target_sdf.columns) == 2, "Only 2 columns should be in the target spark dataframe"
-        assert SparkDataset.ID_COLUMN in target_sdf.columns, \
-            f"id column {SparkDataset.ID_COLUMN} should be presented in the target spark dataframe"
+            assert len(target_sdf.columns) == 2, "Only 2 columns should be in the target spark dataframe"
+            assert SparkDataset.ID_COLUMN in target_sdf.columns, \
+                f"id column {SparkDataset.ID_COLUMN} should be presented in the target spark dataframe"
+
+            self._target_column: str = next(c for c in target_sdf.columns if c != SparkDataset.ID_COLUMN)
+
 
         self._folds_column = None
         if "folds" in kwargs:
@@ -111,7 +115,6 @@ class SparkDataset(LAMLDataset):
         # TODO: SPARK-LAMA there is a clear problem with this target
         #       we either need to bring this column through all datasets(e.g. duplication)
         #       or really save it as a separate dataframe
-        self._target_column: str = next(c for c in target_sdf.columns if c != SparkDataset.ID_COLUMN)
 
         self._validate_dataframe(data)
 

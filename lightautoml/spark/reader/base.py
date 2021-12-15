@@ -584,7 +584,11 @@ class SparkToSparkReader(Reader):
                 kwargs[array_attr] = target_col
 
         dataset = SparkDataset(
-            data.select(SparkDataset.ID_COLUMN, target_col, *self.used_features),
+            data.select(
+                SparkDataset.ID_COLUMN,
+                # target_col,
+                *self.used_features
+            ),
             roles=self.roles,
             task=self.task,
             **kwargs

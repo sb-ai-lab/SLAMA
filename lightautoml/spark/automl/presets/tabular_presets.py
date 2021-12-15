@@ -500,38 +500,6 @@ class TabularAutoML(AutoMLPreset):
             features_names: Optional[Sequence[str]] = None,
             return_all_predictions: Optional[bool] = None,
     ) -> SparkDataset:
-        """Get dataset with predictions.
-
-        Almost same as :meth:`lightautoml.automl.base.AutoML.predict`
-        on new dataset, with additional features.
-
-        Additional features - working with different data formats.
-        Supported now:
-
-            - Path to ``.csv``, ``.parquet``, ``.feather`` files.
-            - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`. For example,
-              ``{'data': X...}``. In this case roles are optional,
-              but `train_features` and `valid_features` required.
-            - :class:`pandas.DataFrame`.
-
-        Parallel inference - you can pass ``n_jobs`` to speedup
-        prediction (requires more RAM).
-        Batch_inference - you can pass ``batch_size``
-        to decrease RAM usage (may be longer).
-
-        Args:
-            data: Dataset to perform inference.
-            features_names: Optional features names,
-              if cannot be inferred from `train_data`.
-            batch_size: Batch size or ``None``.
-            n_jobs: Number of jobs.
-            return_all_predictions: if True,
-              returns all model predictions from last level
-
-        Returns:
-            Dataset with predictions.
-
-        """
 
         read_csv_params = self._get_read_csv_params()
         data, _ = self._read_data(data, features_names, read_csv_params)

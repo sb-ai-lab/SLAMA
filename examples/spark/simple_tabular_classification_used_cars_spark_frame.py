@@ -9,6 +9,8 @@ import time
 import logging
 import sys
 
+from lightautoml.spark.dataset.base import SparkDataset
+from pyspark.sql import functions as F
 from lightautoml.pipelines.utils import get_columns_by_role
 from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.spark.transformers.categorical import LabelEncoder
@@ -137,6 +139,10 @@ if __name__ == "__main__":
         data = data.cache()
         train_data, test_data = data.randomSplit([0.8, 0.2], seed=42)
 
+        test_data_dropped = test_data \
+                                .withColumn(SparkDataset.ID_COLUMN, F.monotonically_increasing_id()) \
+                                .drop(F.col("price")).cache()
+
         automl = TabularAutoML(
             spark=spark,
             task=task,
@@ -159,4 +165,9 @@ if __name__ == "__main__":
                 }
             )
 
-        # time.sleep(600)
+        te_pred = automl.predict(test_data_dropped)
+
+        test_data_pd = test_data.toPandas()
+        te_pred_pd = te_pred.data.limit(50).toPandas()
+
+        _a = 1  # Just to check results in the debuggerr

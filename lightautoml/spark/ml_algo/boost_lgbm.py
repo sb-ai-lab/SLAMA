@@ -173,7 +173,15 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
                             dataset: SparkDataset,
                             model: Union[LightGBMRegressor, LightGBMClassifier]) -> SparkDataFrame:
 
-        pred = model.transform(dataset.data)
+        assembler = VectorAssembler(
+            inputCols=dataset.features,
+            outputCol=f"{self._name}_vassembler_features",
+            handleInvalid="keep"
+        )
+
+        temp_sdf = assembler.transform(dataset.data)
+
+        pred = model.transform(temp_sdf)
 
         return pred
 
