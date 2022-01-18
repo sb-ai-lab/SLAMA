@@ -3,88 +3,21 @@
 """
 Simple example for binary classification on tabular data.
 """
+import logging
+import logging.config
 import pickle
 import time
-from datetime import datetime
-import logging
-import os
-import sys
-from typing import cast
 
 from pyspark.ml.feature import VectorAssembler
+from pyspark.sql import functions as F
 # from skimage.metrics import mean_squared_error
 from synapse.ml.lightgbm import LightGBMRegressor, LightGBMClassifier
 
-from pyspark.sql import functions as F
+from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT, spark_session, log_exec_time
 
-from lightautoml.dataset.np_pd_dataset import NumpyDataset
-
-formatter = logging.Formatter(
-    fmt='%(asctime)s %(name)s {%(module)s:%(lineno)d} %(levelname)s:%(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S %p'
-)
-# set up logging to console
-console = logging.StreamHandler(sys.stdout)
-console.setLevel(logging.DEBUG)
-console.setFormatter(formatter)
-
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.addHandler(console)
-logger = root_logger
-
-from contextlib import contextmanager
-
-from pyspark.sql import SparkSession
-
-
-loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict if name.startswith('lightautoml')]
-for logger in loggers:
-    logger.setLevel(logging.INFO)
-    # logger.addHandler(console)
-
-
-@contextmanager
-def print_exec_time(name: str = None):
-    start = datetime.now()
-    yield
-    end = datetime.now()
-    duration = (end - start).total_seconds()
-    print(f"Exec time ({name}): {duration}")
-
-
-spark = (
-    SparkSession
-        .builder
-        .appName("SPARK-LAMA-app")
-        .master("local[4]")
-        # .master("spark://node4.bdcl:7077")
-        # .config("spark.driver.host", "node4.bdcl")
-        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.4")
-        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-        .config("spark.driver.cores", "4")
-        .config("spark.driver.memory", "16g")
-        .config("spark.cores.max", "8")
-        .config("spark.executor.instances", "2")
-        .config("spark.executor.memory", "16g")
-        .config("spark.executor.cores", "4")
-        .config("spark.memory.fraction", "0.6")
-        .config("spark.memory.storageFraction", "0.5")
-        .config("spark.sql.autoBroadcastJoinThreshold", "100MB")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .getOrCreate()
-)
-@contextmanager
-def spark_session() -> SparkSession:
-
-    print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
-
-    # time.sleep(600)
-    try:
-        yield spark
-    finally:
-        # time.sleep(600)
-        spark.stop()
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/lama.log'))
+logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
+logger = logging.getLogger(__name__)
 
 
 # run automl
@@ -181,11 +114,11 @@ if __name__ == "__main__":
         if is_reg:
             lgbm.setAlpha(1.0).setLambdaL1(0.0).setLambdaL2(0.0)
 
-        with print_exec_time("training"):
+        with log_exec_time("training"):
             temp_sdf = assembler.transform(train_data)
             ml_model = lgbm.fit(temp_sdf)
 
-        with print_exec_time("train prediction"):
+        with log_exec_time("train prediction"):
             train_pred = ml_model.transform(temp_sdf)
             train_pred_pdf = train_pred.select('price', 'predict').toPandas()
         #

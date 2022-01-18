@@ -9,7 +9,7 @@ from lightautoml.pipelines.features.linear_pipeline import LinearFeatures
 from lightautoml.spark.pipelines.features.lgb_pipeline import \
     LGBSimpleFeatures as SparkLGBSimpleFeatures, LGBAdvancedPipeline as SparkLGBAdvancedPipeline
 from lightautoml.spark.pipelines.features.linear_pipeline import LinearFeatures as SparkLinearFeatures
-from lightautoml.spark.transformers.base import print_exec_time
+from lightautoml.spark.transformers.base import log_exec_time
 from lightautoml.tasks import Task
 from .. import DatasetForTest, from_pandas_to_spark, spark, compare_obtained_datasets
 
@@ -74,10 +74,10 @@ def test_linear_features(spark: SparkSession, dataset: DatasetForTest):
     print()
     print(spark_transformer.print_tr_types())
 
-    with print_exec_time():
+    with log_exec_time():
         lama_ds = linear_features.fit_transform(ds).to_numpy()
 
-    with print_exec_time():
+    with log_exec_time():
         spark_ds = spark_linear_features.fit_transform(sds)
 
     # time.sleep(600)
@@ -99,10 +99,10 @@ def test_lgb_simple_features(spark: SparkSession, dataset: DatasetForTest):
     spark_lgb_features = SparkLGBSimpleFeatures()
     spark_transformer = spark_lgb_features.create_pipeline(sds)
 
-    with print_exec_time():
+    with log_exec_time():
         lama_ds = lgb_features.fit_transform(ds)
 
-    with print_exec_time():
+    with log_exec_time():
         spark_ds = spark_lgb_features.fit_transform(sds)
 
     compare_obtained_datasets(lama_ds, spark_ds)
@@ -133,10 +133,10 @@ def test_lgb_advanced_features(spark: SparkSession, dataset: DatasetForTest):
     spark_lgb_features = SparkLGBAdvancedPipeline(**kwargs)
     spark_transformer = spark_lgb_features.create_pipeline(sds)
 
-    with print_exec_time():
+    with log_exec_time():
         lama_ds = lgb_features.fit_transform(ds)
 
-    with print_exec_time():
+    with log_exec_time():
         spark_ds = spark_lgb_features.fit_transform(sds)
 
     compare_obtained_datasets(lama_ds, spark_ds)

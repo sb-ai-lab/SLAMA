@@ -17,7 +17,7 @@ from lightautoml.spark.transformers.categorical import LabelEncoder as SparkLabe
     FreqEncoder as SparkFreqEncoder, OrdinalEncoder as SparkOrdinalEncoder, \
     CatIntersectstions as SparkCatIntersectstions, OHEEncoder as SparkOHEEncoder, \
     TargetEncoder as SparkTargetEncoder
-from lightautoml.spark.utils import print_exec_time
+from lightautoml.spark.utils import log_exec_time
 from lightautoml.tasks import Task
 from lightautoml.transformers.base import ColumnsSelector
 from lightautoml.transformers.categorical import LabelEncoder, FreqEncoder, OrdinalEncoder, CatIntersectstions, \
@@ -146,11 +146,11 @@ def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
 
     sds = from_pandas_to_spark(n_ds, spark, fill_folds_with_zeros_if_not_present=True)
 
-    with print_exec_time():
+    with log_exec_time():
         target_encoder = TargetEncoder()
         lama_output = target_encoder.fit_transform(n_ds)
 
-    with print_exec_time():
+    with log_exec_time():
         spark_encoder = SparkTargetEncoder()
         spark_output = spark_encoder.fit_transform(sds)
 
@@ -165,22 +165,22 @@ def test_target_encoder(spark: SparkSession, dataset: DatasetForTest):
 def test_target_encoder_2(spark: SparkSession):
     df = pd.read_csv("../../examples/data/sampled_app_train.csv")
 
-    with print_exec_time():
+    with log_exec_time():
         sreader = PandasToPandasReader(task=Task("binary"), cv=5)
         sds = sreader.fit_read(df, roles={"target": "TARGET"})
 
     feats_to_select = get_columns_by_role(sds, "Category")
-    with print_exec_time():
+    with log_exec_time():
         cs = ColumnsSelector(keys=feats_to_select)
         cs_sds = cs.fit_transform(sds)
 
-    with print_exec_time():
+    with log_exec_time():
         slabel_encoder = LabelEncoder()
         labeled_sds = slabel_encoder.fit_transform(cs_sds)
 
     sds = from_pandas_to_spark(labeled_sds.to_pandas(), spark)
 
-    with print_exec_time():
+    with log_exec_time():
         spark_encoder = SparkTargetEncoder()
         spark_output = spark_encoder.fit_transform(sds)
 
