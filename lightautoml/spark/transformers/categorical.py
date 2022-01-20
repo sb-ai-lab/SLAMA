@@ -103,7 +103,7 @@ class LabelEncoder(SparkTransformer):
 
         for i in dataset.features:
 
-            logger.info(f"[{type(self)} (LE)] fit column {i}")
+            logger.debug(f"[{type(self)} (LE)] fit column {i}")
 
             role = roles[i]
 
@@ -120,11 +120,11 @@ class LabelEncoder(SparkTransformer):
                 .select(i, F.col("count")) \
                 .toPandas()
 
-            logger.info(f"[{type(self)} (LE)] toPandas is completed")
+            logger.debug(f"[{type(self)} (LE)] toPandas is completed")
 
             vals = vals.sort_values(["count", i], ascending=[False, True])
             self.dicts[i] = Series(np.arange(vals.shape[0], dtype=np.int32) + 1, index=vals[i])
-            logger.info(f"[{type(self)} (LE)] pandas processing is completed")
+            logger.debug(f"[{type(self)} (LE)] pandas processing is completed")
 
         dataset.uncache()
 
@@ -142,7 +142,7 @@ class LabelEncoder(SparkTransformer):
         cols_to_select = []
 
         for i in dataset.features:
-            logger.info(f"[{type(self)} (LE)] transform col {i}")
+            logger.debug(f"[{type(self)} (LE)] transform col {i}")
 
             _ic = F.col(i)
 
@@ -183,7 +183,7 @@ class LabelEncoder(SparkTransformer):
                     if len(vals) == 0:
                         col = F.when(F.isnan(_ic), nan_value).otherwise(None)
                     else:
-                        logger.info(f"[{type(self)} (LE)] map size: {len(vals)}")
+                        logger.debug(f"[{type(self)} (LE)] map size: {len(vals)}")
 
                         labels = sc.broadcast(vals)
 
@@ -245,11 +245,11 @@ class FreqEncoder(LabelEncoder):
                 .select(i, F.col("count")) \
                 .toPandas()
 
-            logger.info(f"[{type(self)} (FE)] toPandas is completed")
+            logger.debug(f"[{type(self)} (FE)] toPandas is completed")
 
             self.dicts[i] = vals.set_index(i)["count"]
 
-            logger.info(f"[{type(self)} (LE)] pandas processing is completed")
+            logger.debug(f"[{type(self)} (LE)] pandas processing is completed")
 
         dataset.uncache()
 
@@ -282,7 +282,7 @@ class OrdinalEncoder(LabelEncoder):
         self.dicts = {}
         for i in dataset.features:
 
-            logger.info(f"[{type(self)} (ORD)] fit column {i}")
+            logger.debug(f"[{type(self)} (ORD)] fit column {i}")
 
             role = roles[i]
 
@@ -303,11 +303,11 @@ class OrdinalEncoder(LabelEncoder):
                     .select(i) \
                     .toPandas()
 
-                logger.info(f"[{type(self)} (ORD)] toPandas is completed")
+                logger.debug(f"[{type(self)} (ORD)] toPandas is completed")
 
                 cnts = Series(cnts[i].astype(str).rank().values, index=cnts[i])
                 self.dicts[i] = cnts.append(Series([cnts.shape[0] + 1], index=[np.nan])).drop_duplicates()
-                logger.info(f"[{type(self)} (ORD)] pandas processing is completed")
+                logger.debug(f"[{type(self)} (ORD)] pandas processing is completed")
 
         dataset.uncache()
 
@@ -551,14 +551,14 @@ class TargetEncoder(SparkTransformer):
             F.sum(_tc).cast("double")
         ).first()
 
-        logger.info(f"[{type(self)} (TE)] statistics is calculated")
+        logger.debug(f"[{type(self)} (TE)] statistics is calculated")
 
         # we assume that there is not many folds in our data
         folds_prior_pdf = cached_df.groupBy(_fc).agg(
             ((total_target_sum - F.sum(_tc)) / (total_count - F.count(_tc))).alias("_folds_prior")
         ).collect()
 
-        logger.info(f"[{type(self)} (TE)] folds_prior is calculated")
+        logger.debug(f"[{type(self)} (TE)] folds_prior is calculated")
 
         folds_prior_map = {fold: prior for fold, prior in folds_prior_pdf}
 
@@ -568,7 +568,7 @@ class TargetEncoder(SparkTransformer):
 
         for col_name in dataset.features:
 
-            logger.info(f"[{type(self)} (TE)] column {col_name}")
+            logger.debug(f"[{type(self)} (TE)] column {col_name}")
 
             _cur_col = F.col(col_name)
 
@@ -579,7 +579,7 @@ class TargetEncoder(SparkTransformer):
                     .toPandas()
             )
 
-            logger.info(f"[{type(self)} (TE)] _agg is calculated")
+            logger.debug(f"[{type(self)} (TE)] _agg is calculated")
 
             candidates_pdf = _agg.groupby(
                 by=[dataset.folds_column, col_name]
@@ -636,7 +636,7 @@ class TargetEncoder(SparkTransformer):
                 [dataset.folds_column, col_name, "_candidates"]
             ].drop_duplicates(subset=[dataset.folds_column, col_name]).apply(create_mapping, axis=1)
 
-            logger.info(f"[{type(self)} (TE)] Statistics in pandas have been calculated. Map size: {len(mapping)}")
+            logger.debug(f"[{type(self)} (TE)] Statistics in pandas have been calculated. Map size: {len(mapping)}")
 
             values = sc.broadcast(mapping)
 
@@ -654,7 +654,7 @@ class TargetEncoder(SparkTransformer):
                 }
             )
 
-            logger.info(f"[{type(self)} (TE)] Encodings have been calculated")
+            logger.debug(f"[{type(self)} (TE)] Encodings have been calculated")
 
         output = dataset.empty()
         self.output_role = NumericRole(np.float32, prob=output.task.name == "binary")
@@ -690,7 +690,7 @@ class TargetEncoder(SparkTransformer):
         # этой логики?
         for i, col_name in enumerate(dataset.features):
             _cur_col = F.col(col_name)
-            logger.info(f"[{type(self)} (TE)] transform map size for column {col_name}: {len(self.encodings[i])}")
+            logger.debug(f"[{type(self)} (TE)] transform map size for column {col_name}: {len(self.encodings[i])}")
 
             values = sc.broadcast(self.encodings[i])
 

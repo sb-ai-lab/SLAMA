@@ -583,12 +583,34 @@ class SparkToSparkReader(Reader):
 
                 kwargs[array_attr] = target_col
 
-        dataset = SparkDataset(
-            data.select(
+        def convert_column(feat: str):
+            role: ColumnRole = self.roles[feat]
+            if isinstance(role, DatetimeRole):
+                result_column = F.to_timestamp(feat, self.roles[feat].format).alias(feat)
+            elif isinstance(role, NumericRole):
+                typ = dtype2Stype[role.dtype.__name__]
+                result_column = (
+                    F.when(F.isnull(feat), float('nan'))
+                    .otherwise(F.col(feat).astype(typ))
+                    .alias(feat)
+                )
+            else:
+                result_column = F.col(feat)
+
+            return result_column
+
+        sdf = data
+        if SparkDataset.ID_COLUMN not in data.columns:
+            sdf = sdf.withColumn(SparkDataset.ID_COLUMN, F.monotonically_increasing_id())
+
+        sdf = sdf.select(
                 SparkDataset.ID_COLUMN,
                 # target_col,
-                *self.used_features
-            ),
+                *[convert_column(feat) for feat in self.used_features]
+            )
+
+        dataset = SparkDataset(
+            sdf,
             roles=self.roles,
             task=self.task,
             **kwargs
