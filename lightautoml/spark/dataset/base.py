@@ -365,6 +365,7 @@ class SparkDataset(LAMLDataset):
 
     def to_pandas(self) -> PandasDataset:
         data, roles = self._materialize_to_pandas()
+        # TODO: SPARK-LAMA convert spark task to lama task
         return PandasDataset(data=data, roles=roles, task=self.task)
 
     def to_numpy(self) -> NumpyDataset:

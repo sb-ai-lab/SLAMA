@@ -20,7 +20,13 @@ logger = logging.getLogger(__name__)
 
 def calculate_automl(path: str, seed: int = 42, use_algos = ("lgb", "linear_l2")) -> Dict[str, Any]:
     with log_exec_time("LAMA"):
-        data = pd.read_csv(path)
+        # to assure that LAMA correctly interprets these columns as categorical
+        data = pd.read_csv(path,  dtype={
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str'
+        })
         train_data, test_data = train_test_split(data, test_size=0.2, random_state=seed)
 
         target_col = 'price'

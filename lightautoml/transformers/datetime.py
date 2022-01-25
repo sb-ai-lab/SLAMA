@@ -140,6 +140,8 @@ class BaseDiff(LAMLTransformer):
             self.
 
         """
+        super().fit(dataset)
+
         self._features = []
         for col in self.base_names:
             self._features.extend(["basediff_{0}__{1}".format(col, x) for x in self.diff_names])
@@ -217,6 +219,8 @@ class DateSeasons(LAMLTransformer):
             self.
 
         """
+        super().fit(dataset)
+
         for check_func in self._fit_checks:
             check_func(dataset)
 

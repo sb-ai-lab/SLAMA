@@ -15,6 +15,8 @@ from lightautoml.spark.ml_algo.base import TabularMLAlgo, SparkMLModel
 from lightautoml.spark.validation.base import TrainValidIterator
 import pandas as pd
 
+from lightautoml.utils.tmp_utils import log_data
+
 logger = logging.getLogger(__name__)
 
 
@@ -186,7 +188,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
         return pred
 
     def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[SparkMLModel, SparkDataFrame, str]:
-
         if self.task is None:
             self.task = train.task
 
@@ -200,6 +201,12 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             fobj,
             feval,
         ) = self._infer_params()
+
+        tds = train.to_pandas()
+        tds.task = None
+        vds = valid.to_pandas()
+        vds.task = None
+        log_data("spark_lgb_train_val", (tds, vds))
 
         train_sdf = self._make_sdf_with_target(train)
         valid_sdf = valid.data

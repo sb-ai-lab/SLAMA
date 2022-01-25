@@ -250,6 +250,7 @@ class OHEEncoder(LAMLTransformer):
             self.
 
         """
+        super().fit(dataset)
 
         # set transformer names and add checks
         for check_func in self._fit_checks:

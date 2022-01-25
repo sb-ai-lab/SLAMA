@@ -1,21 +1,20 @@
-import pickle
 from typing import cast
 
 import pytest
 from pyspark.sql import SparkSession
-from sklearn.model_selection import train_test_split
 
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.reader.base import PandasToPandasReader
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.tasks import Task
+from lightautoml.spark.tasks.base import Task as SparkTask
 from . import spark
 import pandas as pd
 
 
 @pytest.mark.parametrize("cv", [1, 5, 10])
-# @pytest.mark.parametrize("cv", [1])
+# @pytest.mark.parametrize("cv", [5])
 def test_spark_reader(spark: SparkSession, cv: int):
     def checks(sds: SparkDataset, check_target_and_folds: bool = True):
         # 1. it should have _id
@@ -37,31 +36,55 @@ def test_spark_reader(spark: SparkSession, cv: int):
             assert len(folds_sdf.columns) == 2
             assert SparkDataset.ID_COLUMN in folds_sdf.columns and sds.folds_column in folds_sdf.columns
 
-    df = spark.read.csv("../../examples/data/sampled_app_train.csv", header=True)
-    sreader = SparkToSparkReader(task=Task("binary"), cv=cv)
+    # path = "../../examples/data/sampled_app_train.csv"
+    # task_type = "binary"
 
-    sdataset = sreader.fit_read(df)
+    path = "../../examples/data/tiny_used_cars_data.csv"
+    task_type = "reg"
+    roles = {
+        "target": 'price',
+        "drop": ["dealer_zip", "description", "listed_date",
+                 "year", 'Unnamed: 0', '_c0',
+                 'sp_id', 'sp_name', 'trimId',
+                 'trim_name', 'major_options', 'main_picture_url',
+                 'interior_color', 'exterior_color'],
+        "numeric": ['latitude', 'longitude', 'mileage']
+    }
+
+    df = spark.read.csv(path, header=True, escape="\"")
+    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv)
+
+    sdataset = sreader.fit_read(df, roles=roles)
     checks(sdataset)
 
     sdataset = sreader.read(df)
     checks(sdataset, check_target_and_folds=False)
 
+    # comparing with Pandas
+    pdf = pd.read_csv(path, dtype={
+        'fleet': 'str', 'frame_damaged': 'str',
+        'has_accidents': 'str', 'isCab': 'str',
+        'is_cpo': 'str', 'is_new': 'str',
+        'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str'
+    })
+    preader = PandasToPandasReader(task=Task(task_type), cv=cv)
+    pdataset = preader.fit_read(pdf, roles=roles)
 
-    # category_feats_and_roles = [(feat, role) for feat, role in sds.roles.items() if isinstance(role, CategoryRole)]
-    # category_feats = [feat for feat, _ in category_feats_and_roles]
-    # category_roles = {feat: role for feat, role in category_feats_and_roles}
-    #
-    # data = sds.data.select(*category_feats).toPandas()
-    # target_data = sds.target.toPandas()
-    # with open("unit/resources/datasets/dataset_after_reader_dump.pickle", "wb") as f:
-    #     dmp = (data, category_feats, category_roles, target_data)
-    #     pickle.dump(dmp, f)
+    sdiff = set(sdataset.features).symmetric_difference(pdataset.features)
+    assert len(sdiff) == 0, f"Features sets are different: {sdiff}"
 
-    # assert len(sds.folds) == cv
-    #
-    # correct_folds = (
-    #     (SparkDataset.ID_COLUMN in train.columns) and (SparkDataset.ID_COLUMN in val.columns)
-    #     for train, val in sds.folds
-    # )
-    #
-    # assert all(correct_folds), "ID_COLUMN should be presented everywhere"
+    feat_and_roles = [
+        (feat, srole, pdataset.roles[feat])
+        for feat, srole in sdataset.roles.items()
+    ]
+
+    not_equal_roles = [(feat, srole, prole) for feat, srole, prole in feat_and_roles if srole != prole]
+    assert len(not_equal_roles) == 0, f"Roles are different: {not_equal_roles}"
+
+    # two checks on CategoryRole to make PyCharm field resolution happy
+    not_equal_encoding_types = [
+        feat for feat, srole, prole in feat_and_roles
+        if isinstance(srole, CategoryRole) and isinstance(prole, CategoryRole)
+        and srole.encoding_type != prole.encoding_type
+    ]
+    assert len(not_equal_encoding_types) ==0 , f"Encoding types are different: {not_equal_encoding_types}"

@@ -73,6 +73,7 @@ def test_nested_tabular_ml_pipeline_with_linear_bgfs(spark: SparkSession):
     res_ds = spark_ds.data.toPandas()
     pass
 
+
 def test_nested_tabular_ml_pipeline_with_boost_lgbm(spark: SparkSession):
     with open("unit/resources/datasets/dump_tabular_automl_lgb_linear/Lvl_0_Pipe_0_before_pre_selection.pickle", "rb") as f:
         data, target, features, roles = pickle.load(f)

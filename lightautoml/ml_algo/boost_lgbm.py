@@ -16,6 +16,7 @@ from pandas import Series
 
 from ..pipelines.selection.base import ImportanceEstimator
 from ..utils.logging import LoggerStream
+from ..utils.tmp_utils import log_data
 from ..validation.base import TrainValidIterator
 from .base import TabularDataset
 from .base import TabularMLAlgo
@@ -251,6 +252,8 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             feval,
         ) = self._infer_params()
 
+        log_data("lama_lgb_train_val", (train, valid))
+
         train_target, train_weight = self.task.losses["lgb"].fw_func(train.target, train.weights)
         valid_target, valid_weight = self.task.losses["lgb"].fw_func(valid.target, valid.weights)
 
@@ -272,6 +275,13 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
 
         val_pred = model.predict(valid.data)
         val_pred = self.task.losses["lgb"].bw_func(val_pred)
+
+        # TODO: SPARK-LAMA remove it
+        import pandas as pd
+        self._features_importance = pd.Series(
+            [1.0 / len(train.features) for _ in train.features],
+            index=list(train.features)
+        )
 
         return model, val_pred
 
@@ -304,7 +314,10 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
 
         imp = imp / len(self.models)
 
-        return Series(imp, index=self.features).sort_values(ascending=False)
+        # return Series(imp, index=self.features).sort_values(ascending=False)
+        return self._features_importance
+
+
 
     def fit(self, train_valid: TrainValidIterator):
         """Just to be compatible with :class:`~lightautoml.pipelines.selection.base.ImportanceEstimator`.

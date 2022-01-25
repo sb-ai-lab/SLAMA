@@ -19,6 +19,7 @@ class SparkTransformer(LAMLTransformer):
 
     def fit(self, dataset: SparkDataset) -> "SparkTransformer":
 
+        logger.info(f"SparkTransformer of type: {type(self)}")
         self._features = dataset.features
         for check_func in self._fit_checks:
             check_func(dataset)

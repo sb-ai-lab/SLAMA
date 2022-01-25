@@ -1,5 +1,5 @@
 """Basic classes for transformers."""
-
+import logging
 from copy import deepcopy
 from typing import Callable, Set
 from typing import ClassVar
@@ -18,6 +18,9 @@ from ..dataset.utils import concatenate
 # TODO: From func transformer
 
 Roles = Union[Sequence[ColumnRole], ColumnRole, RolesDict, None]
+
+
+logger = logging.getLogger(__name__)
 
 
 class LAMLTransformer:
@@ -64,6 +67,7 @@ class LAMLTransformer:
             self.
 
         """
+        logger.info(f"LAMLTransformer of type {type(self)}")
         self.features = dataset.features
         for check_func in self._fit_checks:
             check_func(dataset)
@@ -379,6 +383,8 @@ class ColumnsSelector(LAMLTransformer):
             self.
 
         """
+        super().fit(dataset)
+
         self.features = self.keys
 
         return self
