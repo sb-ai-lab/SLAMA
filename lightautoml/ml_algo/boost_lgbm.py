@@ -252,7 +252,7 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             feval,
         ) = self._infer_params()
 
-        log_data("lama_lgb_train_val", (train, valid))
+        log_data("lama_lgb_train_val", {"train": train, "valid": valid})
 
         train_target, train_weight = self.task.losses["lgb"].fw_func(train.target, train.weights)
         valid_target, valid_weight = self.task.losses["lgb"].fw_func(valid.target, valid.weights)
@@ -276,13 +276,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
         val_pred = model.predict(valid.data)
         val_pred = self.task.losses["lgb"].bw_func(val_pred)
 
-        # TODO: SPARK-LAMA remove it
-        import pandas as pd
-        self._features_importance = pd.Series(
-            [1.0 / len(train.features) for _ in train.features],
-            index=list(train.features)
-        )
-
         return model, val_pred
 
     def predict_single_fold(self, model: lgb.Booster, dataset: TabularDataset) -> np.ndarray:
@@ -296,6 +289,7 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             Predicted target values.
 
         """
+        log_data("lama_lgb_predict", {"predict": dataset})
         pred = self.task.losses["lgb"].bw_func(model.predict(dataset.data))
 
         return pred
@@ -314,10 +308,7 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
 
         imp = imp / len(self.models)
 
-        # return Series(imp, index=self.features).sort_values(ascending=False)
-        return self._features_importance
-
-
+        return Series(imp, index=self.features).sort_values(ascending=False)
 
     def fit(self, train_valid: TrainValidIterator):
         """Just to be compatible with :class:`~lightautoml.pipelines.selection.base.ImportanceEstimator`.

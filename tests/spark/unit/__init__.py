@@ -240,10 +240,12 @@ def from_pandas_to_spark(p: PandasDataset,
                 if fill_folds_with_zeros_if_not_present else None
 
     target_sdf = spark.createDataFrame(data=tpdf)
+    # target_sdf = target_sdf.fillna(0.0)
 
     obj_columns = list(pdf.select_dtypes(include=['object']))
     pdf[obj_columns] = pdf[obj_columns].astype(str)
     sdf = spark.createDataFrame(data=pdf)
+    # sdf = sdf.fillna(0.0)
 
     if to_vector:
         cols = [c for c in pdf.columns if c != SparkDataset.ID_COLUMN]

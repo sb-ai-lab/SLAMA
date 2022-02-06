@@ -338,7 +338,7 @@ class SparkToSparkReader(Reader):
 
         return dataset
 
-    def _create_folds(self, sdf: SparkDataFrame, kwargs: dict) -> SparkDataFrame:
+    def _create_folds(self, sdf: SparkDataFrame, kwargs: dict) -> Optional[SparkDataFrame]:
         if "folds" in kwargs:
             folds_col = kwargs["folds"]
 
@@ -367,6 +367,9 @@ class SparkToSparkReader(Reader):
             #     train = df.filter(~condition).drop(folds_col)
             #     datasets.append((train, validation))
             # return datasets
+
+        if self.cv == 1:
+            return None
 
         h = 1.0 / self.cv
         folds_sdf = sdf.select(
@@ -613,6 +616,14 @@ class SparkToSparkReader(Reader):
                     data = data.na.replace(self.class_mapping, subset=[target_col])
 
                 kwargs[array_attr] = target_col
+
+        if SparkDataset.ID_COLUMN not in data.columns:
+            data = data.withColumn(SparkDataset.ID_COLUMN, F.monotonically_increasing_id())
+        data = data.cache()
+
+        data = self._create_target(data, target_col=self.target_col)
+        target = data.select(SparkDataset.ID_COLUMN, self.target_col)
+        kwargs["target"] = target
 
         def convert_column(feat: str):
             role: ColumnRole = self.roles[feat]

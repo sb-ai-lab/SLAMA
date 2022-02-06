@@ -15,6 +15,7 @@ from sklearn.linear_model import Lasso
 from sklearn.linear_model import LogisticRegression
 
 from ..dataset.np_pd_dataset import PandasDataset
+from ..utils.tmp_utils import log_data
 from ..validation.base import TrainValidIterator
 from .base import TabularDataset
 from .base import TabularMLAlgo
@@ -124,6 +125,10 @@ class LinearLBFGS(TabularMLAlgo):
             Target predictions for valid dataset.
 
         """
+        logger.info(f"fit_predict single fold in LinearLBGFS. Num of features: {len(train.features)} ")
+
+        log_data("lama_linear_l2_train_val", {"train": train, "valid": valid})
+
         if type(train) is PandasDataset:
             train = train.to_numpy()
             valid = valid.to_numpy()
@@ -154,6 +159,8 @@ class LinearLBFGS(TabularMLAlgo):
             Predictions for input dataset.
 
         """
+        log_data("lama_linear_l2_predict", {"predict": dataset})
+
         pred = model.predict(dataset.data)
 
         return pred

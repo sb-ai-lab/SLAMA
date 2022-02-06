@@ -4,56 +4,67 @@
 Simple example for binary classification on tabular data.
 """
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import pandas as pd
-from sklearn.linear_model.tests.test_ridge import _mean_squared_error_callable
+import sklearn
 from sklearn.model_selection import train_test_split
 
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
 from lightautoml.spark.utils import log_exec_time
 from lightautoml.tasks import Task
-
+from lightautoml.utils.tmp_utils import log_data
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_automl(path: str, seed: int = 42, use_algos = ("lgb", "linear_l2")) -> Dict[str, Any]:
+def calculate_automl(path: str,
+                     task_type: str,
+                     metric_name: str,
+                     target_col: str = 'target',
+                     seed: int = 42,
+                     cv: int = 5,
+                     use_algos = ("lgb", "linear_l2"),
+                     roles: Optional[Dict] = None,
+                     dtype: Optional[Dict] = None) -> Dict[str, Any]:
     with log_exec_time("LAMA"):
         # to assure that LAMA correctly interprets these columns as categorical
-        data = pd.read_csv(path,  dtype={
-            'fleet': 'str', 'frame_damaged': 'str',
-            'has_accidents': 'str', 'isCab': 'str',
-            'is_cpo': 'str', 'is_new': 'str',
-            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str'
-        })
+        roles = roles if roles else {}
+        dtype = dtype if dtype else {}
+
+        data = pd.read_csv(path,  dtype=dtype)
         train_data, test_data = train_test_split(data, test_size=0.2, random_state=seed)
 
-        target_col = 'price'
-        task = Task("reg")
+        task = Task(task_type)
 
-        automl = TabularAutoML(task=task, timeout=3600 * 3, general_params={"use_algos": use_algos})
+        automl = TabularAutoML(
+            task=task,
+            timeout=3600 * 3,
+            general_params={"use_algos": use_algos},
+            reader_params={"cv": cv}
+        )
 
         oof_predictions = automl.fit_predict(
             train_data,
-            roles={
-                "target": target_col,
-                "drop": ["dealer_zip", "description", "listed_date",
-                         "year", 'Unnamed: 0', '_c0',
-                         'sp_id', 'sp_name', 'trimId',
-                         'trim_name', 'major_options', 'main_picture_url',
-                         'interior_color', 'exterior_color'],
-                "numeric": ['latitude', 'longitude', 'mileage']
-            }
+            roles=roles
         )
 
-    metric_value = _mean_squared_error_callable(train_data[target_col].values, oof_predictions.data[:, 0])
+    log_data("lama_test_part", {"test": test_data})
+
+    if metric_name == "mse":
+        evaluator = sklearn.metrics.mean_squared_error
+    elif metric_name == "areaUnderROC":
+        evaluator = sklearn.metrics.roc_auc_score
+    else:
+        raise ValueError(f"Metric {metric_name} is not supported")
+
+    metric_value = evaluator(train_data[target_col].values, oof_predictions.data[:, 0])
     logger.info(f"mse score for out-of-fold predictions: {metric_value}")
 
     with log_exec_time():
         te_pred = automl.predict(test_data)
 
-    test_metric_value = _mean_squared_error_callable(test_data[target_col].values, te_pred.data[:, 0])
+    test_metric_value = evaluator(test_data[target_col].values, te_pred.data[:, 0])
     logger.info(f"mse score for test predictions: {test_metric_value}")
 
     logger.info("Predicting is finished")

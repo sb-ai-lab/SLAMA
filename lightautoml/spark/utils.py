@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from datetime import datetime
 from typing import Optional, Tuple
@@ -30,6 +31,8 @@ def spark_session(master: str = "local[1]", wait_secs_after_the_end: Optional[in
         SparkSession to be used and that is stopped upon exiting this context manager
     """
 
+    # os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
     spark_sess_builder = (
         SparkSession
         .builder
@@ -37,6 +40,9 @@ def spark_session(master: str = "local[1]", wait_secs_after_the_end: Optional[in
         .master(master)
         .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.4")
         .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
+        .config("spark.sql.shuffle.partitions", "4")
+        # .config("spark.driver.extraJavaOptions", "-Ddev.ludovic.netlib.blas.nativeLibPath=/usr/lib64/libopenblaso-r0.3.17.so")
+        # .config("spark.executor.extraJavaOptions", "-Ddev.ludovic.netlib.blas.nativeLibPath=/usr/lib64/libopenblaso-r0.3.17.so")
         .config("spark.driver.cores", "4")
         .config("spark.driver.memory", "16g")
         .config("spark.cores.max", "16")

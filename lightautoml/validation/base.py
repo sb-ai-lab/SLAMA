@@ -1,5 +1,5 @@
 """Basic classes for validation iterators."""
-
+import logging
 from copy import copy
 from typing import Any, Iterator
 from typing import Generator
@@ -18,6 +18,8 @@ from lightautoml.pipelines.features.base import FeaturesPipeline
 # from ..pipelines.selection.base import SelectionPipeline
 
 # TODO: SOLVE CYCLIC IMPORT PROBLEM!!! add Selectors typing
+logger = logging.getLogger(__name__)
+
 
 Dataset = TypeVar("Dataset", bound=LAMLDataset)
 CustomIdxs = Iterable[Tuple[Sequence, Sequence]]
@@ -83,6 +85,7 @@ class TrainValidIterator:
             Copy of object with transformed features.
 
         """
+        logger.info(f"Applying feature pipeline via TrainValidIterator of type: {type(self)}")
         train_valid = copy(self)
         train_valid.train = features_pipeline.fit_transform(train_valid.train)
         return train_valid
@@ -123,7 +126,7 @@ class DummyIterator(TrainValidIterator):
             train: Train dataset.
 
         """
-        self.train = train
+        super().__init__(train)
 
     def __len__(self) -> Optional[int]:
         """Get 1 len.
@@ -173,7 +176,7 @@ class HoldoutIterator(TrainValidIterator):
             valid: Dataset of valid data.
 
         """
-        self.train = train
+        super().__init__(train)
         self.valid = valid
 
     def __len__(self) -> Optional[int]:

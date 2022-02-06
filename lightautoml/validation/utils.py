@@ -46,16 +46,15 @@ def create_validation_iterator(
         New iterator.
 
     """
-    iterator = DummyIterator(train)
-    # if type(train) in [PandasDataset, NumpyDataset, CSRSparseDataset]:
-    #     train = cast(NpDataset, train)
-    #     valid = cast(NpDataset, valid)
-    #     iterator = get_numpy_iterator(train, valid, n_folds, cv_iter)
-    #
-    # else:
-    #     if valid is not None:
-    #         iterator = HoldoutIterator(train, valid)
-    #     else:
-    #         iterator = DummyIterator(train)
-    #
+    if type(train) in [PandasDataset, NumpyDataset, CSRSparseDataset]:
+        train = cast(NpDataset, train)
+        valid = cast(NpDataset, valid)
+        iterator = get_numpy_iterator(train, valid, n_folds, cv_iter)
+
+    else:
+        if valid is not None:
+            iterator = HoldoutIterator(train, valid)
+        else:
+            iterator = DummyIterator(train)
+
     return iterator

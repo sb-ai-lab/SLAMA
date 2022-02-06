@@ -195,26 +195,26 @@ class LGBAdvancedPipeline(FeaturesPipeline, TabularDataFeatures):
 
             ordinal = sorted(list(set(ordinal)))
 
-        # TODO: fix the performance and uncomment
         # get label encoded categories
-        # le_part = self.get_categorical_raw(train, le)
-        # if le_part is not None:
-        #     le_part = SequentialTransformer([le_part, ChangeRoles(output_category_role)])
-        #     transformer_list.append(le_part)
+        le_part = self.get_categorical_raw(train, le)
+        if le_part is not None:
+            le_part = SequentialTransformer([le_part, ChangeRoles(output_category_role)])
+            transformer_list.append(le_part)
 
         # get target encoded part
-        # te_part = self.get_categorical_raw(train, te)
-        # if te_part is not None:
-        #     te_part = SequentialTransformer([te_part, target_encoder()])
-        #     transformer_list.append(te_part)
+        te_part = self.get_categorical_raw(train, te)
+        if te_part is not None:
+            te_part = SequentialTransformer([te_part, target_encoder()])
+            transformer_list.append(te_part)
 
+        # TODO: SPARK-LAMA fix bug with performance of catintersections
         # get intersection of top categories
         intersections = self.get_categorical_intersections(train)
         if intersections is not None:
-            # if target_encoder is not None:
-            #     ints_part = SequentialTransformer([intersections, target_encoder()])
-            # else:
-            ints_part = SequentialTransformer([intersections, ChangeRoles(output_category_role)])
+            if target_encoder is not None:
+                ints_part = SequentialTransformer([intersections, target_encoder()])
+            else:
+                ints_part = SequentialTransformer([intersections, ChangeRoles(output_category_role)])
 
             transformer_list.append(ints_part)
 
