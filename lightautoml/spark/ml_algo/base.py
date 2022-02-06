@@ -308,9 +308,10 @@ class TabularMLAlgo(MLAlgo):
         else:
             role = NumericRole(dtype=np.float32, force_input=True, prob=prob)
 
-        dataset.set_data(preds, [self._predict_feature_name()], role)
+        output: SparkDataset = dataset.empty()
+        output.set_data(preds, [self._predict_feature_name()], role)
 
-        return dataset
+        return output
 
     @staticmethod
     def _make_sdf_with_target(train: SparkDataset) -> SparkDataFrame:

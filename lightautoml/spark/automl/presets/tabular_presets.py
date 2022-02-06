@@ -9,8 +9,10 @@ from pyspark.sql import SparkSession
 from lightautoml.automl.presets.base import AutoMLPreset, upd_params
 from lightautoml.dataset.base import RolesDict, LAMLDataset
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
-from lightautoml.pipelines.selection.base import SelectionPipeline
+from lightautoml.pipelines.selection.base import SelectionPipeline, ComposedSelector
 from lightautoml.pipelines.selection.importance_based import ModelBasedImportanceEstimator, ImportanceCutoffSelector
+from lightautoml.pipelines.selection.permutation_importance_based import NpIterativeFeatureSelector
+from lightautoml.spark.pipelines.selection.permutation_importance_based import NpPermutationImportanceEstimator
 from lightautoml.reader.tabular_batch_generator import ReadableToDf, read_data
 from lightautoml.spark.automl.blend import WeightedBlender
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
@@ -184,9 +186,7 @@ class TabularAutoML(AutoMLPreset):
             selection_gbm.set_prefix("Selector")
 
             if selection_params["importance_type"] == "permutation":
-                # TODO: SPARK-LAMA add support for this selector
-                raise NotImplementedError("Not supported yet")
-                # importance = NpPermutationImportanceEstimator()
+                importance = NpPermutationImportanceEstimator()
             else:
                 importance = ModelBasedImportanceEstimator()
 
@@ -205,20 +205,18 @@ class TabularAutoML(AutoMLPreset):
                 selection_gbm = BoostLGBM(timer=sel_timer_1, **lgb_params)
                 selection_gbm.set_prefix("Selector")
 
-                # TODO: SPARK-LAMA add support for this selector
-                raise NotImplementedError("Not supported yet")
                 # # TODO: Check about reusing permutation importance
-                # importance = NpPermutationImportanceEstimator()
-                #
-                # extra_selector = NpIterativeFeatureSelector(
-                #     selection_feats,
-                #     selection_gbm,
-                #     importance,
-                #     feature_group_size=selection_params["feature_group_size"],
-                #     max_features_cnt_in_result=selection_params["max_features_cnt_in_result"],
-                # )
-                #
-                # pre_selector = ComposedSelector([pre_selector, extra_selector])
+                importance = NpPermutationImportanceEstimator()
+
+                extra_selector = NpIterativeFeatureSelector(
+                    selection_feats,
+                    selection_gbm,
+                    importance,
+                    feature_group_size=selection_params["feature_group_size"],
+                    max_features_cnt_in_result=selection_params["max_features_cnt_in_result"],
+                )
+                
+                pre_selector = ComposedSelector([pre_selector, extra_selector])
 
         return pre_selector
 

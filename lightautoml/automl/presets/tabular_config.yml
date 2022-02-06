@@ -73,7 +73,7 @@ selection_params:
   # 1 is good in most cases
   mode: 1
   # importance type permutation/gain
-  importance_type: 'gain'
+  importance_type: 'permutation'
   # pretrain selector on holdout set. True - fast/ False - accurate
   fit_on_holdout: True
   # cutoff value for permutation or gain (mode 1/2)
