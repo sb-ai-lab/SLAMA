@@ -1,6 +1,7 @@
 import logging
 import logging.config
 import os
+import shutil
 from copy import deepcopy, copy
 from pprint import pprint
 from typing import Any, Callable, Dict
@@ -127,7 +128,7 @@ logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
 
-def calculate_quality(calc_automl: Callable):
+def calculate_quality(calc_automl: Callable, delete_dir: bool = True):
 
     # dataset_name = "used_cars_dataset"
     dataset_name = "buzz_dataset"
@@ -147,6 +148,9 @@ def calculate_quality(calc_automl: Callable):
         cfg['cv'] = cv
 
         os.environ[LOG_DATA_DIR] = f"./dumps/datalogs_{dataset_name}_{seed}"
+        if os.path.exists(os.environ[LOG_DATA_DIR]) and delete_dir:
+            shutil.rmtree(os.environ[LOG_DATA_DIR])
+
         log_config("general", cfg)
 
         res = calc_automl(**cfg)
@@ -164,4 +168,4 @@ def calculate_quality(calc_automl: Callable):
 
 if __name__ == "__main__":
     calculate_quality(lama_automl)
-    calculate_quality(spark_automl)
+    calculate_quality(spark_automl, delete_dir=False)

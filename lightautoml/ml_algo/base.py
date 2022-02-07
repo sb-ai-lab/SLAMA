@@ -235,6 +235,8 @@ class TabularMLAlgo(MLAlgo):
         """
         self.timer.start()
 
+        log_data(f"lama_fit_predict_{type(self).__name__}", {"train": train_valid_iterator.train})
+
         assert self.is_fitted is False, "Algo is already fitted"
         # init params on input if no params was set before
         if self._params is None:
@@ -271,7 +273,7 @@ class TabularMLAlgo(MLAlgo):
                 )
             self.timer.set_control_point()
 
-            log_data(f"lama_fit_predict_{n}", {"train": train, "valid": valid})
+            log_data(f"lama_fit_predict_{type(self).__name__}_{n}", {"train": train, "valid": valid})
 
             model, pred = self.fit_predict_single_fold(train, valid)
 
@@ -279,7 +281,7 @@ class TabularMLAlgo(MLAlgo):
                 tmp_ds = valid.empty()
                 tmp_ds.set_data(pred[:, np.newaxis], "prediction", NumericRole(np.float32, force_input=True, prob=self.task.name in ["binary", "multiclass"]))
                 val_score = self.score(tmp_ds)
-                log_metric("lama", f"fit_predict_{n}", "valid_score", str(val_score))
+                log_metric("lama", f"fit_predict_{type(self).__name__}_{n}", "valid_score", str(val_score))
 
             self.models.append(model)
             preds_arr[idx] += pred.reshape((pred.shape[0], -1))
@@ -306,7 +308,7 @@ class TabularMLAlgo(MLAlgo):
 
         if is_datalog_enabled():
             val_score = self.score(preds_ds)
-            log_metric("lama", f"fit_predict_full", "valid_score", str(val_score))
+            log_metric("lama", f"fit_predict_{type(self).__name__}_full", "valid_score", str(val_score))
 
         return preds_ds
 
@@ -337,7 +339,7 @@ class TabularMLAlgo(MLAlgo):
         preds_ds = dataset.empty().to_numpy()
         preds_arr = None
 
-        log_data("lama_predict", {"predict": dataset})
+        log_data(f"lama_predict_{type(self).__name__}", {"predict": dataset})
 
         for model in self.models:
             if preds_arr is None:

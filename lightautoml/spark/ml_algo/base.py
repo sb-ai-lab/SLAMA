@@ -66,6 +66,8 @@ class TabularMLAlgo(MLAlgo):
         """
         self.timer.start()
 
+        log_data(f"spark_fit_predict_{type(self).__name__}", {"train": train_valid_iterator.train.to_pandas()})
+
         assert self.is_fitted is False, "Algo is already fitted"
         # init params on input if no params was set before
         if self._params is None:
@@ -113,7 +115,7 @@ class TabularMLAlgo(MLAlgo):
             self.timer.set_control_point()
 
             # TODO: SPARK-LAMA only for debug, remove later
-            log_data(f"spark_fit_predict_{n}", {"train": train.to_pandas(), "valid": valid.to_pandas()})
+            log_data(f"spark_fit_predict_{type(self).__name__}_{n}", {"train": train.to_pandas(), "valid": valid.to_pandas()})
 
             model, pred, prediction_column = self.fit_predict_single_fold(train, valid)
 
@@ -127,7 +129,7 @@ class TabularMLAlgo(MLAlgo):
                 tmp_ds.set_data(pred, f"{pred_col_prefix}_{n}", NumericRole(np.float32, force_input=True,
                                                                 prob=self.task.name in ["binary", "multiclass"]))
                 val_score = self.score(tmp_ds)
-                log_metric("spark", f"fit_predict_{n}", "valid_score", str(val_score))
+                log_metric("spark", f"fit_predict_{type(self).__name__}_{n}", "valid_score", str(val_score))
 
             self.models.append(model)
             preds_dfs.append(pred)
@@ -156,7 +158,7 @@ class TabularMLAlgo(MLAlgo):
 
         if is_datalog_enabled():
             val_score = self.score(pred_ds)
-            log_metric("spark", f"fit_predict_full", "valid_score", str(val_score))
+            log_metric("spark", f"fit_predict_{type(self).__name__}_full", "valid_score", str(val_score))
 
         return pred_ds
 
@@ -198,7 +200,7 @@ class TabularMLAlgo(MLAlgo):
         """
         assert self.models != [], "Should be fitted first."
 
-        log_data("spark_predict", {"predict": dataset.to_pandas()})
+        log_data(f"spark_predict_{type(self).__name__}", {"predict": dataset.to_pandas()})
 
         pred_col_prefix = self._predict_feature_name()
         preds_dfs = [
