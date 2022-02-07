@@ -199,10 +199,10 @@ class LGBAdvancedPipeline(FeaturesPipeline, TabularDataFeatures):
         # get intersection of top categories
         intersections = self.get_categorical_intersections(train)
         if intersections is not None:
-            # if target_encoder is not None:
-            #     ints_part = SequentialTransformer([intersections, target_encoder()])
-            # else:
-            ints_part = SequentialTransformer([intersections, ChangeRoles(output_category_role)])
+            if target_encoder is not None:
+                ints_part = SequentialTransformer([intersections, target_encoder()])
+            else:
+                ints_part = SequentialTransformer([intersections, ChangeRoles(output_category_role)])
 
             transformer_list.append(ints_part)
 
