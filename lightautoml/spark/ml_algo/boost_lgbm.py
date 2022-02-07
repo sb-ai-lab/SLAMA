@@ -262,8 +262,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
                             dataset: SparkDataset,
                             model: Union[LightGBMRegressor, LightGBMClassifier]) -> SparkDataFrame:
 
-        log_data("spark_lgb_predict", {"predict": dataset.to_pandas()})
-
         temp_sdf = self._assembler.transform(dataset.data)
 
         pred = model.transform(temp_sdf)
@@ -280,8 +278,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             fobj,
             feval,
         ) = self._infer_params()
-
-        log_data("spark_lgb_train_val", {"train": train.to_pandas(), "valid": valid.to_pandas()})
 
         is_val_col = 'is_val'
         train_sdf = self._make_sdf_with_target(train).withColumn(is_val_col, F.lit(0))

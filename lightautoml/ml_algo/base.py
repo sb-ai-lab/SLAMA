@@ -25,7 +25,7 @@ from ..dataset.np_pd_dataset import PandasDataset
 from ..dataset.roles import NumericRole
 from ..utils.timer import PipelineTimer
 from ..utils.timer import TaskTimer
-
+from ..utils.tmp_utils import log_data, log_metric, is_datalog_enabled
 
 logger = logging.getLogger(__name__)
 TabularDataset = Union[NumpyDataset, CSRSparseDataset, PandasDataset]
@@ -271,7 +271,16 @@ class TabularMLAlgo(MLAlgo):
                 )
             self.timer.set_control_point()
 
+            log_data(f"lama_fit_predict_{n}", {"train": train, "valid": valid})
+
             model, pred = self.fit_predict_single_fold(train, valid)
+
+            if is_datalog_enabled():
+                tmp_ds = valid.empty()
+                tmp_ds.set_data(pred[:, np.newaxis], "prediction", NumericRole(np.float32, force_input=True, prob=self.task.name in ["binary", "multiclass"]))
+                val_score = self.score(tmp_ds)
+                log_metric("lama", f"fit_predict_{n}", "valid_score", str(val_score))
+
             self.models.append(model)
             preds_arr[idx] += pred.reshape((pred.shape[0], -1))
             counter_arr[idx] += 1
@@ -294,6 +303,11 @@ class TabularMLAlgo(MLAlgo):
 
         if iterator_len > 1 or "Tuned" not in self._name:
             logger.info("\x1b[1m{}\x1b[0m fitting and predicting completed".format(self._name))
+
+        if is_datalog_enabled():
+            val_score = self.score(preds_ds)
+            log_metric("lama", f"fit_predict_full", "valid_score", str(val_score))
+
         return preds_ds
 
     def predict_single_fold(self, model: Any, dataset: TabularDataset) -> np.ndarray:
@@ -322,6 +336,8 @@ class TabularMLAlgo(MLAlgo):
         assert self.models != [], "Should be fitted first."
         preds_ds = dataset.empty().to_numpy()
         preds_arr = None
+
+        log_data("lama_predict", {"predict": dataset})
 
         for model in self.models:
             if preds_arr is None:

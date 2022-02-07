@@ -11,6 +11,7 @@ from lightautoml.ml_algo.base import MLAlgo
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.utils.timer import TaskTimer
+from lightautoml.utils.tmp_utils import log_data, log_metric, is_datalog_enabled
 from lightautoml.validation.base import TrainValidIterator
 
 # from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
@@ -111,11 +112,23 @@ class TabularMLAlgo(MLAlgo):
                 )
             self.timer.set_control_point()
 
+            # TODO: SPARK-LAMA only for debug, remove later
+            log_data(f"spark_fit_predict_{n}", {"train": train.to_pandas(), "valid": valid.to_pandas()})
+
             model, pred, prediction_column = self.fit_predict_single_fold(train, valid)
+
             pred = pred.select(
                 SparkDataset.ID_COLUMN,
                 F.col(prediction_column).alias(f"{pred_col_prefix}_{n}")
             )
+
+            if is_datalog_enabled():
+                tmp_ds = valid.empty()
+                tmp_ds.set_data(pred, f"{pred_col_prefix}_{n}", NumericRole(np.float32, force_input=True,
+                                                                prob=self.task.name in ["binary", "multiclass"]))
+                val_score = self.score(tmp_ds)
+                log_metric("spark", f"fit_predict_{n}", "valid_score", str(val_score))
+
             self.models.append(model)
             preds_dfs.append(pred)
 
@@ -140,6 +153,11 @@ class TabularMLAlgo(MLAlgo):
 
         if iterator_len > 1 or "Tuned" not in self._name:
             logger.info("\x1b[1m{}\x1b[0m fitting and predicting completed".format(self._name))
+
+        if is_datalog_enabled():
+            val_score = self.score(pred_ds)
+            log_metric("spark", f"fit_predict_full", "valid_score", str(val_score))
+
         return pred_ds
 
     def fit_predict_single_fold(self, train: SparkDataset, valid: SparkDataset) -> Tuple[SparkMLModel, SparkDataFrame, str]:
@@ -179,6 +197,8 @@ class TabularMLAlgo(MLAlgo):
 
         """
         assert self.models != [], "Should be fitted first."
+
+        log_data("spark_predict", {"predict": dataset.to_pandas()})
 
         pred_col_prefix = self._predict_feature_name()
         preds_dfs = [

@@ -252,8 +252,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             feval,
         ) = self._infer_params()
 
-        log_data("lama_lgb_train_val", {"train": train, "valid": valid})
-
         train_target, train_weight = self.task.losses["lgb"].fw_func(train.target, train.weights)
         valid_target, valid_weight = self.task.losses["lgb"].fw_func(valid.target, valid.weights)
 
@@ -289,7 +287,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
             Predicted target values.
 
         """
-        log_data("lama_lgb_predict", {"predict": dataset})
         pred = self.task.losses["lgb"].bw_func(model.predict(dataset.data))
 
         return pred

@@ -387,7 +387,7 @@ class PandasToPandasReader(Reader):
         #     self._roles = {x: new_roles[x] for x in new_roles if x not in droplist}
         #     dataset = PandasDataset(train_data[self.used_features], self.roles, task=self.task, **kwargs)
 
-        # log_data("p2preader", dataset)
+        log_data("lama_reader_fit_read", {"train": dataset.to_pandas()})
 
         return dataset
 
@@ -537,6 +537,8 @@ class PandasToPandasReader(Reader):
                 kwargs[array_attr] = val
 
         dataset = PandasDataset(data[self.used_features], roles=self.roles, task=self.task, **kwargs)
+
+        log_data("lama_reader_read", {"predict": dataset.to_pandas()})
 
         return dataset
 
