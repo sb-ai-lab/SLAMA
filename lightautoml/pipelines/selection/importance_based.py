@@ -10,7 +10,7 @@ from ...ml_algo.base import MLAlgo
 from ..features.base import FeaturesPipeline
 from .base import ImportanceEstimator
 from .base import SelectionPipeline
-
+from ...utils.tmp_utils import log_data
 
 ImportanceEstimatedAlgo = TypeVar("ImportanceEstimatedAlgo", bound=ImportanceEstimator)
 
@@ -75,6 +75,7 @@ class ImportanceCutoffSelector(SelectionPipeline):
 
         """
         imp = self.imp_estimator.get_features_score()
+        log_data(f"datalog_cutoff_selector", {"feature_importance": imp.sort_values(), "cutoff": self.cutoff})
         self.map_raw_feature_importances(imp)
         selected = self.mapped_importances.index.values[self.mapped_importances.values > self.cutoff]
         if len(selected) == 0:

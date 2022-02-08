@@ -6,6 +6,7 @@ from traceback import extract_stack, format_stack
 from typing import Any, Union, Dict
 
 LOG_DATA_DIR = "LOG_DATA_DIR"
+LAMA_LIBRARY = "LAMA_LIBRARY"
 
 
 def is_datalog_enabled():
@@ -15,6 +16,10 @@ def is_datalog_enabled():
 def log_data(name: str, data: Any) -> None:
     if not is_datalog_enabled():
         return
+
+    if "spark" not in name and "lama" not in name:
+        library = os.environ[LAMA_LIBRARY] if LAMA_LIBRARY in os.environ else "unknownlib"
+        name = f"{name}_{library}"
 
     base_path = os.environ[LOG_DATA_DIR]
     os.makedirs(base_path, exist_ok=True)

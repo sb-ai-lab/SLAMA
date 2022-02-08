@@ -4,6 +4,7 @@
 Simple example for binary classification on tabular data.
 """
 import logging
+import os
 from typing import Dict, Any, Optional
 
 import pandas as pd
@@ -13,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
 from lightautoml.spark.utils import log_exec_time
 from lightautoml.tasks import Task
-from lightautoml.utils.tmp_utils import log_data
+from lightautoml.utils.tmp_utils import log_data, LAMA_LIBRARY
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,8 @@ def calculate_automl(path: str,
                      use_algos = ("lgb", "linear_l2"),
                      roles: Optional[Dict] = None,
                      dtype: Optional[Dict] = None) -> Dict[str, Any]:
+    os.environ[LAMA_LIBRARY] = "lama"
+
     with log_exec_time("LAMA"):
         # to assure that LAMA correctly interprets these columns as categorical
         roles = roles if roles else {}
