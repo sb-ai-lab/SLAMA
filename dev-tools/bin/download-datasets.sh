@@ -12,3 +12,6 @@ wget https://www.openml.org/data/get_csv/1798765/phpYLeydd -O /opt/gesture_segme
 wget https://www.openml.org/data/get_csv/52422/ipums_la_97-small.arff -O /opt/ipums_97.csv
 
 head -n 25001 /opt/Buzzinsocialmedia_Twitter.csv > /opt/Buzzinsocialmedia_Twitter_25k.csv
+
+#cp examples/data/sampled_app_train.csv /opt
+#cp examples/data/small_used_cars_data.csv /opt

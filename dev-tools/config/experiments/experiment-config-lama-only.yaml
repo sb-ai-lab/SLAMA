@@ -1,0 +1,19 @@
+---
+calculation_scripts:
+  spark: spark_used_cars.py
+  lama: lama_used_cars.py
+spark_quality_repeat_rate: 2
+state_file: 'delete'  # Available values are 'use|ignore|delete', use - skip experiments in state file, ignore - don`t skip experiments, delete - delete experiments in state file
+
+# Unique set of parameters for each experiment
+
+experiments:
+  - name: "cmp-all"
+    library: ["lama"]
+    repeat_rate: 1
+    params:
+      dataset: ["buzz_dataset"]
+      seed: [42, 100]
+      cv: [5]
+      use_algos:
+        - [["lgb"]]

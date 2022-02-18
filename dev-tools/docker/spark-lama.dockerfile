@@ -1,5 +1,7 @@
 FROM spark-pyspark-python:3.9-3.2.0
 
+ARG spark_jars_cache=jars_cache
+
 WORKDIR /src
 
 RUN pip install poetry
@@ -12,10 +14,9 @@ COPY requirements.txt /src
 # before this image building: poetry export -f requirements.txt > requirements.txt
 RUN pip install -r requirements.txt
 
-COPY poetry.lock /src
-COPY pyproject.toml /src
-RUN poetry install
+RUN pip install torchvision==0.9.1
 
-COPY . /src
-RUN poetry build
-RUN pip install dist/LightAutoML-0.3.0-py3-none-any.whl
+COPY dist/LightAutoML-0.3.0-py3-none-any.whl /tmp/LightAutoML-0.3.0-py3-none-any.whl
+RUN pip install /tmp/LightAutoML-0.3.0-py3-none-any.whl
+
+

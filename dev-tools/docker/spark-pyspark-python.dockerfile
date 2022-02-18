@@ -21,3 +21,5 @@ RUN wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SP
 	rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz
 
 RUN pip install pyspark==${SPARK_VERSION} pyarrow
+
+COPY jars_cache /root/.ivy2/cache

@@ -1,0 +1,74 @@
+---
+experiment_type: spark_quality
+calculation_scripts:
+  spark: spark_used_cars.py
+  lama: lama_used_cars.py
+spark_quality_repeat_rate: 2
+state_file: 'delete'  # Available values are 'use|ignore|delete', use - skip experiments in state file, ignore - don`t skip experiments, delete - delete experiments in state file
+
+# Unique set of parameters for each experiment
+
+experiments:
+  - name: "cmp-all"
+    library: ["spark"]
+    repeat_rate: 1
+    params:
+      dataset: ["buzz_dataset"]
+      seed: [42, 100]
+      cv: [5]
+      use_algos:
+        - [["lgb"]]
+    spark_config:
+      spark.executor.instances: ['2']
+      spark.executor.cores: ['4']
+
+# Static parameters for Spark
+default_spark_config: {
+  spark.master: k8s://https://node2.bdcl:6443,
+  #deploy-mode: cluster,
+  spark.driver.bindAddress: '0.0.0.0',
+  spark.kubernetes.container.image: node2.bdcl:5000/spark-lama-k8s:3.9-3.2.0,
+  spark.kubernetes.namespace: spark-lama-exps,
+  spark.kubernetes.authenticate.driver.serviceAccountName: spark,
+  spark.kubernetes.memoryOverheadFactor: '0.2',
+  spark.kubernetes.driver.label.appname: driver-test-submit-run,
+  spark.kubernetes.executor.label.appname: executor-test-submit-run,
+  spark.kubernetes.executor.deleteOnTermination: 'false',
+  spark.jars.packages: com.microsoft.azure:synapseml_2.12:0.9.4,
+  spark.jars.repositories: https://mmlspark.azureedge.net/maven,
+  spark.driver.cores: '4',
+  spark.driver.memory: '16g',
+  spark.executor.instances: '4',
+  spark.executor.cores: '4',
+  spark.executor.memory: '16g',
+  spark.cores.max: '16',
+  spark.memory.fraction:  '0.6',
+  spark.memory.storageFraction: '0.5',
+  spark.sql.autoBroadcastJoinThreshold: 100MB,
+  spark.sql.execution.arrow.pyspark.enabled: 'true',
+
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.options.claimName: spark-lama-data,
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.options.storageClass: local-hdd,
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.mount.path: /opt/spark_data/,
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.mount.readOnly: 'true',
+
+  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.options.claimName: spark-lama-data,
+  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.options.storageClass: local-hdd,
+  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.mount.path: /opt/spark_data/,
+  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.mount.readOnly: 'true',
+
+#  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.options.claimName: spark-lama-ivy2-cache,
+#  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.options.storageClass: local-hdd,
+#  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.mount.path: /root/.ivy2/cache,
+#  spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.mount.readOnly: 'true',
+#
+#  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.options.claimName: spark-lama-ivy2-cache,
+#  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.options.storageClass: local-hdd,
+#  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.mount.path: /root/.ivy2/cache,
+#  spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-ivy2-cache.mount.readOnly: 'true',
+
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.exp-results-vol.options.claimName:  exp-results-vol,
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.exp-results-vol.options.storageClass: local-hdd,
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.exp-results-vol.mount.path: /exp_results,
+  spark.kubernetes.driver.volumes.persistentVolumeClaim.exp-results-vol.mount.readOnly: 'false',
+}

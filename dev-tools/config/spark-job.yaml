@@ -1,0 +1,35 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: spark-lama-exps
+  name: exp-test
+spec:
+  template:
+    metadata:
+      name: exp-test-pod
+    spec:
+      serviceAccountName: spark
+      automountServiceAccountToken: true
+      volumes:
+        - name: spark-lama-data
+          persistentVolumeClaim:
+            claimName: spark-lama-data
+            readOnly: True
+        - name: scripts-volume
+          configMap:
+            name: exp-test-scripts
+      containers:
+      - name: spark
+        image: node2.bdcl:5000/spark-lama:3.9-3.2.0
+        command: [ "python" ]
+        args: ["/scripts/spark_used_cars.py", "1"]
+        imagePullPolicy: Always
+        volumeMounts:
+          - mountPath: /spark_data
+            name: spark-lama-data
+            readOnly: true
+          - name: scripts-volume
+            mountPath: /scripts
+      restartPolicy: Never
+  backoffLimit: 0

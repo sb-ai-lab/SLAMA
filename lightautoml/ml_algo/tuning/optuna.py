@@ -154,7 +154,7 @@ class OptunaTuner(ParamsTuner):
             ml_algo.params = self._best_params
 
             logger.info(f"Hyperparameters optimization for \x1b[1m{ml_algo._name}\x1b[0m completed")
-            logger.info2(
+            logger.info(
                 f"The set of hyperparameters \x1b[1m{self._best_params}\x1b[0m\n achieve {self.study.best_value:.4f} {metric_name}"
             )
 
@@ -213,7 +213,9 @@ class OptunaTuner(ParamsTuner):
 
             output_dataset = _ml_algo.fit_predict(train_valid_iterator=train_valid_iterator)
 
-            return _ml_algo.score(output_dataset)
+            score = _ml_algo.score(output_dataset)
+            logger.info(f"SCORE FROM OBJECTIVE: {score}")
+            return score
 
         return objective
 
