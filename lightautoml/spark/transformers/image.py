@@ -14,7 +14,7 @@ from lightautoml.image.image import DeepImageEmbedder, CreateImageFeatures
 from lightautoml.image.utils import pil_loader
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
-from lightautoml.spark.transformers.base import SparkTransformer
+from lightautoml.spark.transformers.base import ObsoleteSparkTransformer
 from lightautoml.text.utils import single_text_hash
 from lightautoml.transformers.image import path_check
 
@@ -43,7 +43,7 @@ def path_or_vector_check(dataset: LAMLDataset):
 
 
 # TODO: needs a vector based alternative
-class ImageFeaturesTransformer(SparkTransformer):
+class ImageFeaturesTransformer(ObsoleteSparkTransformer):
     """Simple image histogram."""
 
     _fit_checks = (path_check,)
@@ -143,7 +143,7 @@ class ImageFeaturesTransformer(SparkTransformer):
         return output
 
 
-class AutoCVWrap(SparkTransformer):
+class AutoCVWrap(ObsoleteSparkTransformer):
     """Calculate image embeddings."""
     _fit_checks = ()
     _transform_checks = ()

@@ -239,6 +239,7 @@ class EmptySelector(SelectionPipeline):
     """Empty selector - perform no selection, just save input features names."""
 
     def __init__(self):
+        print('i am here')
         super().__init__()
 
     def perform_selection(self, train_valid: Optional[TrainValidIterator]):

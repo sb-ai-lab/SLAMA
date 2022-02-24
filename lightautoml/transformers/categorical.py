@@ -28,7 +28,7 @@ NumpyOrPandas = Union[NumpyDataset, PandasDataset]
 NumpyOrSparse = Union[NumpyDataset, CSRSparseDataset]
 
 
-def categorical_check(dataset: LAMLDataset):
+def categorical_check(dataset: LAMLDataset, use_features: Optional[List[str]] = None):
     """Check if all passed vars are categories.
 
     Raises AssertionError if non-categorical features are present.
@@ -39,11 +39,12 @@ def categorical_check(dataset: LAMLDataset):
     """
     roles = dataset.roles
     features = dataset.features
-    for f in features:
+    feats = use_features if use_features else features
+    for f in feats:
         assert roles[f].name == "Category", "Only categories accepted in this transformer"
 
 
-def oof_task_check(dataset: LAMLDataset):
+def oof_task_check(dataset: LAMLDataset, use_features: Optional[List[str]] = None):
     """Check if all passed vars are categories.
 
     Args:
@@ -70,7 +71,7 @@ def multiclass_task_check(dataset: LAMLDataset):
     assert task.name in ["multiclass"], "Only multiclass tasks supported in this transformer"
 
 
-def encoding_check(dataset: LAMLDataset):
+def encoding_check(dataset: LAMLDataset, use_features: Optional[List[str]] = None):
     """Check if all passed vars are categories.
 
     Args:
@@ -79,7 +80,8 @@ def encoding_check(dataset: LAMLDataset):
     """
     roles = dataset.roles
     features = dataset.features
-    for f in features:
+    feats = use_features if use_features else features
+    for f in feats:
         assert roles[
             f
         ].label_encoded, "Transformer should be applied to category only after label encoding. Feat {0} is {1}".format(
@@ -423,7 +425,7 @@ class TargetEncoder(LAMLTransformer):
         return idx
 
     def fit(self, dataset: NumpyOrPandas):
-        super().fit_transform(dataset)
+        self.fit_transform(dataset)
 
     def fit_transform(self, dataset: NumpyOrPandas) -> NumpyDataset:
         """Calc oof encoding and save encoding stats for new data.

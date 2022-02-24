@@ -15,6 +15,7 @@ from typing import Union
 from typing import cast
 
 import numpy as np
+from pyspark.ml import Model
 
 from lightautoml.validation.base import TrainValidIterator
 
@@ -118,7 +119,7 @@ class MLAlgo(ABC):
 
         self.default_params = {**self._default_params, **default_params}
 
-        self.models = []
+        self.models: List[Model] = []
         self._features = None
 
         self.timer = timer
@@ -235,7 +236,8 @@ class TabularMLAlgo(MLAlgo):
         """
         self.timer.start()
 
-        log_data(f"lama_fit_predict_{type(self).__name__}", {"train": train_valid_iterator.train})
+        logger.info(f"Input columns for MLALgo: {sorted(train_valid_iterator.train.features)}")
+        # log_data(f"lama_fit_predict_{type(self).__name__}", {"train": train_valid_iterator.train})
 
         assert self.is_fitted is False, "Algo is already fitted"
         # init params on input if no params was set before

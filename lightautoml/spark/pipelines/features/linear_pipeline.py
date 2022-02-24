@@ -1,37 +1,20 @@
-from typing import Optional, Union, cast
+from typing import Optional, Set, Union
+
 import numpy as np
 
-from lightautoml.dataset.base import LAMLDataset
-from lightautoml.pipelines.features.linear_pipeline import LinearFeatures as LAMALinearFeatures
+from lightautoml.dataset.roles import CategoryRole
 from lightautoml.pipelines.selection.base import ImportanceEstimator
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.pipelines.features.base import TabularDataFeatures
-
-from lightautoml.pipelines.utils import get_columns_by_role
-from lightautoml.dataset.roles import CategoryRole
-
+from lightautoml.spark.pipelines.features.base import SparkFeaturesPipeline, SparkTabularDataFeatures
+from lightautoml.spark.transformers.base import SparkChangeRolesTransformer, SparkUnionTransformer, \
+    SparkSequentialTransformer, SparkEstOrTrans
 # Same comments as for spark.pipelines.features.base
-from lightautoml.spark.transformers.base import SequentialTransformer, SparkTransformer, UnionTransformer, ChangeRoles
-from lightautoml.spark.transformers.categorical import LabelEncoder, OHEEncoder
-from lightautoml.spark.transformers.numeric import FillInf, FillnaMedian, LogOdds, StandardScaler, NaNFlags
+from lightautoml.spark.transformers.categorical import SparkOHEEncoderEstimator, SparkLabelEncoderEstimator
+from lightautoml.spark.transformers.numeric import SparkFillInfTransformer, SparkFillnaMedianEstimator, \
+    SparkLogOddsTransformer, SparkNaNFlagsEstimator, SparkStandardScalerEstimator
 
 
-class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
-    """
-    Creates pipeline for linear models and nnets.
-
-    Includes:
-
-        - Create categorical intersections.
-        - OHE or embed idx encoding for categories.
-        - Other cats to numbers ways if defined in role params.
-        - Standartization and nan handling for numbers.
-        - Numbers discretization if needed.
-        - Dates handling.
-        - Handling probs (output of lower level models).
-
-    """
-
+class SparkLinearFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
     def __init__(
         self,
         feats_imp: Optional[ImportanceEstimator] = None,
@@ -43,6 +26,7 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         auto_unique_co: int = 50,
         output_categories: bool = True,
         multiclass_te_co: int = 3,
+        cacher_key: str = 'default_cacher',
         **_
     ):
         """
@@ -62,42 +46,24 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
               on multiclass task if number of classes is high.
 
         """
-        LAMALinearFeatures.__init__(
-            self,
-            feats_imp,
-            top_intersections,
-            max_bin_count,
-            max_intersection_depth,
-            subsample,
-            sparse_ohe,
-            auto_unique_co,
-            output_categories,
-            multiclass_te_co,
+        super().__init__(
+            cacher_key=cacher_key,
+            multiclass_te_co=multiclass_te_co,
+            top_intersections=top_intersections,
+            max_intersection_depth=max_intersection_depth,
+            subsample=subsample,
+            feats_imp=feats_imp,
+            auto_unique_co=auto_unique_co,
+            output_categories=output_categories,
+            ascending_by_cardinality=False,
         )
+        # self._input_features = input_features
+        # self._input_roles = input_roles
 
-    def _merge_seq(self, data: LAMLDataset) -> SparkTransformer:
-        data = cast(SparkDataset, data)
-        pipes = []
-        for pipe in self.pipes:
-            _pipe = cast(SparkTransformer, pipe(data))
+    def _get_input_features(self) -> Set[str]:
+        return set(self.input_features)
 
-            with data.applying_temporary_caching():
-                data = cast(SparkDataset, _pipe.fit_transform(data))
-                data.cache_and_materialize()
-
-            pipes.append(_pipe)
-
-        return SequentialTransformer(pipes, is_already_fitted=True) if len(pipes) > 1 else pipes[-1]
-
-    def _merge(self, data: SparkDataset) -> SparkTransformer:
-        pipes = [cast(SparkTransformer, pipe(data))
-                 for pipe in self.pipes]
-
-        union = UnionTransformer(pipes) if len(pipes) > 1 else pipes[0]
-        print(f"Producing union: {type(union)}")
-        return union
-
-    def create_pipeline(self, train: SparkDataset) -> SparkTransformer:
+    def create_pipeline(self, train: SparkDataset) -> SparkEstOrTrans:
         """Create linear pipeline.
 
         Args:
@@ -120,7 +86,7 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         dense_list.append(self.get_freq_encoding(train))
 
         # 2 - check 'auto' type (int is the same - no label encoded numbers in linear models)
-        auto = get_columns_by_role(train, "Category", encoding_type="auto") + get_columns_by_role(
+        auto = self._cols_by_role(train, "Category", encoding_type="auto") + self._cols_by_role(
             train, "Category", encoding_type="int"
         )
 
@@ -128,14 +94,14 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         if target_encoder is None:
             le = (
                     auto
-                    + get_columns_by_role(train, "Category", encoding_type="oof")
-                    + get_columns_by_role(train, "Category", encoding_type="ohe")
+                    + self._cols_by_role(train, "Category", encoding_type="oof")
+                    + self._cols_by_role(train, "Category", encoding_type="ohe")
             )
             te = []
 
         else:
-            te = get_columns_by_role(train, "Category", encoding_type="oof")
-            le = get_columns_by_role(train, "Category", encoding_type="ohe")
+            te = self._cols_by_role(train, "Category", encoding_type="oof")
+            le = self._cols_by_role(train, "Category", encoding_type="ohe")
             # split auto categories by unique values cnt
             un_values = self.get_uniques_cnt(train, auto)
             te = te + [x for x in un_values.index if un_values[x] > self.auto_unique_co]
@@ -144,18 +110,32 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         # get label encoded categories
         sparse_list.append(self.get_categorical_raw(train, le))
 
-        # TODO: fix the performance and uncomment
         # get target encoded categories
         te_part = self.get_categorical_raw(train, te)
         if te_part is not None:
-            te_part = SequentialTransformer([te_part, target_encoder()])
+            target_encoder_stage = target_encoder(
+                input_cols=te_part.getOutputCols(),
+                input_roles=te_part.getOutputRoles(),
+                task_name=train.task.name,
+                folds_column=train.folds_column,
+                target_column=train.target_column,
+                do_replace_columns=True)
+            te_part = SparkSequentialTransformer([te_part, target_encoder_stage])
             te_list.append(te_part)
         
         # get intersection of top categories
         intersections = self.get_categorical_intersections(train)
         if intersections is not None:
             if target_encoder is not None:
-                ints_part = SequentialTransformer([intersections, target_encoder()])
+                target_encoder_stage = target_encoder(
+                    input_cols=intersections.getOutputCols(),
+                    input_roles=intersections.getOutputRoles(),
+                    task_name=train.task.name,
+                    folds_column=train.folds_column,
+                    target_column=train.target_column,
+                    do_replace_columns=True
+                )
+                ints_part = SparkSequentialTransformer([intersections, target_encoder_stage])
                 te_list.append(ints_part)
             else:
                 sparse_list.append(intersections)
@@ -163,7 +143,11 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         # add datetime seasonality
         seas_cats = self.get_datetime_seasons(train, CategoryRole(np.int32))
         if seas_cats is not None:
-            sparse_list.append(SequentialTransformer([seas_cats, LabelEncoder()]))
+            # sparse_list.append(SequentialTransformer([seas_cats, LabelEncoder()]))
+            label_encoder_stage = SparkLabelEncoderEstimator(input_cols=seas_cats.outputCols(),
+                                                             input_roles=seas_cats.outputRoles(),
+                                                             do_replace_columns=True)
+            sparse_list.append(SparkSequentialTransformer([seas_cats, label_encoder_stage]))
 
         # get quantile binning
         sparse_list.append(self.get_binned_data(train))
@@ -180,23 +164,38 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         # handle probs if exists
         probs_list = [x for x in probs_list if x is not None]
         if len(probs_list) > 0:
-            probs_pipe = UnionTransformer(probs_list)
-            probs_pipe = SequentialTransformer([probs_pipe, LogOdds()])
+            probs_pipe = SparkUnionTransformer(probs_list)
+            probs_pipe = SparkSequentialTransformer([probs_pipe,
+                                                     SparkLogOddsTransformer(input_cols=probs_pipe.get_output_cols(),
+                                                                             input_roles=probs_pipe.get_output_roles(),
+                                                                             do_replace_columns=True)])
             dense_list.append(probs_pipe)
 
         # handle dense
         dense_list = [x for x in dense_list if x is not None]
         if len(dense_list) > 0:
             # standartize, fillna, add null flags
-            dense_pipe = SequentialTransformer(
+
+            dense_pipe1 = SparkUnionTransformer(dense_list)
+            fill_inf_stage = SparkFillInfTransformer(input_cols=dense_pipe1.get_output_cols(),
+                                                     input_roles=dense_pipe1.get_output_roles(),
+                                                     do_replace_columns=True)
+            fill_na_median_stage = SparkFillnaMedianEstimator(input_cols=fill_inf_stage.getOutputCols(),
+                                                              input_roles=fill_inf_stage.getOutputCols(),
+                                                              do_replace_columns=True)
+            standerd_scaler_stage = SparkStandardScalerEstimator(input_cols=fill_na_median_stage.getOutputCols(),
+                                                                 input_roles=fill_na_median_stage.getOutputRoles(),
+                                                                 do_replace_columns=True)
+
+            dense_pipe = SparkSequentialTransformer(
                 [
-                    UnionTransformer(dense_list),
-                    UnionTransformer(
-                        [
-                            SequentialTransformer([FillInf(), FillnaMedian(), StandardScaler()]),
-                            NaNFlags(),
-                        ]
-                    ),
+                    dense_pipe1,
+                    SparkUnionTransformer([
+                        SparkNaNFlagsEstimator(input_cols=dense_pipe1.get_output_cols(),
+                                               input_roles=dense_pipe1.get_output_roles(),
+                                               do_replace_columns=True),
+                        SparkSequentialTransformer([fill_inf_stage, fill_na_median_stage, standerd_scaler_stage])
+                    ])
                 ]
             )
             transformers_list.append(dense_pipe)
@@ -204,19 +203,25 @@ class LinearFeatures(TabularDataFeatures, LAMALinearFeatures):
         # handle categories - cast to float32 if categories are inputs or make ohe
         sparse_list = [x for x in sparse_list if x is not None]
         if len(sparse_list) > 0:
-            sparse_pipe = UnionTransformer(sparse_list)
+            sparse_pipe = SparkUnionTransformer(sparse_list)
             if self.output_categories:
-                final = ChangeRoles(CategoryRole(np.float32))
+                final = SparkChangeRolesTransformer(input_cols=sparse_pipe.get_output_cols(),
+                                                    input_roles=sparse_pipe.get_output_roles(),
+                                                    role=CategoryRole(np.float32))
             else:
                 if self.sparse_ohe == "auto":
-                    final = OHEEncoder(total_feats_cnt=train.shape[1])
+                    final = SparkOHEEncoderEstimator(input_cols=sparse_pipe.get_output_cols(),
+                                                     input_roles=sparse_pipe.get_output_roles(),
+                                                     total_feats_cnt=train.shape[1])
                 else:
-                    final = OHEEncoder(make_sparse=self.sparse_ohe)
-            sparse_pipe = SequentialTransformer([sparse_pipe, final])
+                    final = SparkOHEEncoderEstimator(input_cols=sparse_pipe.get_output_cols(),
+                                                     input_roles=sparse_pipe.get_output_roles(),
+                                                     make_sparse=self.sparse_ohe)
+            sparse_pipe = SparkSequentialTransformer([sparse_pipe, final])
 
             transformers_list.append(sparse_pipe)
 
         # final pipeline
-        union_all = UnionTransformer(transformers_list)
+        union_all = SparkUnionTransformer(transformers_list)
 
         return union_all

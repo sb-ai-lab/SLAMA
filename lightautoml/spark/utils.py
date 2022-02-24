@@ -1,12 +1,12 @@
 import logging
-import os
 import socket
 import time
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 from pyspark import RDD
+from pyspark.ml import Transformer, Estimator
 from pyspark.sql import SparkSession
 
 from lightautoml.spark.dataset.base import SparkDataFrame
@@ -38,9 +38,9 @@ def spark_session(session_args: Optional[dict] = None, master: str = "local[]", 
             .builder
             .appName("SPARK-LAMA-app")
             .master(master)
-            .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.4")
+            .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-            .config("spark.sql.shuffle.partitions", "4")
+            .config("spark.sql.shuffle.partitions", "16")
             # .config("spark.driver.extraJavaOptions", "-Ddev.ludovic.netlib.blas.nativeLibPath=/usr/lib64/libopenblaso-r0.3.17.so")
             # .config("spark.executor.extraJavaOptions", "-Ddev.ludovic.netlib.blas.nativeLibPath=/usr/lib64/libopenblaso-r0.3.17.so")
             .config("spark.driver.cores", "4")
@@ -99,7 +99,7 @@ def log_exec_time(name: Optional[str] = None):
     duration = (end - start).total_seconds()
 
     msg = f"Exec time of {name}: {duration}" if name else f"Exec time: {duration}"
-    logger.info(msg)
+    logger.warning(msg)
 
 
 # log_exec_time() class to return elapsed time value
@@ -177,3 +177,76 @@ def logging_config(level: int = logging.INFO, log_filename: str = '/var/log/lama
             }
         }
     }
+
+
+def cache(df: SparkDataFrame) -> SparkDataFrame:
+    if not df.is_cached:
+        df = df.cache()
+    return df
+
+
+class NoOpTransformer(Transformer):
+    def __init__(self, name: Optional[str] = None):
+        super().__init__()
+        self._name = name
+
+    def _transform(self, dataset):
+        return dataset
+
+
+class DebugTransformer(Transformer):
+    def __init__(self, name: Optional[str] = None):
+        super().__init__()
+        self._name = name
+
+    def _transform(self, dataset):
+        dataset = dataset.cache()
+        dataset.write.mode('overwrite').format('noop').save()
+        return dataset
+
+
+class Cacher(Estimator):
+    _cacher_dict: Dict[str, SparkDataFrame] = dict()
+
+    @classmethod
+    def get_dataset_by_key(cls, key: str) -> Optional[SparkDataFrame]:
+        return cls._cacher_dict.get(key, None)
+
+    @property
+    def dataset(self) -> SparkDataFrame:
+        """Returns chached dataframe"""
+        return self._cacher_dict[self._key]
+
+    def __init__(self, key: str):
+        super().__init__()
+        self._key = key
+        self._dataset: Optional[SparkDataFrame] = None
+
+    def _fit(self, dataset):
+        ds = dataset.cache()
+        logger.info(f"Cacher {self._key}. Starting to materialize data.")
+        # ds.write.mode('overwrite').format('noop').save()
+        ds.count()
+        logger.info(f"Cacher {self._key}. Finished data materialization.")
+
+        previous_ds = self._cacher_dict.get(self._key, None)
+        if previous_ds is not None:
+            previous_ds.unpersist()
+
+        self._cacher_dict[self._key] = ds
+
+        return NoOpTransformer(name=f"cacher_{self._key}")
+
+
+class EmptyCacher(Cacher):
+    def __init__(self, key: str):
+        super().__init__(key)
+        self._dataset: Optional[SparkDataFrame] = None
+
+    @property
+    def dataset(self) -> SparkDataFrame:
+        return self._dataset
+
+    def _fit(self, dataset):
+        self._dataset = dataset
+        return NoOpTransformer(name=f"empty_cacher_{self._key}")

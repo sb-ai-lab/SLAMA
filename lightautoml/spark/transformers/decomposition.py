@@ -5,14 +5,14 @@ from pyspark.ml.functions import vector_to_array, array_to_vector
 
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.transformers.base import SparkTransformer
+from lightautoml.spark.transformers.base import ObsoleteSparkTransformer
 from lightautoml.transformers.decomposition import numeric_check
 
 import numpy as np
 import pyspark.sql.functions as F
 
 
-class PCATransformer(SparkTransformer):
+class PCATransformer(ObsoleteSparkTransformer):
     """PCA."""
 
     _fit_checks = (numeric_check,)

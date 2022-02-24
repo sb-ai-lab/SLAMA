@@ -7,10 +7,13 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import DatetimeRole
-from lightautoml.spark.transformers.datetime import TimeToNum as SparkTimeToNum, BaseDiff as SparkBaseDiff, \
-    DateSeasons as SparkDateSeasons
+from lightautoml.spark.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer, \
+    SparkTimeToNumTransformer
+from lightautoml.tasks import Task
 from lightautoml.transformers.datetime import TimeToNum, BaseDiff, DateSeasons
-from .. import DatasetForTest, from_pandas_to_spark, spark, compare_by_content
+from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess
+
+spark = spark_sess
 
 DATASETS = [
 
@@ -78,9 +81,9 @@ DATASETS = [
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_time_to_num(spark: SparkSession, dataset: DatasetForTest):
 
-    ds = PandasDataset(dataset.dataset, roles=dataset.roles)
+    ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task('binary'))
 
-    compare_by_content(spark, ds, TimeToNum(), SparkTimeToNum())
+    compare_sparkml_by_content(spark, ds, TimeToNum(), SparkTimeToNumTransformer(input_cols=ds.features, input_roles=ds.roles))
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
@@ -91,19 +94,20 @@ def test_base_diff(spark: SparkSession, dataset: DatasetForTest):
     base_names = columns[:middle]
     diff_names = columns[middle:]
 
-    ds = PandasDataset(dataset.dataset, roles=dataset.roles)
+    ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
 
-    compare_by_content(
+    compare_sparkml_by_content(
         spark,
         ds,
         BaseDiff(base_names=base_names, diff_names=diff_names),
-        SparkBaseDiff(base_names=base_names, diff_names=diff_names)
+        SparkBaseDiffTransformer(input_roles=ds.roles, base_names=base_names, diff_names=diff_names)
     )
 
 
 @pytest.mark.parametrize("dataset", [DATASETS[1]])
 def test_date_seasons(spark: SparkSession, dataset: DatasetForTest):
 
-    ds = PandasDataset(dataset.dataset, roles=dataset.roles)
+    ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
 
-    compare_by_content(spark, ds, DateSeasons(), SparkDateSeasons())
+    compare_sparkml_by_content(spark, ds, DateSeasons(),
+                               SparkDateSeasonsTransformer(input_cols=ds.features, input_roles=ds.roles))

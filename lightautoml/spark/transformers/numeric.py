@@ -2,153 +2,221 @@ from typing import Optional, Dict, List
 
 import numpy as np
 import pandas as pd
+from pyspark.ml import Transformer
 from pyspark.ml.feature import QuantileDiscretizer, Bucketizer
 from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import FloatType, IntegerType
+from lightautoml.dataset.base import RolesDict
 
-from lightautoml.dataset.roles import NumericRole, CategoryRole
-from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.transformers.base import SparkTransformer
+from lightautoml.dataset.roles import ColumnRole, NumericRole, CategoryRole
+from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
+from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTransformer, ObsoleteSparkTransformer
 from lightautoml.transformers.numeric import numeric_check
 
 
-class NaNFlags(SparkTransformer):
+class SparkNaNFlagsEstimator(SparkBaseEstimator):
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     # TODO: the value is copied from the corresponding LAMA transformer.
     # TODO: it is better to be taken from shared module as a string constant
     _fname_prefix = "nanflg"
 
-    def __init__(self, nan_rate: float = 0.005):
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 do_replace_columns: bool = False,
+                 nan_rate: float = 0.005):
         """
 
         Args:
             nan_rate: Nan rate cutoff.
 
         """
-        self.nan_rate = nan_rate
-        self.nan_cols: Optional[str] = None
-        self._features: Optional[List[str]] = None
+        super().__init__(input_cols,
+                         input_roles,
+                         do_replace_columns=do_replace_columns,
+                         output_role=NumericRole(np.float32))
+        self._nan_rate = nan_rate
+        self._nan_cols: Optional[str] = None
+        self.set(self.outputRoles, dict())
+        self.set(self.outputCols, [])
+        # self._features: Optional[List[str]] = None
 
-    def _fit(self, dataset: SparkDataset) -> "NaNFlags":
+    def _fit(self, sdf: SparkDataFrame) -> "Transformer":
 
-        sdf = dataset.data
+        row = (
+            sdf
+            .select([F.mean(F.isnan(c).astype(FloatType())).alias(c) for c in self.getInputCols()])
+            .first()
+        )
 
-        row = sdf\
-            .select([F.mean(F.isnan(c).astype(FloatType())).alias(c) for c in dataset.features])\
-            .collect()[0]
+        self._nan_cols = [
+            f"{self._fname_prefix}__{col}"
+            for col, col_nan_rate in row.asDict(True).items()
+            if col_nan_rate > self._nan_rate
+        ]
 
-        self.nan_cols = [col for col, col_nan_rate in row.asDict(True).items() if col_nan_rate > self.nan_rate]
-        self._features = list(self.nan_cols)
+        self.set(self.outputCols, self._nan_cols)
+        self.set(self.outputRoles, {c: self._output_role for c in self._nan_cols})
 
-        return self
-
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
-
-        sdf = dataset.data
-
-        new_sdf = sdf.select(*dataset.service_columns, *[
-            F.isnan(c).astype(FloatType()).alias(feat)
-            for feat, c in zip(self.features, self.nan_cols)
-        ])
-
-        output = dataset.empty()
-        output.set_data(new_sdf, self.features, NumericRole(np.float32))
-
-        return output
+        return SparkNaNFlagsTransformer(
+            input_cols=self.getInputCols(),
+            input_roles=self.getInputRoles(),
+            output_cols=self.getOutputCols(),
+            output_roles=self.getOutputRoles(),
+            do_replace_columns=self.getDoReplaceColumns()
+        )
 
 
-class FillInf(SparkTransformer):
+class SparkNaNFlagsTransformer(SparkBaseTransformer):
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    # TODO: the value is copied from the corresponding LAMA transformer.
+    # TODO: it is better to be taken from shared module as a string constant
+    _fname_prefix = "nanflg"
 
+    # def __init__(self,
+    #              input_cols: List[str],
+    #              input_roles: RolesDict,
+    #              output_cols: List[str],
+    #              output_roles: RolesDict,):
+    #     super().__init__(
+    #         input_cols=input_cols,
+    #         output_cols=output_cols,
+    #         input_roles=input_roles,
+    #         output_roles=output_roles,
+    #         do_replace_columns=False)
+    #     self._nan_cols = nan_cols
+
+    def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
+
+        new_cols = [
+            F.isnan(in_c).astype(FloatType()).alias(out_c)
+            for in_c, out_c in zip(self.getInputCols(), self.getOutputCols())
+        ]
+
+        out_sdf = self._make_output_df(sdf, new_cols)
+
+        return out_sdf
+
+
+class SparkFillInfTransformer(SparkBaseTransformer):
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "fillinf"
 
-    _can_unwind_parents = False
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: RolesDict,
+                 do_replace_columns=False):
+        output_cols = [f"{self._fname_prefix}__{feat}" for feat in input_cols]
+        super().__init__(
+            input_cols=input_cols,
+            output_cols=output_cols,
+            input_roles=input_roles,
+            output_roles={f: NumericRole(np.float32) for f in output_cols},
+            do_replace_columns=do_replace_columns)
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+    def _transform(self, df: SparkDataFrame) -> SparkDataFrame:
+        def is_inf(col: str):
+            return F.col(col).isin([F.lit("+Infinity").cast("double"), F.lit("-Infinity").cast("double")])
 
-        df = dataset.data
+        new_cols = [
+            F.when(is_inf(i), np.nan).otherwise(F.col(i)).alias(f"{self._fname_prefix}__{i}")
+            for i in self.getInputCols()
+        ]
 
-        for i in dataset.features:
-            df = df \
-                .withColumn(i,
-                            F.when(
-                                F.col(i).isin([F.lit("+Infinity").cast("double"), F.lit("-Infinity").cast("double")]),
-                                None)
-                            .otherwise(F.col(i))
-                            ) \
-                .withColumnRenamed(i, f"{self._fname_prefix}__{i}")
+        out_df = self._make_output_df(df, cols_to_add=new_cols)
 
-        output = dataset.empty()
-        output.set_data(df, self.features, NumericRole(np.float32))
-
-        return output
+        return out_df
 
 
-class FillnaMedian(SparkTransformer):
+class SparkFillnaMedianEstimator(SparkBaseEstimator):
     """Fillna with median."""
 
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "fillnamed"
 
-    def __init__(self):
-        self.meds: Optional[Dict[str, float]] = None
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols,
+                         input_roles,
+                         do_replace_columns=do_replace_columns,
+                         output_role=NumericRole(np.float32))
+        self._meds: Optional[Dict[str, float]] = None
 
-    def _fit(self, dataset: SparkDataset):
+    def _fit(self, sdf: SparkDataFrame) -> Transformer:
         """Approximately estimates medians.
 
         Args:
-            dataset: SparkDataset with numerical features.
+            dataset: SparkDataFrame with numerical features.
 
         Returns:
-            self.
+            Spark MLlib Transformer
 
         """
 
-        print("I'm in fit")
-        sdf = dataset.data
+        row = sdf\
+            .select([F.percentile_approx(c, 0.5).alias(c) for c in self.getInputCols()])\
+            .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in self.getInputCols()])\
+            .first()
 
-        rows = sdf\
-            .select([F.percentile_approx(c, 0.5).alias(c) for c in dataset.features])\
-            .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in dataset.features])\
-            .collect()
+        self._meds = row.asDict()
 
-        assert len(rows) == 1, f"Results count should be exactly 1, but it is {len(rows)}"
+        return SparkFillnaMedianTransformer(input_cols=self.getInputCols(),
+                                            output_cols=self.getOutputCols(),
+                                            input_roles=self.getInputRoles(),
+                                            output_roles=self.getOutputRoles(),
+                                            meds=self._meds,
+                                            do_replace_columns=self.getDoReplaceColumns())
 
-        self.meds = rows[0].asDict()
 
-        self._features = [f"{self._fname_prefix}__{c}" for c in dataset.features]
+class SparkFillnaMedianTransformer(SparkBaseTransformer):
+    """Fillna with median."""
 
-        return self
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "fillnamed"
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+    def __init__(self, input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 meds: Dict,
+                 do_replace_columns: bool = False, ):
+        super().__init__(input_cols=input_cols,
+                         output_cols=output_cols,
+                         input_roles=input_roles,
+                         output_roles=output_roles,
+                         do_replace_columns=do_replace_columns)
+        self._meds = meds
+
+    def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
         """Transform - fillna with medians.
 
         Args:
-            dataset: SparkDataset of numerical features
+            dataset: SparkDataFrame of numerical features
 
         Returns:
-            SparkDataset with replaced NaN with medians
+            SparkDataFrame with replaced NaN with medians
 
         """
-        print("I'm in transform")
-        sdf = dataset.data
 
-        new_sdf = sdf.select(*dataset.service_columns, *[
-            F.when(F.isnan(c), self.meds[c]).otherwise(F.col(c)).alias(f"{self._fname_prefix}__{c}")
-            for c in dataset.features
-        ])
+        new_cols = [
+            F.when(F.isnan(c), self._meds[c]).otherwise(F.col(c)).alias(f"{self._fname_prefix}__{c}")
+            for c in self.getInputCols()
+        ]
 
-        output = dataset.empty()
-        output.set_data(new_sdf, self.features, NumericRole(np.float32))
+        out_sdf = self._make_output_df(sdf, new_cols)
 
-        return output
+        return out_sdf
 
 
-class LogOdds(SparkTransformer):
+class SparkLogOddsTransformer(SparkBaseTransformer):
     """Convert probs to logodds."""
 
     _fit_checks = (numeric_check,)
@@ -157,173 +225,195 @@ class LogOdds(SparkTransformer):
 
     _can_unwind_parents = False
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: RolesDict,
+                 do_replace_columns=False):
+        out_cols = [f"{self._fname_prefix}__{feat}" for feat in input_cols]
+        super().__init__(input_cols=input_cols,
+                         output_cols=out_cols,
+                         input_roles=input_roles,
+                         output_roles={f: NumericRole(np.float32) for f in out_cols},
+                         do_replace_columns=do_replace_columns)
+
+    def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
         """Transform - convert num values to logodds.
 
         Args:
-            dataset: Pandas or Numpy dataset of categorical features.
+            dataset: SparkDataFrame dataset of categorical features.
 
         Returns:
-            Numpy dataset with encoded labels.
+            SparkDataFrame with encoded labels.
 
         """
+        new_cols = []
+        for i in self.getInputCols():
+            col = F.when(F.col(i) < 1e-7, 1e-7) \
+                .when(F.col(i) > 1 - 1e-7, 1 - 1e-7) \
+                .otherwise(F.col(i))
+            col = F.log(col / (F.lit(1) - col))
+            new_cols.append(col.alias(f"{self._fname_prefix}__{i}"))
 
-        sdf = dataset.data
+        out_sdf = self._make_output_df(sdf, new_cols)
 
-        # # transform
-        # # TODO: maybe np.exp and then cliping and logodds?
-        # data = np.clip(data, 1e-7, 1 - 1e-7)
-        # data = np.log(data / (1 - data))
-        new_sdf = sdf.select(
-            SparkDataset.ID_COLUMN,
-            *[
-                F.when(F.col(c) < 1e-7, 1e-7)
-                .when(F.col(c) > 1 - 1e-7, 1 - 1e-7)
-                .otherwise(F.col(c))
-                .alias(c)
-                for c in dataset.features
-            ]
-        )\
-        .select(
-            SparkDataset.ID_COLUMN,
-            *[F.log(F.col(c) / (F.lit(1) - F.col(c))).alias(f"{self._fname_prefix}__{c}")
-              for c in dataset.features]
-        )
-
-        # create resulted
-        output = dataset.empty()
-        output.set_data(new_sdf, self.features, NumericRole(np.float32))
-
-        return output
+        return out_sdf
 
 
-class StandardScaler(SparkTransformer):
+class SparkStandardScalerEstimator(SparkBaseEstimator):
     """Classic StandardScaler."""
 
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "scaler"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols,
+                         input_roles,
+                         do_replace_columns=do_replace_columns,
+                         output_role=NumericRole(np.float32))
         self._means_and_stds: Optional[Dict[str, float]] = None
 
-    def _fit(self, dataset: SparkDataset):
+    def _fit(self, sdf: SparkDataFrame) -> Transformer:
         """Estimate means and stds.
 
         Args:
-            dataset: Pandas or Numpy dataset of categorical features.
+            sdf: SparkDataFrame of categorical features.
 
         Returns:
-            self.
+            StandardScalerTransformer instance
 
         """
 
-        sdf = dataset.data
-
-        means = [F.mean(c).alias(f"mean_{c}") for c in sdf.columns]
+        means = [F.mean(c).alias(f"mean_{c}") for c in self.getInputCols()]
         stds = [
             F.when(F.stddev(c) == 0, 1).when(F.isnan(F.stddev(c)), 1).otherwise(F.stddev(c)).alias(f"std_{c}")
-            for c in dataset.features
+            for c in self.getInputCols()
         ]
 
-        self._means_and_stds = sdf\
-            .select(means + stds)\
-            .collect()[0].asDict()
+        self._means_and_stds = sdf.select(means + stds).first().asDict()
 
-        return self
+        return SparkStandardScalerTransformer(input_cols=self.getInputCols(),
+                                              output_cols=self.getOutputCols(),
+                                              input_roles=self.getInputRoles(),
+                                              output_roles=self.getOutputRoles(),
+                                              means_and_stds=self._means_and_stds,
+                                              do_replace_columns=self.getDoReplaceColumns())
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+
+class SparkStandardScalerTransformer(SparkBaseTransformer):
+    """Classic StandardScaler."""
+
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "scaler"
+
+    def __init__(self,
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 means_and_stds: Dict,
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols=input_cols,
+                         output_cols=output_cols,
+                         input_roles=input_roles,
+                         output_roles=output_roles,
+                         do_replace_columns=do_replace_columns)
+        self._means_and_stds = means_and_stds
+
+    def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
         """Scale test data.
 
         Args:
-            dataset: Pandas or Numpy dataset of numeric features.
+            sdf: SparkDataFrame of numeric features.
 
         Returns:
-            Numpy dataset with encoded labels.
+            SparkDataFrame with encoded labels.
 
         """
 
-        sdf = dataset.data
+        new_cols = []
+        for c in self.getInputCols():
+            col = (F.col(c) - self._means_and_stds[f"mean_{c}"]) / F.lit(self._means_and_stds[f"std_{c}"])
+            new_cols.append(col.alias(f"{self._fname_prefix}__{c}"))
 
-        new_sdf = sdf.select(*dataset.service_columns, *[
-            ((F.col(c) - self._means_and_stds[f"mean_{c}"]) / F.lit(self._means_and_stds[f"std_{c}"])).alias(f"{self._fname_prefix}__{c}")
-            for c in dataset.features
-        ])
+        out_sdf = self._make_output_df(sdf, new_cols)
 
-        # create resulted
-        output = dataset.empty()
-        output.set_data(new_sdf, self.features, NumericRole(np.float32))
-
-        return output
+        return out_sdf
 
 
-class QuantileBinning(SparkTransformer):
+class SparkQuantileBinningEstimator(SparkBaseEstimator):
     """Discretization of numeric features by quantiles."""
 
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "qntl"
 
-    def __init__(self, nbins: int = 10):
-        """
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 do_replace_columns: bool = False,
+                 nbins: int = 10):
+        super().__init__(input_cols,
+                         input_roles,
+                         do_replace_columns=do_replace_columns,
+                         output_role=CategoryRole(np.int32, label_encoded=True))
+        self._nbins = nbins
+        self._bucketizer = None
 
-        Args:
-            nbins: maximum number of bins.
-                One more will be added to keep NaN values (bin num = 0)
-
-        """
-        self.nbins = nbins
-        self._bucketizer: Optional[Bucketizer] = None
-
-    def _fit(self, dataset: SparkDataset):
-        """Estimate bins borders.
-
-        Args:
-            dataset: Pandas or Numpy dataset of numeric features.
-
-        Returns:
-            self.
-
-        """
-
-        sdf = dataset.data
-
-        qdisc = QuantileDiscretizer(numBucketsArray=[self.nbins for _ in dataset.features],
+    def _fit(self, sdf: SparkDataFrame) -> Transformer:
+        qdisc = QuantileDiscretizer(numBucketsArray=[self._nbins for _ in self.getInputCols()],
                                     handleInvalid="keep",
-                                    inputCols=[c for c in dataset.features],
-                                    outputCols=[f"{self._fname_prefix}__{c}" for c in dataset.features])
+                                    inputCols=self.getInputCols(),
+                                    outputCols=self.getOutputCols())
 
         self._bucketizer = qdisc.fit(sdf)
 
-        return self
+        return SparkQuantileBinningTransformer(
+            self._nbins,
+            self._bucketizer,
+            input_cols=self.getInputCols(),
+            input_roles=self.getInputRoles(),
+            output_cols=self.getOutputCols(),
+            output_roles=self.getOutputRoles(),
+            do_replace_columns=self.getDoReplaceColumns()
+        )
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
-        """Apply bin borders.
 
-        Args:
-            dataset: Spark dataset of numeric features.
+class SparkQuantileBinningTransformer(SparkBaseTransformer):
+    _fit_checks = (numeric_check,)
+    _transform_checks = ()
+    _fname_prefix = "qntl"
 
-        Returns:
-            Spark dataset with encoded labels.
+    def __init__(self,
+                 bins,
+                 bucketizer,
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols=input_cols,
+                         output_cols=output_cols,
+                         input_roles=input_roles,
+                         output_roles=output_roles,
+                         do_replace_columns=do_replace_columns)
+        self._bins = bins
+        self._bucketizer = bucketizer
 
-        """
+    def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
+        new_cols =[
+            F.when(F.col(c).astype(IntegerType()) == F.lit(self._bins), 0).otherwise(F.col(c).astype(IntegerType()) + 1).alias(c)
+            for c in self._bucketizer.getOutputCols()
+        ]
 
-        sdf = dataset.data
+        rest_cols = [c for c in sdf.columns if c not in self._bucketizer.getOutputCols()]
 
-        # we do the last select to renumerate our bins
-        # 0 bin is reserved for NaN's and the rest just shifted by +1
-        # ...or keep (keep invalid values in a special additional bucket)
-        # see: https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.ml.feature.QuantileDiscretizer.html
-        new_sdf = self._bucketizer\
-            .transform(sdf)\
-            .select(*dataset.service_columns, *[F.col(c).astype(IntegerType()).alias(c) for c in self._bucketizer.getOutputCols()])\
-            .select(*dataset.service_columns, *[
-                F.when(F.col(c) == self.nbins, 0).otherwise(F.col(c) + 1).alias(c)
-                for c in self._bucketizer.getOutputCols()
-            ])
+        intermediate_sdf = self._bucketizer.transform(sdf).select(*rest_cols, *new_cols)
 
-        output = dataset.empty()
-        output.set_data(new_sdf, self.features, CategoryRole(np.int32, label_encoded=True))
+        output_sdf = self._make_output_df(intermediate_sdf, cols_to_add=[])
 
-        return output
+        return output_sdf

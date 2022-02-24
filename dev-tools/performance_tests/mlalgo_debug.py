@@ -18,7 +18,7 @@ from lightautoml.ml_algo.utils import tune_and_fit_predict
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.utils import spark_session, logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.validation.base import DummyIterator, HoldoutIterator
-from lightautoml.spark.ml_algo.boost_lgbm import BoostLGBM as SparkBoostLGBM
+from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM as SparkBoostLGBM
 from lightautoml.spark.ml_algo.linear_pyspark import LinearLBFGS as SparkLinearLBFGS
 
 from pyspark.sql import functions as F
@@ -158,11 +158,7 @@ if True:
         predict_col = preds.features[0]
         preds = preds.data
 
-        pred_target_df = (
-            preds
-                .join(test_sds.target, on=SparkDataset.ID_COLUMN, how='inner')
-                .select(SparkDataset.ID_COLUMN, test_sds.target_column, predict_col)
-        )
+        pred_target_df = preds.select(SparkDataset.ID_COLUMN, test_sds.target_column, predict_col)
 
         pt_df = pred_target_df.toPandas()
         test_metric_value2 = evaluator(

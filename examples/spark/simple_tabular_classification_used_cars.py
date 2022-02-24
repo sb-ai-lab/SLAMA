@@ -11,9 +11,9 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType
 from sklearn.metrics import mean_squared_error
 
-from lightautoml.spark.automl.presets.tabular_presets import TabularAutoML
+from lightautoml.spark.automl.presets.tabular_presets import SparkTabularAutoML
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.tasks.base import Task as SparkTask
+from lightautoml.spark.tasks.base import SparkTask as SparkTask
 from lightautoml.spark.utils import log_exec_time, logging_config, VERBOSE_LOGGING_FORMAT, spark_session
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
@@ -43,7 +43,7 @@ if __name__ == "__main__":
             .drop(F.col(target_col)).cache()
 
         # automl = TabularAutoML(spark=spark, task=task, general_params={"use_algos": ["lgb", "linear_l2"]})
-        automl = TabularAutoML(spark=spark, task=task, general_params={"use_algos": ["linear_l2"]})
+        automl = SparkTabularAutoML(spark=spark, task=task, general_params={"use_algos": ["linear_l2"]})
 
         with log_exec_time():
             oof_predictions = automl.fit_predict(

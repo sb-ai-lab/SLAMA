@@ -2164,6 +2164,14 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "toposort"
+version = "1.7"
+description = "\"Implements a topological sort algorithm.\""
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "torch"
 version = "1.8.1"
 description = "Tensors and Dynamic neural networks in Python with strong GPU acceleration"
@@ -2402,7 +2410,7 @@ report = ["cffi", "weasyprint"]
 [metadata]
 lock-version = "1.1"
 python-versions = "~3.9"
-content-hash = "93d2e583b888e2d039d481f8011af5de5616e8ead7ded55abd3c752802c8a393"
+content-hash = "0e1b34acf0f6dffa5ffe45b0cd7ab425a8bef6491f37538a27a3f398edadabca"
 
 [metadata.files]
 alabaster = [
@@ -3809,6 +3817,10 @@ toml = [
 tomli = [
     {file = "tomli-2.0.0-py3-none-any.whl", hash = "sha256:b5bde28da1fed24b9bd1d4d2b8cba62300bfb4ec9a6187a957e8ddb9434c5224"},
     {file = "tomli-2.0.0.tar.gz", hash = "sha256:c292c34f58502a1eb2bbb9f5bbc9a5ebc37bee10ffb8c2d6bbdfa8eb13cc14e1"},
+]
+toposort = [
+    {file = "toposort-1.7-py2.py3-none-any.whl", hash = "sha256:8ed8e109e96ae30bf66da2d2155e4eb9989d9c5c743c837e37d9774a4eddd804"},
+    {file = "toposort-1.7.tar.gz", hash = "sha256:ddc2182c42912a440511bd7ff5d3e6a1cabc3accbc674a3258c8c41cbfbb2125"},
 ]
 torch = [
     {file = "torch-1.8.1-cp36-cp36m-manylinux1_x86_64.whl", hash = "sha256:f23eeb1a48cc39209d986c418ad7e02227eee973da45c0c42d36b1aec72f4940"},

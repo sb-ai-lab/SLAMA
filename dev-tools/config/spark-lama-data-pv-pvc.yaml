@@ -118,3 +118,33 @@ spec:
   resources:
     requests:
       storage: '25Gi'
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-spark-lama-chkp-data
+spec:
+  capacity:
+    storage: '1000Gi'
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hdd
+  hostPath:
+    path: /mnt/ess_storage/DN_1/storage/sber_LAMA/spark_chkp_data/
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-lama-chkp-data
+  namespace: spark-lama-exps
+spec:
+  volumeName: pv-spark-lama-chkp-data
+  storageClassName: local-hdd
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: '1000Gi'

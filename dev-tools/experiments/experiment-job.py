@@ -22,7 +22,9 @@ MARKER = "EXP-RESULT:"
 
 statefile_path = "/tmp/exp-job"
 results_path = "/tmp/exp-job"
-cfg_path = "./dev-tools/config/experiments/experiment-config-spark-single-node-tuned.yaml"
+cfg_path = "./dev-tools/config/experiments/experiment-config-spark-cluster.yaml"
+# cfg_path = "./dev-tools/config/experiments/experiment-config-lama-only.yaml"
+# cfg_path = "./dev-tools/config/experiments/experiment-config-advlgb-boostgb-spark-cluster.yaml"
 all_results_path = "/tmp/exp-job/results.txt"
 
 
@@ -127,7 +129,8 @@ def generate_experiments(config_data: Dict) -> List[ExpInstanceConfig]:
             params = copy(params)
             spark_config = copy(spark_config)
 
-            use_algos = '__'.join(['_'.join(layer) for layer in params['use_algos']])
+            use_algos = '__'.join(['_'.join(layer) for layer in params['use_algos']]) \
+                if 'use_algos' in params else 'noalg'
 
             instance_id = f"{name}-{library}-n{repeat_seq_id}-{params['dataset'].replace('_', '-')}" \
                           f"-{use_algos.replace('_', '-')}-" \
@@ -159,13 +162,14 @@ def run_experiments(experiments_configs: List[ExpInstanceConfig]) \
     for exp_instance in experiments_configs:
         instance_id = exp_instance["instance_id"]
         launch_script_name = exp_instance["calculation_script"]
-        with open(f"/tmp/{instance_id}-config.yaml", "w+") as outfile:
+        jobname = instance_id[:50].strip('-')
+        with open(f"/tmp/{jobname}-config.yaml", "w+") as outfile:
             yaml.dump(exp_instance["params"], outfile, default_flow_style=False)
 
         outfile = os.path.abspath(f"{results_path}/Results_{instance_id}.log")
 
         p = subprocess.Popen(
-            [JOB_SUBMITTER_EXE, instance_id, str(launch_script_name), outfile],
+            [JOB_SUBMITTER_EXE, jobname, str(launch_script_name), outfile],
         )
 
         logger.info(f"Started process with instance id {instance_id} and args {p.args}")

@@ -25,7 +25,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-class NpPermutationImportanceEstimator(SparkImportanceEstimator):
+class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
     """Permutation importance based estimator.
 
     Importance calculate, using random permutation
@@ -65,8 +65,6 @@ class NpPermutationImportanceEstimator(SparkImportanceEstimator):
 
         permutation_importance = {}
 
-        valid_data.cache()
-
         for it, feat in enumerate(valid_data.features):
             logger.info(f"Start processing ({it},{feat})")
             df = valid_data.data
@@ -88,8 +86,7 @@ class NpPermutationImportanceEstimator(SparkImportanceEstimator):
             ds.set_data(
                 permutated_df,
                 valid_data.features,
-                valid_data.roles,
-                valid_data.dependencies
+                valid_data.roles
             )
             logger.debug("Dataframe with shuffled column prepared")
 
@@ -102,8 +99,6 @@ class NpPermutationImportanceEstimator(SparkImportanceEstimator):
                 )
             )
             permutation_importance[feat] = normal_score - shuffled_score
-
-        valid_data.uncache()
 
         self.raw_importances = Series(permutation_importance).sort_values(ascending=False)
 

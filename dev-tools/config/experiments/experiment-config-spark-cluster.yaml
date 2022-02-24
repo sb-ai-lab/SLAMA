@@ -3,41 +3,101 @@ experiment_type: spark_quality
 calculation_scripts:
   spark: spark_used_cars.py
   lama: lama_used_cars.py
-spark_quality_repeat_rate: 2
 state_file: 'delete'  # Available values are 'use|ignore|delete', use - skip experiments in state file, ignore - don`t skip experiments, delete - delete experiments in state file
 
 # Unique set of parameters for each experiment
 
 experiments:
-  - name: "cmp-all"
+  - name: "cmp-all-0"
+    library: [ "spark" ]
+    repeat_rate: 1
+    params:
+      func: [ "calculate_automl" ]
+      dataset: [ "used_cars_dataset_1x_original" ]
+      seed: [ 42 ]
+      cv: [ 5 ]
+      use_algos:
+        - [ [ "linear_l2" ] ]
+    spark_config:
+      spark.executor.instances: [ '1' ]
+      spark.executor.cores: [ '8' ]
+      spark.executor.memory: [ '32g' ]
+  - name: "cmp-all-1"
     library: ["spark"]
     repeat_rate: 1
     params:
-      dataset: ["buzz_dataset"]
-      seed: [42, 100]
+      func: ["calculate_automl"]
+      dataset: ["used_cars_dataset_1x_original"]
+      seed: [42]
       cv: [5]
       use_algos:
-        - [["lgb"]]
+        - [["linear_l2"]]
     spark_config:
       spark.executor.instances: ['2']
-      spark.executor.cores: ['4']
+      spark.executor.cores: ['8']
+      spark.executor.memory: [ '32g' ]
+  - name: "cmp-all-2"
+    library: [ "spark" ]
+    repeat_rate: 1
+    params:
+      func: [ "calculate_automl" ]
+      dataset: [ "used_cars_dataset_1x_original" ]
+      seed: [ 42 ]
+      cv: [ 5 ]
+      use_algos:
+        - [ [ "linear_l2" ] ]
+    spark_config:
+      spark.executor.instances: [ '4' ]
+      spark.executor.cores: [ '8' ]
+      spark.executor.memory: [ '32g' ]
+#  - name: "cmp-all-2"
+#    library: [ "spark" ]
+#    repeat_rate: 1
+#    params:
+#      func: [ "calculate_automl" ]
+#      dataset: [ "used_cars_dataset_1x" ]
+#      seed: [ 42 ]
+#      cv: [ 5 ]
+#      use_algos:
+#        - [ [ "lgb" ], [ "linear_l2" ] ]
+#    spark_config:
+#      spark.executor.instances: [ '1' ]
+#      spark.executor.cores: [ '16' ]
+#      spark.executor.memory: [ '64g' ]
+#  - name: "cmp-all-3"
+#    library: [ "spark" ]
+#    repeat_rate: 1
+#    params:
+#      func: [ "calculate_automl" ]
+#      dataset: [ "used_cars_dataset_2x" ]
+#      seed: [ 42 ]
+#      cv: [ 5 ]
+#      use_algos:
+#        - [ [ "lgb" ], [ "linear_l2" ] ]
+#    spark_config:
+#      spark.executor.instances: [ '4' ]
+#      spark.executor.cores: [ '8' ]
+#      spark.executor.memory: [ '32g' ]
+
 
 # Static parameters for Spark
 default_spark_config: {
-  spark.master: k8s://https://node2.bdcl:6443,
+  spark.master: k8s://https://10.32.15.3:6443,
   #deploy-mode: cluster,
   spark.driver.bindAddress: '0.0.0.0',
   spark.kubernetes.container.image: node2.bdcl:5000/spark-lama-k8s:3.9-3.2.0,
   spark.kubernetes.namespace: spark-lama-exps,
   spark.kubernetes.authenticate.driver.serviceAccountName: spark,
-  spark.kubernetes.memoryOverheadFactor: '0.2',
+  spark.kubernetes.memoryOverheadFactor: '0.4',
   spark.kubernetes.driver.label.appname: driver-test-submit-run,
   spark.kubernetes.executor.label.appname: executor-test-submit-run,
   spark.kubernetes.executor.deleteOnTermination: 'false',
-  spark.jars.packages: com.microsoft.azure:synapseml_2.12:0.9.4,
+  spark.scheduler.minRegisteredResourcesRatio: '1.0',
+  spark.scheduler.maxRegisteredResourcesWaitingTime: '180s',
+  spark.jars.packages: com.microsoft.azure:synapseml_2.12:0.9.5,
   spark.jars.repositories: https://mmlspark.azureedge.net/maven,
   spark.driver.cores: '4',
-  spark.driver.memory: '16g',
+  spark.driver.memory: '32g',
   spark.executor.instances: '4',
   spark.executor.cores: '4',
   spark.executor.memory: '16g',

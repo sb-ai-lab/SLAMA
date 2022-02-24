@@ -6,12 +6,12 @@ from pyspark.sql.session import SparkSession
 from lightautoml.dataset.np_pd_dataset import NumpyDataset, PandasDataset
 from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector, ModelBasedImportanceEstimator
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.ml_algo.boost_lgbm import BoostLGBM
+from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
 from lightautoml.spark.ml_algo.linear_pyspark import LinearLBFGS
 from lightautoml.spark.pipelines.features.lgb_pipeline import LGBSimpleFeatures, LGBAdvancedPipeline
 from lightautoml.spark.pipelines.features.linear_pipeline import LinearFeatures
-from lightautoml.spark.pipelines.ml.nested_ml_pipe import NestedTabularMLPipeline as SparkNestedTabularMLPipeline
-from lightautoml.spark.tasks.base import Task
+from lightautoml.spark.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline as SparkNestedTabularMLPipeline
+from lightautoml.spark.tasks.base import SparkTask
 
 import pandas as pd
 
@@ -25,7 +25,7 @@ def test_nested_tabular_ml_pipeline_with_linear_bgfs(spark: SparkSession):
     with open("unit/resources/datasets/dump_tabular_automl_lgb_linear/Lvl_1_Pipe_0_before_pre_selection.pickle", "rb") as f:
         data, target, features, roles = pickle.load(f)
 
-    pds = PandasDataset(data, roles, task=Task("binary"))
+    pds = PandasDataset(data, roles, task=SparkTask("binary"))
     target = pd.Series(target)
     sds = from_pandas_to_spark(pds, spark, target)
 
@@ -49,7 +49,7 @@ def test_nested_tabular_ml_pipeline_with_linear_bgfs(spark: SparkSession):
     linear_l2_feats = LinearFeatures(**linear_feat_kwargs)
 
     selection_feats = LGBSimpleFeatures()
-    selection_gbm = BoostLGBM()
+    selection_gbm = SparkBoostLGBM()
     selection_gbm.set_prefix("Selector")
 
     importance = ModelBasedImportanceEstimator()
@@ -78,7 +78,7 @@ def test_nested_tabular_ml_pipeline_with_boost_lgbm(spark: SparkSession):
     with open("unit/resources/datasets/dump_tabular_automl_lgb_linear/Lvl_0_Pipe_0_before_pre_selection.pickle", "rb") as f:
         data, target, features, roles = pickle.load(f)
 
-    pds = PandasDataset(data, roles, task=Task("binary"))
+    pds = PandasDataset(data, roles, task=SparkTask("binary"))
     target = pd.Series(target)
     sds = from_pandas_to_spark(pds, spark, target)
 
@@ -93,11 +93,11 @@ def test_nested_tabular_ml_pipeline_with_boost_lgbm(spark: SparkSession):
         'top_intersections': 4
     }
 
-    ml_model = BoostLGBM()
+    ml_model = SparkBoostLGBM()
     ml_model_feats = LGBAdvancedPipeline(**ml_alg_kwargs)
 
     selection_feats = LGBSimpleFeatures()
-    selection_gbm = BoostLGBM()
+    selection_gbm = SparkBoostLGBM()
     selection_gbm.set_prefix("Selector")
 
     importance = ModelBasedImportanceEstimator()

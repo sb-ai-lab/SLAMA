@@ -30,7 +30,8 @@ def calculate_automl(path: str,
                      cv: int = 5,
                      use_algos = ("lgb", "linear_l2"),
                      roles: Optional[Dict] = None,
-                     dtype: Optional[Dict] = None) -> Dict[str, Any]:
+                     dtype: Optional[Dict] = None,
+                     **_) -> Dict[str, Any]:
     os.environ[LAMA_LIBRARY] = "lama"
 
     with log_exec_timer("LAMA") as train_timer:

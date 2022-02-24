@@ -1,27 +1,24 @@
+import itertools
 import logging
-import pickle
 from collections import defaultdict
-from itertools import chain, combinations
-from typing import Optional, Sequence, List, Tuple, Dict, Union, cast, Iterator
+from itertools import combinations
+from typing import Optional, Sequence, List, Tuple, Dict, Any
 
 import numpy as np
+import pandas as pd
 from pandas import Series
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder
-from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window, Column, SparkSession
-from pyspark.sql.functions import udf, array, monotonically_increasing_id
-from pyspark.sql.types import FloatType, DoubleType, IntegerType
+from pyspark.ml.param.shared import Param, Params
+from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame, Window, Column
 from sklearn.utils.murmurhash import murmurhash3_32
 
+from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
-from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
-from lightautoml.spark.transformers.base import SparkTransformer
-from lightautoml.spark.utils import get_cached_df_through_rdd
+from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTransformer
 from lightautoml.transformers.categorical import categorical_check, encoding_check, oof_task_check, \
     multiclass_task_check
-from lightautoml.transformers.base import LAMLTransformer
-
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +30,7 @@ logger = logging.getLogger(__name__)
 murmurhash3_32_udf = F.udf(lambda value: murmurhash3_32(value.replace("NaN", "nan"), seed=42) if value is not None else None, SparkTypes.IntegerType())
 
 
-def pandas_dict_udf(broadcasted_dict):
-
-    def f(s: Series) -> Series:
-        values_dict = broadcasted_dict.value
-        return s.map(values_dict)
-    return F.pandas_udf(f, "double")
-
-
-class LabelEncoder(SparkTransformer):
-
+class TypesHelper:
     _ad_hoc_types_mapper = defaultdict(
         lambda: "string",
         {
@@ -80,28 +68,46 @@ class LabelEncoder(SparkTransformer):
         SparkTypes.DecimalType
     )
 
+
+def pandas_dict_udf(broadcasted_dict):
+
+    def f(s: Series) -> Series:
+        values_dict = broadcasted_dict.value
+        return s.map(values_dict)
+    return F.pandas_udf(f, "double")
+
+
+class SparkLabelEncoderEstimator(SparkBaseEstimator, TypesHelper):
+
     _fit_checks = (categorical_check,)
     _transform_checks = ()
     _fname_prefix = "le"
 
     _fillna_val = 0
 
-    def __init__(self, *args, **kwargs):
-        self._output_role = CategoryRole(np.int32, label_encoded=True)
-        self.dicts = None
+    def __init__(self,
+                 input_cols: Optional[List[str]] = None,
+                 input_roles: Optional[Dict[str, ColumnRole]] = None,
+                 subs: Optional[float] = None,
+                 random_state: Optional[int] = 42,
+                 do_replace_columns: bool = False,
+                 output_role: Optional[ColumnRole] = None):
+        if not output_role:
+            output_role = CategoryRole(np.int32, label_encoded=True)
+        super().__init__(input_cols, input_roles, do_replace_columns=do_replace_columns, output_role=output_role)
+        self._input_intermediate_columns = self.getInputCols()
+        self._input_internediate_roles = self.getInputRoles()
 
-    def _fit(self, dataset: SparkDataset) -> "LabelEncoder":
-
+    def _fit(self, dataset: SparkDataFrame) -> "SparkLabelEncoderTransformer":
         logger.info(f"[{type(self)} (LE)] fit is started")
 
-        roles = dataset.roles
+        roles = self._input_internediate_roles
 
-        dataset.cache()
-        df = dataset.data
+        df = dataset
 
         self.dicts = dict()
 
-        for i in dataset.features:
+        for i in self._input_intermediate_columns:
 
             logger.debug(f"[{type(self)} (LE)] fit column {i}")
 
@@ -126,32 +132,56 @@ class LabelEncoder(SparkTransformer):
             self.dicts[i] = Series(np.arange(vals.shape[0], dtype=np.int32) + 1, index=vals[i])
             logger.debug(f"[{type(self)} (LE)] pandas processing is completed")
 
-        dataset.uncache()
-
         logger.info(f"[{type(self)} (LE)] fit is finished")
 
-        return self
+        return SparkLabelEncoderTransformer(input_cols=self.getInputCols(),
+                                            output_cols=self.getOutputCols(),
+                                            input_roles=self.getInputRoles(),
+                                            output_roles=self.getOutputRoles(),
+                                            do_replace_columns=self.getDoReplaceColumns(),
+                                            dicts=self.dicts)
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+
+class SparkLabelEncoderTransformer(SparkBaseTransformer, TypesHelper):
+    _transform_checks = ()
+    _fname_prefix = "le"
+
+    _fillna_val = 0
+
+    fittedDicts = Param(Params._dummy(), "fittedDicts", "dicts from fitted Estimator")
+
+    def __init__(self,
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool,
+                 dicts: Dict):
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns)
+        self.set(self.fittedDicts, dicts)
+        self._dicts = dicts
+        self._input_columns = self.getInputCols()
+
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
 
         logger.info(f"[{type(self)} (LE)] transform is started")
 
-        df = dataset.data
+        df = dataset
         sc = df.sql_ctx.sparkSession.sparkContext
 
         cols_to_select = []
 
-        for i in dataset.features:
+        for i, out_col in zip(self._input_columns,  self.getOutputCols()):
             logger.debug(f"[{type(self)} (LE)] transform col {i}")
 
             _ic = F.col(i)
 
-            if i not in self.dicts:
+            if i not in self._dicts:
                 col = _ic
-            elif len(self.dicts[i]) == 0:
+            elif len(self._dicts[i]) == 0:
                 col = F.lit(self._fillna_val)
             else:
-                vals: dict = self.dicts[i].to_dict()
+                vals: dict = self._dicts[i].to_dict()
 
                 null_value = self._fillna_val
                 if None in vals:
@@ -197,24 +227,169 @@ class LabelEncoder(SparkTransformer):
                             col = F.when(_ic.isNull(), null_value) \
                                    .otherwise(pandas_dict_udf(labels)(_ic))
 
-            cols_to_select.append(col.alias(f"{self._fname_prefix}__{i}"))
-
-        output: SparkDataset = dataset.empty()
-        output.set_data(
-            df.select(
-                *dataset.service_columns,
-                *cols_to_select
-            ).fillna(self._fillna_val),
-            self.features,
-            self._output_role
-        )
+            cols_to_select.append(col.alias(out_col))
 
         logger.info(f"[{type(self)} (LE)] Transform is finished")
+
+        output = self._make_output_df(df, cols_to_select).fillna(self._fillna_val)
 
         return output
 
 
-class FreqEncoder(LabelEncoder):
+class SparkOrdinalEncoderEstimator(SparkLabelEncoderEstimator):
+    _fit_checks = (categorical_check,)
+    _fname_prefix = "ord"
+    _fillna_val = float("nan")
+
+    def __init__(self,
+                 input_cols: Optional[List[str]] = None,
+                 input_roles: Optional[Dict[str, ColumnRole]] = None,
+                 subs: Optional[float] = None,
+                 random_state: Optional[int] = 42):
+        super().__init__(input_cols, input_roles, subs, random_state, output_role=NumericRole(np.float32))
+        self.dicts = None
+        self._use_cols = self.getInputCols()
+
+    def _fit(self, dataset: SparkDataFrame) -> "Transformer":
+
+        logger.info(f"[{type(self)} (ORD)] fit is started")
+
+        # roles = dataset.roles
+        roles = self.getOrDefault(self.inputRoles)
+
+        self.dicts = {}
+        for i in self._use_cols:
+
+            logger.debug(f"[{type(self)} (ORD)] fit column {i}")
+
+            role = roles[i]
+
+            if not type(dataset.schema[i].dataType) in self._spark_numeric_types:
+
+                co = role.unknown
+
+                cnts = dataset \
+                    .groupBy(i).count() \
+                    .where((F.col("count") > co) & F.col(i).isNotNull()) \
+
+                # TODO SPARK-LAMA: isnan raises an exception if column is boolean.
+                if type(dataset.schema[i].dataType) != SparkTypes.BooleanType:
+                    cnts = cnts \
+                        .where(~F.isnan(F.col(i)))
+
+                cnts = cnts \
+                    .select(i) \
+                    .toPandas()
+
+                logger.debug(f"[{type(self)} (ORD)] toPandas is completed")
+
+                cnts = Series(cnts[i].astype(str).rank().values, index=cnts[i])
+                self.dicts[i] = cnts.append(Series([cnts.shape[0] + 1], index=[float("nan")])).drop_duplicates()
+                logger.debug(f"[{type(self)} (ORD)] pandas processing is completed")
+
+        logger.info(f"[{type(self)} (ORD)] fit is finished")
+
+        return SparkOrdinalEncoderTransformer(input_cols=self.getInputCols(),
+                                              output_cols=self.getOutputCols(),
+                                              input_roles=self.getInputRoles(),
+                                              output_roles=self.getOutputRoles(),
+                                              do_replace_columns=self.getDoReplaceColumns(),
+                                              dicts=self.dicts)
+
+
+def ord_pandas_dict_udf(broadcasted_dict, fillna_value):
+
+    def f(s: Series) -> Series:
+        values_dict = broadcasted_dict.value
+        fillna_val = fillna_value.value
+        s[s == "nan"] = float("nan")
+        s[s == None] = float("nan")
+        return s.map(values_dict).fillna(fillna_val)
+    return F.pandas_udf(f, "double")
+
+
+class SparkOrdinalEncoderTransformer(SparkLabelEncoderTransformer):
+    _transform_checks = ()
+    _fname_prefix = "ord"
+    _fillna_val = np.nan
+
+    def __init__(self,
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool,
+                 dicts: Dict):
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns, dicts)
+
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
+
+        logger.info(f"[{type(self)} (ORD)] transform is started")
+
+        df = dataset.fillna(self._fillna_val)
+        sc = df.sql_ctx.sparkSession.sparkContext
+        fill_na_val = sc.broadcast(self._fillna_val)
+
+        cols_to_select = []
+
+        for i, out_col in zip(self._input_columns,  self.getOutputCols()):
+            logger.debug(f"[{type(self)} (ORD)] transform col {i}")
+
+            _ic = F.col(i)
+
+            if i not in self._dicts:
+                col = _ic
+            elif len(self._dicts[i]) == 0:
+                col = F.lit(self._fillna_val)
+            else:
+                vals = self._dicts[i].to_dict()
+
+                null_value = self._fillna_val
+                if None in vals:
+                    null_value = vals[None]
+                    _ = vals.pop(None, None)
+
+                if len(vals) == 0:
+                    col = F.when(_ic.isNull(), null_value).otherwise(None)
+                else:
+
+                    nan_value = self._fillna_val
+
+                    # if np.isnan(list(vals.keys())).any():  # not working
+                    # Вот этот кусок кода тут по сути из-за OrdinalEncoder, который
+                    # в КАЖДЫЙ dicts пихает nan. И вот из-за этого приходится его отсюда чистить.
+                    # Нужно подумать, как это всё зарефакторить.
+                    new_dict = {}
+                    for key, value in vals.items():
+                        try:
+                            if np.isnan(key):
+                                nan_value = value
+                            else:
+                                new_dict[key] = value
+                        except TypeError:
+                            new_dict[key] = value
+
+                    vals = new_dict
+
+                    if len(vals) == 0:
+                        col = F.lit(nan_value)
+                    else:
+                        logger.debug(f"[{type(self)} (ORD)] map size: {len(vals)}")
+
+                        labels = sc.broadcast(self._dicts[i].to_dict())
+
+                        col = ord_pandas_dict_udf(labels, fill_na_val)(_ic).astype("double")
+
+            cols_to_select.append(col.alias(out_col))
+
+        logger.info(f"[{type(self)} (ORD)] Transform is finished")
+
+        output = self._make_output_df(df, cols_to_select).fillna(self._fillna_val)
+
+        return output
+
+
+class SparkFreqEncoderEstimator(SparkLabelEncoderEstimator):
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
@@ -222,20 +397,20 @@ class FreqEncoder(LabelEncoder):
 
     _fillna_val = 1
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._output_role = NumericRole(np.float32)
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: RolesDict,
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols, input_roles, do_replace_columns, output_role=NumericRole(np.float32))
 
-    def _fit(self, dataset: SparkDataset) -> "FreqEncoder":
+    def _fit(self, dataset: SparkDataFrame) -> "SparkFreqEncoderTransformer":
 
         logger.info(f"[{type(self)} (FE)] fit is started")
 
-        dataset.cache()
-
-        df = dataset.data
+        df = dataset
 
         self.dicts = {}
-        for i in dataset.features:
+        for i in self.getInputCols():
 
             logger.info(f"[{type(self)} (FE)] fit column {i}")
 
@@ -251,89 +426,42 @@ class FreqEncoder(LabelEncoder):
 
             logger.debug(f"[{type(self)} (LE)] pandas processing is completed")
 
-        dataset.uncache()
-
         logger.info(f"[{type(self)} (FE)] fit is finished")
 
-        return self
+        return SparkFreqEncoderTransformer(input_cols=self.getInputCols(),
+                                           output_cols=self.getOutputCols(),
+                                           input_roles=self.getInputRoles(),
+                                           output_roles=self.getOutputRoles(),
+                                           do_replace_columns=self.getDoReplaceColumns(),
+                                           dicts=self.dicts)
 
 
-class OrdinalEncoder(LabelEncoder):
-
-    _fit_checks = (categorical_check,)
-    _transform_checks = ()
-    _fname_prefix = "ord"
-
-    _fillna_val = np.nan
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._output_role = NumericRole(np.float32)
-
-    def _fit(self, dataset: SparkDataset) -> "OrdinalEncoder":
-
-        logger.info(f"[{type(self)} (ORD)] fit is started")
-
-        roles = dataset.roles
-
-        dataset.cache()
-        cached_dataset = dataset.data
-
-        self.dicts = {}
-        for i in dataset.features:
-
-            logger.debug(f"[{type(self)} (ORD)] fit column {i}")
-
-            role = roles[i]
-
-            if not type(cached_dataset.schema[i].dataType) in self._spark_numeric_types:
-
-                co = role.unknown
-
-                cnts = cached_dataset \
-                    .groupBy(i).count() \
-                    .where((F.col("count") > co) & F.col(i).isNotNull()) \
-
-                # TODO SPARK-LAMA: isnan raises an exception if column is boolean.
-                if type(cached_dataset.schema[i].dataType) != SparkTypes.BooleanType:
-                    cnts = cnts \
-                        .where(~F.isnan(F.col(i)))
-
-                cnts = cnts \
-                    .select(i) \
-                    .toPandas()
-
-                logger.debug(f"[{type(self)} (ORD)] toPandas is completed")
-
-                cnts = Series(cnts[i].astype(str).rank().values, index=cnts[i])
-                self.dicts[i] = cnts.append(Series([cnts.shape[0] + 1], index=[np.nan])).drop_duplicates()
-                logger.debug(f"[{type(self)} (ORD)] pandas processing is completed")
-
-        dataset.uncache()
-
-        logger.info(f"[{type(self)} (ORD)] fit is finished")
-
-        return self
-
-
-class CatIntersectstions(LabelEncoder):
+class SparkFreqEncoderTransformer(SparkLabelEncoderTransformer):
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
-    _fname_prefix = "inter"
+    _fname_prefix = "freq"
+    _fillna_val = 1
 
     def __init__(self,
-                 intersections: Optional[Sequence[Sequence[str]]] = None,
-                 max_depth: int = 2):
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool,
+                 dicts: Dict):
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns, dicts)
 
-        super().__init__()
-        self.intersections = intersections
-        self.max_depth = max_depth
 
-    @staticmethod
-    def _make_category(cols: Sequence[str]) -> Column:
+class SparkCatIntersectionsHelper:
+    _fname_prefix = "inter"
+
+    def _make_col_name(self, cols: Sequence[str]) -> str:
+        return f"({'__'.join(cols)})"
+
+    def _make_category(self, cols: Sequence[str]) -> Column:
         lit = F.lit("_")
-        col_name = f"({'__'.join(cols)})"
+        col_name = self._make_col_name(cols)
         columns_for_concat = []
         for col in cols:
             columns_for_concat.append(F.col(col))
@@ -342,50 +470,104 @@ class CatIntersectstions(LabelEncoder):
 
         return murmurhash3_32_udf(F.concat(*columns_for_concat)).alias(col_name)
 
-    def _build_df(self, dataset: SparkDataset) -> SparkDataset:
+    def _build_df(self, df: SparkDataFrame,
+                  intersections: Optional[Sequence[Sequence[str]]]) -> SparkDataFrame:
+        columns_to_select = [
+            self._make_category(comb)
+                .alias(f"{self._make_col_name(comb)}") for comb in intersections]
+        df = df.select('*', *columns_to_select)
+        return df
 
-        logger.info(f"[{type(self)} (CI)] build df is started")
 
-        df = dataset.data
+class SparkCatIntersectionsEstimator(SparkCatIntersectionsHelper, SparkLabelEncoderEstimator):
 
-        roles = {}
+    _fit_checks = (categorical_check,)
+    _transform_checks = ()
 
-        columns_to_select = []
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 intersections: Optional[Sequence[Sequence[str]]] = None,
+                 max_depth: int = 2,
+                 do_replace_columns: bool = False):
 
-        for comb in self.intersections:
-            columns_to_select.append(self._make_category(comb))
-            roles[f"({'__'.join(comb)})"] = CategoryRole(
-                object,
-                unknown=max((dataset.roles[x].unknown for x in comb)),
-                label_encoded=True,
-            )
-
-        result = df.select(*dataset.service_columns, *columns_to_select)
-
-        output = dataset.empty()
-        output.set_data(result, result.columns, roles)
-
-        logger.info(f"[{type(self)} (CI)] build df is finished")
-
-        return output
-
-    def _fit(self, dataset: SparkDataset):
+        super().__init__(input_cols,
+                         input_roles,
+                         do_replace_columns=do_replace_columns,
+                         output_role=CategoryRole(np.int32, label_encoded=True))
+        self.intersections = intersections
+        self.max_depth = max_depth
 
         if self.intersections is None:
             self.intersections = []
-            for i in range(2, min(self.max_depth, len(dataset.features)) + 1):
-                self.intersections.extend(list(combinations(dataset.features, i)))
+            for i in range(2, min(self.max_depth, len(self.getInputCols())) + 1):
+                self.intersections.extend(list(combinations(self.getInputCols(), i)))
 
-        inter_dataset = self._build_df(dataset)
-        return super()._fit(inter_dataset)
+        self._input_roles = {
+            f"{self._make_col_name(comb)}": CategoryRole(
+                np.int32,
+                unknown=max((self.getInputRoles()[x].unknown for x in comb)),
+                label_encoded=True,
+            ) for comb in self.intersections
+        }
+        self._input_columns = list(self._input_roles.keys())
 
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
+        out_roles = {f"{self._fname_prefix}__{f}": role
+                     for f, role in self._input_roles.items()}
 
-        inter_dataset = self._build_df(dataset)
-        return super().transform(inter_dataset)
+        self.set(self.outputCols, list(out_roles.keys()))
+        self.set(self.outputRoles, out_roles)
+
+    def _fit(self, df: SparkDataFrame) -> Transformer:
+        logger.info(f"[{type(self)} (CI)] fit is started")
+        inter_df = self._build_df(df, self.intersections)
+
+        super()._fit(inter_df)
+
+        logger.info(f"[{type(self)} (CI)] fit is finished")
+
+        return SparkCatIntersectionsTransformer(
+            input_cols=self.getInputCols(),
+            output_cols=self.getOutputCols(),
+            input_roles=self.getInputRoles(),
+            output_roles=self.getOutputRoles(),
+            do_replace_columns=self.getDoReplaceColumns(),
+            dicts=self.dicts,
+            intersections=self.intersections
+        )
 
 
-class OHEEncoder(SparkTransformer):
+class SparkCatIntersectionsTransformer(SparkCatIntersectionsHelper, SparkLabelEncoderTransformer):
+
+    _fit_checks = (categorical_check,)
+    _transform_checks = ()
+
+    _fillna_val = 0
+
+    def __init__(self,
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool,
+                 dicts: Dict,
+                 intersections: Optional[Sequence[Sequence[str]]] = None):
+
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns, dicts)
+        self.intersections = intersections
+
+    def _transform(self, df: SparkDataFrame) -> SparkDataFrame:
+        inter_df = self._build_df(df, self.intersections)
+        temp_cols = set(inter_df.columns).difference(df.columns)
+        self._input_columns = temp_cols
+
+        out_df = super()._transform(inter_df)
+
+        out_df = out_df.drop(*temp_cols)
+        return out_df
+
+
+class SparkOHEEncoderEstimator(SparkBaseEstimator):
     """
     Simple OneHotEncoder over label encoded categories.
     """
@@ -401,6 +583,9 @@ class OHEEncoder(SparkTransformer):
 
     def __init__(
         self,
+        input_cols: List[str],
+        input_roles: Dict[str, ColumnRole],
+        do_replace_columns: bool = False,
         make_sparse: Optional[bool] = None,
         total_feats_cnt: Optional[int] = None,
         dtype: type = np.float32,
@@ -413,16 +598,21 @@ class OHEEncoder(SparkTransformer):
             dtype: Dtype of new features.
 
         """
-        self.make_sparse = make_sparse
-        self.total_feats_cnt = total_feats_cnt
+        super().__init__(input_cols,
+                         input_roles,
+                         do_replace_columns=do_replace_columns,
+                         output_role=None)
+
+        self._make_sparse = make_sparse
+        self._total_feats_cnt = total_feats_cnt
         self.dtype = dtype
 
-        if self.make_sparse is None:
-            assert self.total_feats_cnt is not None, "Param total_feats_cnt should be defined if make_sparse is None"
+        if self._make_sparse is None:
+            assert self._total_feats_cnt is not None, "Param total_feats_cnt should be defined if make_sparse is None"
 
         self._ohe_transformer_and_roles: Optional[Tuple[Transformer, Dict[str, ColumnRole]]] = None
 
-    def _fit(self, dataset: SparkDataset):
+    def _fit(self, sdf: SparkDataFrame) -> Transformer:
         """Calc output shapes.
 
         Automatically do ohe in sparse form if approximate fill_rate < `0.2`.
@@ -435,17 +625,12 @@ class OHEEncoder(SparkTransformer):
 
         """
 
-        sdf = dataset.data
-        temp_sdf = sdf.cache()
-        maxs = [F.max(c).alias(f"max_{c}") for c in dataset.features]
-        mins = [F.min(c).alias(f"min_{c}") for c in dataset.features]
-        mm = temp_sdf.select(maxs + mins).collect()[0].asDict()
+        maxs = [F.max(c).alias(f"max_{c}") for c in self.getInputCols()]
+        mins = [F.min(c).alias(f"min_{c}") for c in self.getInputCols()]
+        mm = sdf.select(maxs + mins).first().asDict()
 
-        self._features = [f"{self._fname_prefix}__{c}" for c in dataset.features]
-
-        ohe = OneHotEncoder(inputCols=dataset.features, outputCols=self._features, handleInvalid="error")
-        transformer = ohe.fit(temp_sdf)
-        temp_sdf.unpersist()
+        ohe = OneHotEncoder(inputCols=self.getInputCols(), outputCols=self.getOutputCols(), handleInvalid="error")
+        transformer = ohe.fit(sdf)
 
         roles = {
             f"{self._fname_prefix}__{c}": NumericVectorOrArrayRole(
@@ -454,14 +639,43 @@ class OHEEncoder(SparkTransformer):
                     f"{self._fname_prefix}_{i}__{c}"
                     for i in np.arange(mm[f"min_{c}"], mm[f"max_{c}"] + 1)
                 ]
-            ) for c in dataset.features
+            ) for c in self.getInputCols()
         }
 
         self._ohe_transformer_and_roles = (transformer, roles)
 
-        return self
+        return OHEEncoderTransformer(
+            transformer,
+            input_cols=self.getInputCols(),
+            output_cols=self.getOutputCols(),
+            input_roles=self.getInputRoles(),
+            output_roles=roles
+        )
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+
+class OHEEncoderTransformer(SparkBaseTransformer):
+    """OHEEncoder Transformer"""
+
+    _fit_checks = (categorical_check, encoding_check)
+    _transform_checks = ()
+    _fname_prefix = "ohe"
+
+    @property
+    def features(self) -> List[str]:
+        """Features list."""
+        return self._features
+
+    def __init__(self,
+                 ohe_transformer: Transformer,
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns)
+        self._ohe_transformer = ohe_transformer
+
+    def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
         """Transform categorical dataset to ohe.
 
         Args:
@@ -471,17 +685,7 @@ class OHEEncoder(SparkTransformer):
             Numpy dataset with encoded labels.
 
         """
-
-        sdf = dataset.data
-
-        ohe, roles = self._ohe_transformer_and_roles
-
-        # transform
-        data = ohe.transform(sdf).select(*dataset.service_columns, *list(roles.keys()))
-
-        # create resulted
-        output = dataset.empty()
-        output.set_data(data, self.features, roles)
+        output = self._ohe_transformer.transform(sdf)
 
         return output
 
@@ -496,26 +700,26 @@ def te_mapping_udf(broadcasted_dict):
     return F.udf(f, "double")
 
 
-class TargetEncoder(SparkTransformer):
-
+class SparkTargetEncoderEstimator(SparkBaseEstimator):
     _fit_checks = (categorical_check, oof_task_check, encoding_check)
     _transform_checks = ()
     _fname_prefix = "oof"
 
-    def __init__(self, alphas: Sequence[float] = (0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 250.0, 1000.0)):
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 alphas: Sequence[float] = (0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 250.0, 1000.0),
+                 task_name: Optional[str] = None,
+                 folds_column: Optional[str] = None,
+                 target_column: Optional[str] = None,
+                 do_replace_columns: bool = False
+                ):
+        super().__init__(input_cols, input_roles, do_replace_columns,
+                         NumericRole(np.float32, prob=task_name == "binary"))
         self.alphas = alphas
-
-    def fit(self, dataset: SparkDataset):
-        super().fit_transform(dataset)
-
-    def fit_transform(self, dataset: SparkDataset) -> SparkDataset:
-        dataset.cache()
-        result = self._fit_transform(dataset)
-
-        if self._can_unwind_parents:
-            result.unwind_dependencies()
-
-        return result
+        self._task_name = task_name
+        self._folds_column = folds_column
+        self._target_column = target_column
 
     @staticmethod
     def score_func_binary(target, candidate) -> float:
@@ -527,307 +731,328 @@ class TargetEncoder(SparkTransformer):
     def score_func_reg(target, candidate) -> float:
         return (target - candidate) ** 2
 
-    def _fit_transform(self, dataset: SparkDataset) -> SparkDataset:
-        LAMLTransformer.fit(self, dataset)
-
+    def _fit(self, dataset: SparkDataFrame) -> "SparkTargetEncoderTransformer":
         logger.info(f"[{type(self)} (TE)] fit_transform is started")
+
+        assert self._target_column in dataset.columns, "Target should be presented in the dataframe"
+        assert self._folds_column in dataset.columns, "Folds should be presented in the dataframe"
 
         self.encodings = []
 
-        df = dataset.data \
-            .join(dataset.target, SparkDataset.ID_COLUMN) \
-            .join(dataset.folds, SparkDataset.ID_COLUMN)
+        sdf = dataset
+        sc = sdf.sql_ctx.sparkSession.sparkContext
 
-        cached_df = df.cache()
-        sc = cached_df.sql_ctx.sparkSession.sparkContext
+        _fc = F.col(self._folds_column)
+        _tc = F.col(self._target_column)
 
-        _fc = F.col(dataset.folds_column)
-        _tc = F.col(dataset.target_column)
-
-        # float, int, float
-        prior, total_count, total_target_sum = cached_df.agg(
+        n_folds, prior, total_target_sum, total_count = sdf.select(
+            F.max(_fc) + 1,
             F.mean(_tc.cast("double")),
-            F.count(_tc),
-            F.sum(_tc).cast("double")
+            F.sum(_tc).cast("double"),
+            F.count(_tc)
         ).first()
 
-        logger.debug(f"[{type(self)} (TE)] statistics is calculated")
-
-        # we assume that there is not many folds in our data
-        folds_prior_pdf = cached_df.groupBy(_fc).agg(
+        folds_prior_pdf = sdf.groupBy(_fc).agg(
             ((total_target_sum - F.sum(_tc)) / (total_count - F.count(_tc))).alias("_folds_prior")
         ).collect()
 
-        logger.debug(f"[{type(self)} (TE)] folds_prior is calculated")
+        def binary_score(col_name: str):
+            return F.mean(-(_tc * F.log(col_name) + (1 - _tc) * F.log(1 - F.col(col_name)))).alias(col_name)
 
-        folds_prior_map = {fold: prior for fold, prior in folds_prior_pdf}
+        def reg_score(col_name: str):
+            return F.mean(F.pow((_tc - F.col(col_name)), F.lit(2))).alias(col_name)
 
-        join_score_df: Optional[SparkDataFrame] = None
+        for feature in self.getInputCols():
+            _cur_col = F.col(feature)
+            windowSpec = Window.partitionBy(_cur_col)
+            f_df = sdf.groupBy(_cur_col, _fc).agg(F.sum(_tc).alias("f_sum"), F.count(_tc).alias("f_count")).cache()
 
-        cols_to_select = []
-
-        for col_name in dataset.features:
-
-            logger.debug(f"[{type(self)} (TE)] column {col_name}")
-
-            _cur_col = F.col(col_name)
-
-            _agg = (
-                cached_df
-                    .groupBy(_fc, _tc, _cur_col)
-                    .agg(F.sum(_tc).alias("_psum"), F.count(_tc).alias("_pcount"))
-                    .toPandas()
-            )
-
-            logger.debug(f"[{type(self)} (TE)] _agg is calculated")
-
-            candidates_pdf = _agg.groupby(
-                by=[dataset.folds_column, col_name]
-            )["_psum", "_pcount"].sum().reset_index().rename(columns={"_psum": "_fsum", "_pcount": "_fcount"})
-
-            if join_score_df is not None:
-                join_score_df.unpersist()
-
-            t_df = candidates_pdf.groupby(col_name).agg(
-                _tsum=('_fsum', 'sum'),
-                _tcount=('_fcount', 'sum')
-            ).reset_index()
-
-            candidates_pdf_2 = candidates_pdf.merge(t_df, on=col_name, how='inner')
-
-            def make_candidates(x):
-                cat_val, fold, fsum, tsum, fcount, tcount = x
-                oof_sum = tsum - fsum
-                oof_count = tcount - fcount
-                candidates = [(oof_sum + a * folds_prior_map[fold]) / (oof_count + a) for a in self.alphas]
-                return candidates
-
-            candidates_pdf_2['_candidates'] = candidates_pdf_2[
-                [col_name, dataset.folds_column, '_fsum', '_tsum', '_fcount', '_tcount']
-            ].apply(make_candidates, axis=1)
-
-            scores = []
-
-            def calculate_scores(pd_row):
-                folds, target, col, psum, pcount, candidates = pd_row
-                score_func = self.score_func_binary if dataset.task.name == "binary" else self.score_func_reg
-                scores.append(
-                    [score_func(target, c) * pcount for c in candidates]
+            oof_df = (
+                f_df
+                    .select(
+                    _cur_col,
+                    _fc,
+                    (F.sum('f_sum').over(windowSpec) - F.col("f_sum")).alias("oof_sum"),
+                    (F.sum('f_count').over(windowSpec) - F.col("f_count")).alias("oof_count")
                 )
-
-            candidates_pdf_3 = _agg.merge(
-                candidates_pdf_2[[dataset.folds_column, col_name, "_candidates"]],
-                on=[dataset.folds_column, col_name]
             )
 
-            candidates_pdf_3.apply(calculate_scores, axis=1)
+            mapping = {row[self._folds_column]: row["_folds_prior"] for row in folds_prior_pdf}
+            folds_prior_exp = F.create_map(*[F.lit(x) for x in itertools.chain(*mapping.items())])
 
-            _sum = np.array(scores, dtype=np.float64).sum(axis=0)
-            _mean = _sum / total_count
-            idx = _mean.argmin()
+            candidates_cols = [
+                ((F.col('oof_sum') + F.lit(alpha) * folds_prior_exp[_fc]) / (F.col('oof_count') + F.lit(alpha))).cast(
+                    "double").alias(f"candidate_{i}")
+                for i, alpha in enumerate(self.alphas)
+            ]
 
-            mapping = {}
+            candidates_df = oof_df.select(_cur_col, _fc, *candidates_cols)
 
-            def create_mapping(pd_row):
-                folds, col, candidates = pd_row
-                mapping[f"{folds}_{col}"] = candidates[idx]
+            score_func = binary_score if self._task_name == "binary" else reg_score
 
-            candidates_pdf_3[
-                [dataset.folds_column, col_name, "_candidates"]
-            ].drop_duplicates(subset=[dataset.folds_column, col_name]).apply(create_mapping, axis=1)
-
-            logger.debug(f"[{type(self)} (TE)] Statistics in pandas have been calculated. Map size: {len(mapping)}")
-
-            values = sc.broadcast(mapping)
-
-            cols_to_select.append(te_mapping_udf(values)(_fc, _cur_col).alias(f"{self._fname_prefix}__{col_name}"))
-
-            _column_agg_dicts: dict = candidates_pdf.groupby(by=[col_name]).agg(
-                _csum=("_fsum", "sum"), _ccount=("_fcount", "sum")
-            ).to_dict()
-
-            self.encodings.append(
-                {
-                    col_value: (_column_agg_dicts["_csum"][col_value] + self.alphas[idx] * prior)
-                               / (_column_agg_dicts["_ccount"][col_value] + self.alphas[idx])
-                               for col_value in _column_agg_dicts["_csum"].keys()
-                }
+            scores = (
+                sdf
+                    .join(candidates_df, on=[feature, self._folds_column])
+                    .select(*[score_func(f"candidate_{i}") for i, alpha in enumerate(self.alphas)])
+                    .first()
+                    .asDict()
             )
+
+            seq_scores = [scores[f"candidate_{i}"] for i, alpha in enumerate(self.alphas)]
+            best_alpha = self.alphas[np.argmin(seq_scores)]
+
+            encoding = f_df.groupby(_cur_col).agg(
+                ((F.sum("f_sum") + best_alpha * prior) / (F.sum('f_count') + best_alpha)).alias("encoding")).collect()
+            f_df.unpersist()
+
+            encoding = {row[feature]: row['encoding'] for row in encoding}
+
+            self.encodings.append(encoding)
 
             logger.debug(f"[{type(self)} (TE)] Encodings have been calculated")
 
-        output = dataset.empty()
-        self.output_role = NumericRole(np.float32, prob=output.task.name == "binary")
-        output.set_data(
-            cached_df.select(
-                *dataset.service_columns,
-                *cols_to_select
-            ),
-            self.features,
-            self.output_role
-        )
-
-        cached_df.unpersist()
-
-        # TODO: set cached_rdd as a dependency if it is not None
-        output.dependencies = []
-
         logger.info(f"[{type(self)} (TE)] fit_transform is finished")
 
-        return output
+        return SparkTargetEncoderTransformer(
+            encodings=self.encodings,
+            input_cols=self.getInputCols(),
+            input_roles=self.getInputRoles(),
+            output_cols=self.getOutputCols(),
+            output_roles=self.getOutputRoles(),
+            do_replace_columns=self.getDoReplaceColumns()
+        )
 
-    def _transform(self, dataset: SparkDataset) -> SparkDataset:
+
+class SparkTargetEncoderTransformer(SparkBaseTransformer):
+
+    _fit_checks = (categorical_check, oof_task_check, encoding_check)
+    _transform_checks = ()
+    _fname_prefix = "oof"
+
+    def __init__(self,
+                 encodings: List[Dict[str, Any]],
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns)
+        self._encodings = encodings
+
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
 
         cols_to_select = []
         logger.info(f"[{type(self)} (TE)] transform is started")
 
-        sc = dataset.data.sql_ctx.sparkSession.sparkContext
+        sc = dataset.sql_ctx.sparkSession.sparkContext
 
         # TODO SPARK-LAMA: Нужно что-то придумать, чтобы ориентироваться по именам колонок, а не их индексу
         # Просто взять и забираться из dataset.features е вариант, т.к. в transform может прийти другой датасет
         # В оригинальной ламе об этом не парились, т.к. сразу переходили в numpy. Если прислали датасет не с тем
         # порядком строк - ну штоош, это проблемы того, кто датасет этот сюда вкинул. Стоит ли нам тоже придерживаться
         # этой логики?
-        for i, col_name in enumerate(dataset.features):
+        for i, (col_name, out_name) in enumerate(zip(self.getInputCols(), self.getOutputCols())):
             _cur_col = F.col(col_name)
-            logger.debug(f"[{type(self)} (TE)] transform map size for column {col_name}: {len(self.encodings[i])}")
+            logger.debug(f"[{type(self)} (TE)] transform map size for column {col_name}: {len(self._encodings[i])}")
 
-            values = sc.broadcast(self.encodings[i])
+            values = sc.broadcast(self._encodings[i])
 
-            cols_to_select.append(pandas_dict_udf(values)(_cur_col).alias(f"{self._fname_prefix}__{col_name}"))
+            cols_to_select.append(pandas_dict_udf(values)(_cur_col).alias(out_name))
 
-        output = dataset.empty()
-        output.set_data(
-            dataset.data.select(
-                *dataset.service_columns,
-                *cols_to_select
-            ),
-            self.features,
-            self.output_role
-        )
+        output = self._make_output_df(dataset, cols_to_select)
 
         logger.info(f"[{type(self)} (TE)] transform is finished")
 
         return output
 
 
-class MultiClassTargetEncoder(SparkTransformer):
+# def mcte_mapping_udf(broadcasted_dict):
+#     def f(folds, target, current_column):
+#         values_dict = broadcasted_dict.value
+#         try:
+#             return values_dict[(folds, target, current_column)]
+#         except KeyError:
+#             return np.nan
+#     return F.udf(f, "double")
+
+
+def mcte_transform_udf(broadcasted_dict):
+    def f(target, current_column):
+        values_dict = broadcasted_dict.value
+        try:
+            return values_dict[(target, current_column)]
+        except KeyError:
+            return np.nan
+    return F.udf(f, "double")
+
+
+class SparkMulticlassTargetEncoderEstimator(SparkBaseEstimator):
+    _fit_checks = (categorical_check, multiclass_task_check, encoding_check)
+    _transform_checks = ()
+    _fname_prefix = "multioof"
+
+    def __init__(self,
+                 input_cols: List[str],
+                 input_roles: Dict[str, ColumnRole],
+                 alphas: Sequence[float] = (0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 250.0, 1000.0),
+                 task_name: Optional[str] = None,
+                 folds_column: Optional[str] = None,
+                 target_column: Optional[str] = None,
+                 do_replace_columns: bool = False
+                 ):
+        super().__init__(input_cols, input_roles, do_replace_columns,
+                         NumericRole(np.float32, prob=True))
+        self.alphas = alphas
+        self._task_name = task_name
+        self._folds_column = folds_column
+        self._target_column = target_column
+
+    def _fit(self, dataset: SparkDataFrame) -> "SparkMultiTargetEncoderTransformer":
+        logger.info(f"[{type(self)} (MCTE)] fit_transform is started")
+
+        assert self._target_column in dataset.columns, "Target should be presented in the dataframe"
+        assert self._folds_column in dataset.columns, "Folds should be presented in the dataframe"
+
+        self.encodings = []
+
+        df = dataset
+        sc = df.sql_ctx.sparkSession.sparkContext
+
+        _fc = F.col(self._folds_column)
+        _tc = F.col(self._target_column)
+
+        tcn = self._target_column
+        fcn = self._folds_column
+
+        agg = df.groupBy([_fc, _tc]).count().toPandas().sort_values(by=[fcn, tcn])
+
+        rows_count = agg["count"].sum()
+        prior = agg.groupby(tcn).agg({
+            "count": sum
+        })
+
+        prior["prior"] = prior["count"] / float(rows_count)
+        prior = prior.to_dict()["prior"]
+
+        agg["tt_sum"] = agg[tcn].map(agg[[tcn, "count"]].groupby(tcn).sum()["count"].to_dict()) - agg["count"]
+        agg["tf_sum"] = rows_count - agg[fcn].map(agg[[fcn, "count"]].groupby(fcn).sum()["count"].to_dict())
+
+        agg["folds_prior"] = agg["tt_sum"] / agg["tf_sum"]
+        folds_prior_dict = agg[[fcn, tcn, "folds_prior"]].groupby([fcn, tcn]).max().to_dict()["folds_prior"]
+
+        # Folds column unique values
+        fcvs = sorted(list(set([fold for fold, target in folds_prior_dict.keys()])))
+        # Target column unique values
+        tcvs = sorted(list(set([target for fold, target in folds_prior_dict.keys()])))
+
+        # cols_to_select = []
+
+        for ccn in self.getInputCols():
+
+            logger.debug(f"[{type(self)} (MCTE)] column {ccn}")
+
+            _cc = F.col(ccn)
+
+            col_agg = df.groupby(_fc, _tc, _cc).count().toPandas()
+            col_agg_dict = col_agg.groupby([ccn, fcn, tcn]).sum().to_dict()["count"]
+            t_sum_dict = col_agg[[ccn, tcn, "count"]].groupby([ccn, tcn]).sum().to_dict()["count"]
+            f_count_dict = col_agg[[ccn, fcn, "count"]].groupby([ccn, fcn]).sum().to_dict()["count"]
+            t_count_dict = col_agg[[ccn, "count"]].groupby([ccn]).sum().to_dict()["count"]
+
+            alphas_values = dict()
+            # Current column unique values
+            ccvs = sorted(col_agg[ccn].unique())
+
+            for column_value in ccvs:
+                for fold in fcvs:
+                    oof_count = t_count_dict.get(column_value, 0) - f_count_dict.get((column_value, fold), 0)
+                    for target in tcvs:
+                        oof_sum = t_sum_dict.get((column_value, target), 0) - col_agg_dict.get((column_value, fold, target), 0)
+                        alphas_values[(column_value, fold, target)] = [(oof_sum + a * folds_prior_dict[(fold, target)]) / (oof_count + a) for a in self.alphas]
+
+            def make_candidates(x):
+                fold, target, column_value, count = x
+                values = alphas_values[(column_value, fold, target)]
+                for i, a in enumerate(self.alphas):
+                    x[f"alpha_{i}"] = values[i]
+                return x
+
+            candidates_df = col_agg.apply(make_candidates, axis=1)
+
+            best_alpha_index = np.array([(-np.log(candidates_df[f"alpha_{i}"]) * candidates_df["count"]).sum() for i, a in enumerate(self.alphas)]).argmin()
+
+            # bacn = f"alpha_{best_alpha_index}"
+            # processing_df = pd.DataFrame(
+            #     [[fv, tv, cv, alp[best_alpha_index]] for (cv, fv, tv), alp in alphas_values.items()],
+            #     columns=[fcn, tcn, ccn, bacn]
+            # )
+
+            # mapping = processing_df.groupby([fcn, tcn, ccn]).max().to_dict()[bacn]
+            # values = sc.broadcast(mapping)
+
+            # for tcv in tcvs:
+            #     cols_to_select.append(mcte_mapping_udf(values)(_fc, F.lit(tcv), _cc).alias(f"{self._fname_prefix}_{tcv}__{ccn}"))
+
+            column_encodings_dict = pd.DataFrame(
+                [
+                    [
+                        ccv, tcv,
+                        (t_sum_dict.get((ccv, tcv), 0) + self.alphas[best_alpha_index] * prior[tcv])
+                        / (t_count_dict[ccv] + self.alphas[best_alpha_index])
+                    ]
+                    for (ccv, fcv, tcv), _ in alphas_values.items()
+                ],
+                columns=[ccn, tcn, "encoding"]
+            ).groupby([tcn, ccn]).max().to_dict()["encoding"]
+
+            self.encodings.append(column_encodings_dict)
+
+        logger.info(f"[{type(self)} (MCTE)] fit_transform is finished")
+
+        return SparkMultiTargetEncoderTransformer(
+            encodings=self.encodings,
+            input_cols=self.getInputCols(),
+            input_roles=self.getInputRoles(),
+            output_cols=self.getOutputCols(),
+            output_roles=self.getOutputRoles(),
+            do_replace_columns=self.getDoReplaceColumns()
+        )
+
+
+class SparkMultiTargetEncoderTransformer(SparkBaseTransformer):
 
     _fit_checks = (categorical_check, multiclass_task_check, encoding_check)
     _transform_checks = ()
     _fname_prefix = "multioof"
 
-    @property
-    def features(self) -> List[str]:
-        return self._features
+    def __init__(self,
+                 encodings: List[Dict[str, Any]],
+                 input_cols: List[str],
+                 output_cols: List[str],
+                 input_roles: RolesDict,
+                 output_roles: RolesDict,
+                 do_replace_columns: bool = False):
+        super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns)
+        self._encodings = encodings
 
-    def __init__(self, alphas: Sequence[float] = (0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 250.0, 1000.0)):
-        self.alphas = alphas
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
 
-    #TODO
-    @staticmethod
-    def score_func(candidates: np.ndarray, target: np.ndarray) -> int:
+        cols_to_select = []
+        logger.info(f"[{type(self)} (MCTE)] transform is started")
 
-        target = target[:, np.newaxis, np.newaxis]
-        scores = -np.log(np.take_along_axis(candidates, target, axis=1)).mean(axis=0)[0]
-        idx = scores.argmin()
+        sc = dataset.sql_ctx.sparkSession.sparkContext
 
-        return idx
+        for i, (col_name, out_name) in enumerate(zip(self.getInputCols(), self.getOutputCols())):
+            _cc = F.col(col_name)
+            logger.debug(f"[{type(self)} (MCTE)] transform map size for column {col_name}: {len(self._encodings[i])}")
 
-    def fit_transform(self,
-                      dataset: SparkDataset,
-                      target_column: str,
-                      folds_column: str) -> SparkDataset:
+            enc = self._encodings[i]
+            values = sc.broadcast(enc)
+            for tcv in {tcv for tcv, _ in enc.keys()}:
+                cols_to_select.append(mcte_transform_udf(values)(F.lit(tcv), _cc).alias(out_name))
 
-        # set transformer names and add checks
-        super().fit(dataset)
+        output = self._make_output_df(dataset, cols_to_select)
 
-        data = dataset.data
-
-        self.encodings = []
-        prior = data.groupBy(target_column).agg(F.count(F.col(target_column).cast("double"))/data.count()).collect()
-        prior = list(map(lambda x: x[1], prior))
-
-        f_sum = data.groupBy(target_column, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("sumd"))
-        f_count = data.groupBy(folds_column).agg(F.count(F.col(target_column).cast("double")).alias("countd"))
-        f_sum = f_sum.join(f_count, folds_column)
-        tot_sum = data.groupBy(target_column).agg(F.count(F.col(target_column).cast("double")).alias("sumT"))
-        f_sum = f_sum.join(tot_sum, target_column)
-        tot_count = data.agg(F.count(F.col(target_column).cast("double")).alias("countT")).collect()[0][0]
-
-        folds_prior = f_sum.withColumn("folds_prior", udf(lambda x, y, z: (z - x) / (tot_count - y), FloatType())(F.col("sumd"), F.col("countd"), F.col("sumT")))
-        self.feats = data
-        self.encs = {}
-        self.n_classes = data.agg(F.max(target_column)).collect()[0][0] + 1
-        self.old_columns = data.columns
-        self.old_columns.remove('_id')
-        self._features = []
-        for i in dataset.features:
-            for j in range(self.n_classes):
-                self._features.append("{0}_{1}__{2}".format("multioof", j, i))
-
-        for col_name in self.old_columns:
-
-            f_sum = data.groupBy(col_name, target_column, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("sumd"))
-            f_count = data.groupBy(col_name, folds_column).agg(F.count(F.col(target_column).cast("double")).alias("countd"))
-            t_sum = data.groupBy(col_name, target_column).agg(F.count(F.col(target_column).cast("double")).alias("sumt"))
-            t_count = data.groupBy(col_name).agg(F.count(F.col(target_column).cast("double")).alias("countt"))
-            f_sum = f_sum.join(f_count, [col_name, folds_column]).join(t_sum, [col_name, target_column]).join(t_count, col_name)
-
-            oof_sum = f_sum.withColumn("oof_sum", F.col("sumt") - F.col(("sumd"))).withColumn("oof_count", F.col("countt") - F.col(("countd")))
-            oof_sum_joined = oof_sum.join(data[col_name, target_column, folds_column], [col_name, target_column, folds_column]).join(folds_prior[folds_column, target_column, "folds_prior"], [folds_column, target_column])
-            diff = {}
-            udf_diff = udf(lambda x: float(-(np.log(x))), DoubleType())
-
-            for a in self.alphas:
-                udf_a = udf(lambda os, fp, oc: (os + a * fp) / (oc + a), DoubleType())
-                alp_colname = f"walpha{a}".replace(".", "d").replace(",", "d")
-                dif_colname = f"{alp_colname}Diff"
-                oof_sum_joined = oof_sum_joined.withColumn(alp_colname, udf_a(F.col("oof_sum").cast("double"), F.col("folds_prior").cast("double"), F.col("oof_count").cast("double")))
-                oof_sum_joined = oof_sum_joined.withColumn(dif_colname, udf_diff(F.col(alp_colname).cast("double")))
-                diff[a] = oof_sum_joined.agg(F.avg(F.col(alp_colname + "Diff").cast("double"))).collect()[0][0]
-            a_opt = min(diff, key=diff.get)
-            out_col = f"walpha{a_opt}".replace(".", "d").replace(",", "d")
-
-            w = Window.orderBy(monotonically_increasing_id())
-
-            self.feats = self.feats.withColumn("columnindex", F.row_number().over(w))
-            oof_sum_joined = oof_sum_joined.withColumn("columnindex", F.row_number().over(w))
-
-            self.feats = self.feats.alias('a').join(oof_sum_joined.withColumnRenamed(out_col, self._fname_prefix + "__" +col_name).alias('b'),
-                                                     self.feats.columnindex == oof_sum_joined.columnindex, 'inner').select(
-                [F.col('a.' + xx) for xx in self.feats.columns] + [F.col('b.{}'.format(self._fname_prefix + "__" +col_name))]).drop(self.feats.columnindex)
-
-            # calc best encoding
-            enc_list = []
-            for i in range(self.n_classes):
-                enc = f_sum.withColumn(f"enc_{col_name}", udf(lambda tot_sum, tot_count: float((tot_sum + a_opt * prior[i]) / (tot_count + a_opt)), FloatType())(F.col("sumt"), F.col("countt"))).select(f"enc_{col_name}")
-                enc = list(map(lambda x: x[0], enc.collect()))
-                enc_list.append(enc)
-            sums = [sum(x) for x in zip(*enc_list)]
-            for i in range(self.n_classes):
-                self.encs[self._fname_prefix + "_" + str(i) + "__" + col_name ] = [enc_list[i][j]/sums[j] for j in range(len(enc_list[i]))]
-
-        self.output_role = NumericRole(np.float32, prob=True)
-        return self.transform(dataset)
-
-    def transform(self, dataset: SparkDataset) -> SparkDataset:
-
-        # checks here
-        super().transform(dataset)
-
-        data = dataset.data
-        dc = self.old_columns
-        # transform
-        for c in dc:
-            data = data.withColumn(c, data[c].cast("int"))
-            for i in range(self.n_classes):
-                col = self.encs[self._fname_prefix + "_" + str(i) + "__" + c]
-                data = data.withColumn(self._fname_prefix + "_" + str(i) + "__" + c, udf(lambda x: col[x], DoubleType())(c))
-            data = data.drop(c)
-
-        # create resulted
-        output = dataset.empty()
-        output.set_data(data, self.features, self.output_role)
+        logger.info(f"[{type(self)} (MCTE)] transform is finished")
 
         return output

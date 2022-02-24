@@ -1,23 +1,35 @@
-from typing import Optional, Callable, Any, Dict, Union, cast
+from typing import Optional, Union, cast
 
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator, MulticlassClassificationEvaluator, \
     Evaluator
+from pyspark.ml.functions import vector_to_array
+from pyspark.sql.pandas.functions import pandas_udf
 
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.tasks.losses.base import SparkLoss
 from lightautoml.tasks import Task as LAMATask
-from lightautoml.tasks.base import LAMLMetric, _default_losses, _default_metrics, _valid_task_names
+from lightautoml.tasks.base import LAMLMetric, _default_losses
+
+import pandas as pd
+import numpy as np
+
+DEFAULT_PREDICTION_COL_NAME = "prediction"
+DEFAULT_TARGET_COL_NAME = "target"
+DEFAULT_PROBABILITY_COL_NAME = "probability"
+
+
+def argmax_in_vector(vec: pd.Series) -> pd.Series:
+    vec.transform()
 
 
 class SparkMetric(LAMLMetric):
     def __init__(
         self,
         name: str,
-        evaluator: Evaluator,
-        target_col: str,
-        prediction_col: str,
+        metric_name: str,
+        target_col: Optional[str] = None,
+        prediction_col: Optional[str] = None,
         greater_is_better: bool = True,
-        metric_params: Optional[Dict] = None
     ):
         """
 
@@ -32,39 +44,46 @@ class SparkMetric(LAMLMetric):
 
         """
         self._name = name
-        self._evaluator = evaluator
+        self._metric_name = metric_name
         self._target_col = target_col
         self._prediction_col = prediction_col
         self.greater_is_better = greater_is_better
-        self._metric_params = metric_params
 
     def __call__(self, dataset: Union[SparkDataset, SparkDataFrame], dropna: bool = False):
+        sdf: SparkDataFrame = dataset.data if isinstance(dataset, SparkDataset) else dataset
 
-        if isinstance(dataset, SparkDataset):
-
-            assert len(dataset.features) == 1, \
-                f"Dataset should contain only one feature that would be interpretated as a prediction"
-
+        if self._target_col is not None and self._prediction_col is not None:
+            assert self._target_col in sdf.columns and self._prediction_col in sdf.columns
+            prediction_column = self._prediction_col
+            target_column = self._target_col
+        elif isinstance(dataset, SparkDataset) and len(dataset.features) == 1:
             prediction_column = dataset.features[0]
-
-            sdf = dataset.data.dropna() if dropna else dataset.data
-            sdf = (
-                sdf.join(dataset.target, SparkDataset.ID_COLUMN)
-                    .withColumnRenamed(dataset.target_column, self._target_col)
-                    .withColumnRenamed(prediction_column, self._prediction_col)
-            )
-        elif isinstance(dataset, SparkDataFrame):
-            sdf = cast(SparkDataFrame, dataset)
-            assert "prediction" in sdf.columns and "target" in sdf.columns
-            sdf = (
-                sdf
-                .withColumnRenamed("target", self._target_col)
-                .withColumnRenamed("prediction", self._prediction_col)
-            )
+            target_column = dataset.target_column
         else:
-            raise ValueError(f"Unsupported type {type(dataset)}")
+            sdf = cast(SparkDataFrame, dataset)
+            assert DEFAULT_PREDICTION_COL_NAME in sdf.columns and DEFAULT_TARGET_COL_NAME in sdf.columns
+            prediction_column = DEFAULT_PREDICTION_COL_NAME
+            target_column = DEFAULT_TARGET_COL_NAME
 
-        score = self._evaluator.evaluate(sdf, params=self._metric_params)
+        sdf = sdf.dropna() if dropna else sdf
+
+        if self._name == "binary":
+            evaluator = BinaryClassificationEvaluator(rawPredictionCol=prediction_column)
+        elif self._name == "reg":
+            evaluator = RegressionEvaluator(predictionCol=prediction_column)
+        else:
+            temp_pred_col = 'multiclass_temp_prediction'
+            evaluator = MulticlassClassificationEvaluator(probabilityCol=prediction_column, predictionCol=temp_pred_col)
+
+            @pandas_udf('double')
+            def argmax(vec: pd.Series) -> pd.Series:
+                return vec.transform(lambda x: np.argmax(x))
+
+            sdf = sdf.select('*', argmax(vector_to_array(prediction_column)).alias(temp_pred_col))
+
+        evaluator = evaluator.setMetricName(self._metric_name).setLabelCol(target_column)
+
+        score = evaluator.evaluate(sdf)
         sign = 2 * float(self.greater_is_better) - 1
         return score * sign
 
@@ -73,70 +92,56 @@ class SparkMetric(LAMLMetric):
         return self._name
 
 
-class Task(LAMATask):
+class SparkTask(LAMATask):
 
-    _default_metrics = {"binary": "areaUnderROC", "reg": "mse", "multiclass": "logLoss"}
-    _greater_is_better_mapping = {"areaUnderROC": True, "mse": False, "logLoss": False}
-    _target_col = "target"
-    _prediction_col = "prediction"
+    _default_metrics = {"binary": "auc", "reg": "mse", "multiclass": "crossentropy"}
+
+    _supported_metrics ={
+        "binary": {
+            "auc": "areaUnderROC",
+            "aupr": "areaUnderPR"
+        },
+        "reg": {
+            "r2": "rmse",
+            "mse": "mse",
+            "mae": "mae",
+        },
+        "multiclass": {
+            "crossentropy": "logLoss",
+            "accuracy": "accuracy",
+            "f1_micro": "f1",
+            "f1_weighted": "weightedFMeasure"
+        }
+    }
 
     def __init__(
         self,
         name: str,
         loss: Optional[str] = None,
-        loss_params: Optional[Dict] = None,
         metric: Optional[str] = None,
-        metric_params: Optional[Dict] = None,
         greater_is_better: Optional[bool] = None,
     ):
-        super().__init__(name, loss, loss_params, metric, metric_params, greater_is_better)
-        assert name in _valid_task_names, "Invalid task name: {}, allowed task names: {}".format(
-            name, _valid_task_names
-        )
 
-        self._name = name
+        super().__init__(name, loss, None, metric, None, greater_is_better)
 
         if metric is None:
-            metric = self._default_metrics[self.name]
-
-        if greater_is_better is None:
-            greater_is_better = self._greater_is_better_mapping[metric]
+            metric = self._default_metrics[name]
 
         # add losses
         # if None - infer from task
         self.losses = {}
         if loss is None:
             loss = _default_losses[self.name]
-
-        if loss_params is None:
-            loss_params = {}
-
         # SparkLoss actualy does nothing, but it is there
         # to male TabularAutoML work
         self.losses = {'lgb': SparkLoss(),'linear_l2': SparkLoss()}
 
-        # TODO: do something with loss, but check at first MLAlgo impl.
-
-        # set callback metric for loss
-        # if no metric - infer from task
-
-        self.metric_params = metric_params if metric_params else dict()
-
-        # TODO: real column names?
-        if self._name == "binary":
-            self._evaluator = BinaryClassificationEvaluator(metricName=metric,
-                                                            rawPredictionCol=self._prediction_col,
-                                                            labelCol=self._target_col)
-        elif self._name == "reg":
-            self._evaluator = RegressionEvaluator(metricName=metric,
-                                                  predictionCol=self._prediction_col,
-                                                  labelCol=self._target_col)
-        else:
-            self._evaluator = MulticlassClassificationEvaluator(metricName=metric,
-                                                                predictionCol=self._prediction_col,
-                                                                labelCol=self._target_col)
+        assert metric in self._supported_metrics[self.name], \
+            f"Unsupported metric {metric} for task {self.name}." \
+            f"The following metrics are supported: {list(self._supported_metrics[self.name].keys())}"
 
         self.metric_name = metric
 
     def get_dataset_metric(self) -> LAMLMetric:
-        return SparkMetric(self.name, self._evaluator, self._target_col, self._prediction_col, self.greater_is_better)
+        spark_metric_name = self._supported_metrics[self.name][self.metric_name]
+        return SparkMetric(self.name, metric_name=spark_metric_name, greater_is_better=self.greater_is_better)

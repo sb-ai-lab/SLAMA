@@ -112,7 +112,7 @@ class BoostCB(TabularMLAlgo, ImportanceEstimator):
         self.task = train_valid_iterator.train.task
 
         if train_valid_iterator.train.dataset_type != "CSRSparseDataset":
-            self._nan_rate = train_valid_iterator.train.to_pandas().nan_rate()
+            self._nan_rate = train_valid_iterator.train.to_pandas()._nan_rate()
 
         try:
             self._le_cat_features = getattr(self, "_le_cat_features")

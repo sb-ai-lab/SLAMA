@@ -13,6 +13,7 @@ experiments:
     library: ["spark"]
     repeat_rate: 1
     params:
+      func: ["calculate_automl"]
       dataset: ["buzz_dataset", "lama_test_dataset", "ailerons_dataset", "used_cars_dataset"]
       seed: [1, 42, 100, 777]
       cv: [5]

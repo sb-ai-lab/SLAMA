@@ -6,15 +6,13 @@ Simple example for binary classification on tabular data.
 import logging.config
 
 import pandas as pd
-from sklearn.metrics import roc_auc_score
+from pyspark.sql import functions as F
 from sklearn.model_selection import train_test_split
 
-from lightautoml.spark.automl.presets.tabular_presets import TabularAutoML
+from lightautoml.spark.automl.presets.tabular_presets import SparkTabularAutoML
 from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.tasks.base import Task as SparkTask
+from lightautoml.spark.tasks.base import SparkTask as SparkTask
 from lightautoml.spark.utils import spark_session, log_exec_time, logging_config, VERBOSE_LOGGING_FORMAT
-
-from pyspark.sql import functions as F
 
 logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/lama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -31,7 +29,7 @@ if __name__ == "__main__":
         test_data = test_data.withColumn(SparkDataset.ID_COLUMN, F.monotonically_increasing_id())
 
         # run automl
-        automl = TabularAutoML(
+        automl = SparkTabularAutoML(
             spark=spark,
             task=SparkTask("binary"),
             general_params={"use_algos": ["lgb", "linear_l2"]})

@@ -14,7 +14,7 @@ from sklearn.base import TransformerMixin
 from lightautoml.dataset.roles import TextRole
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
-from lightautoml.spark.transformers.base import SparkTransformer
+from lightautoml.spark.transformers.base import ObsoleteSparkTransformer
 from lightautoml.text.dl_transformers import DLTransformer
 from lightautoml.text.tokenizer import BaseTokenizer
 from lightautoml.text.tokenizer import SimpleEnTokenizer
@@ -22,7 +22,7 @@ from lightautoml.transformers.text import TunableTransformer, model_by_name, log
 from lightautoml.transformers.text import text_check
 
 
-class TfidfTextTransformer(SparkTransformer, TunableTransformer):
+class TfidfTextTransformer(ObsoleteSparkTransformer, TunableTransformer):
     """Simple Tfidf vectorizer."""
 
     _fit_checks = (text_check,)
@@ -202,7 +202,7 @@ class TfidfTextTransformer(SparkTransformer, TunableTransformer):
         return output
 
 
-class AutoNLPWrap(SparkTransformer):
+class AutoNLPWrap(ObsoleteSparkTransformer):
     """Calculate text embeddings."""
 
     _fit_checks = (text_check,)
@@ -490,7 +490,7 @@ class AutoNLPWrap(SparkTransformer):
         return 1
 
 
-class Tokenizer(SparkTransformer):
+class Tokenizer(ObsoleteSparkTransformer):
     _fit_checks = (text_check,)
     _transform_checks = ()
     _fname_prefix = "tokenized"
@@ -523,7 +523,7 @@ class Tokenizer(SparkTransformer):
         return output
 
 
-class ConcatTextTransformer(SparkTransformer):
+class ConcatTextTransformer(ObsoleteSparkTransformer):
     _fit_checks = (text_check,)
     _transform_checks = ()
     _fname_prefix = "concated"

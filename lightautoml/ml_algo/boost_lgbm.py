@@ -258,6 +258,7 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
         lgb_train = lgb.Dataset(train.data, label=train_target, weight=train_weight)
         lgb_valid = lgb.Dataset(valid.data, label=valid_target, weight=valid_weight)
 
+        # TODO: SPARK-LAMA remove later
         with redirect_stdout(LoggerStream(logger, verbose_eval=100)):
             model = lgb.train(
                 params,

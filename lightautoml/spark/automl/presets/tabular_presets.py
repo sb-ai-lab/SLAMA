@@ -1,40 +1,38 @@
 import logging
 import os
 from copy import deepcopy, copy
-from typing import Optional, Sequence, Iterable, cast, Union, Tuple, Callable
+from typing import Optional, Sequence, Iterable, Union, Tuple
 
-import pandas as pd
 from pyspark.sql import SparkSession
 
-from lightautoml.automl.presets.base import AutoMLPreset, upd_params
-from lightautoml.dataset.base import RolesDict, LAMLDataset
+from lightautoml.automl.presets.base import upd_params
+from lightautoml.dataset.base import RolesDict
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
 from lightautoml.pipelines.selection.base import SelectionPipeline, ComposedSelector
 from lightautoml.pipelines.selection.importance_based import ModelBasedImportanceEstimator, ImportanceCutoffSelector
 from lightautoml.pipelines.selection.permutation_importance_based import NpIterativeFeatureSelector
-from lightautoml.spark.pipelines.selection.permutation_importance_based import NpPermutationImportanceEstimator
-from lightautoml.reader.tabular_batch_generator import ReadableToDf, read_data
-from lightautoml.spark.automl.blend import WeightedBlender
+from lightautoml.reader.tabular_batch_generator import ReadableToDf
+from lightautoml.spark.automl.blend import SparkWeightedBlender, SparkBestModelSelector
+from lightautoml.spark.automl.presets.base import SparkAutoMLPreset
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
-from lightautoml.spark.ml_algo.boost_lgbm import BoostLGBM
-from lightautoml.spark.ml_algo.linear_pyspark import LinearLBFGS
-from lightautoml.spark.pipelines.features.lgb_pipeline import LGBSimpleFeatures, LGBAdvancedPipeline
-from lightautoml.spark.pipelines.features.linear_pipeline import LinearFeatures
-from lightautoml.spark.pipelines.ml.nested_ml_pipe import NestedTabularMLPipeline
+from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
+from lightautoml.spark.ml_algo.linear_pyspark import SparkLinearLBFGS
+from lightautoml.spark.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures, SparkLGBAdvancedPipeline
+from lightautoml.spark.pipelines.features.linear_pipeline import SparkLinearFeatures
+from lightautoml.spark.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline
+from lightautoml.spark.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
 from lightautoml.spark.reader.base import SparkToSparkReader
-from lightautoml.spark.validation.folds_iterator import FoldsIterator
-from lightautoml.tasks import Task
-from lightautoml.validation.base import HoldoutIterator, DummyIterator
+from lightautoml.spark.tasks.base import SparkTask
 
 logger = logging.getLogger(__name__)
 
-# Either path/full url, or pyspark.sql.DataFrame, or dict with data
-ReadableIntoSparkDf = Union[str, SparkDataFrame, dict, pd.DataFrame]
+# Either path/full url, or pyspark.sql.DataFrame
+ReadableIntoSparkDf = Union[str, SparkDataFrame]
 
 base_dir = os.path.dirname(__file__)
 
 
-class TabularAutoML(AutoMLPreset):
+class SparkTabularAutoML(SparkAutoMLPreset):
     _default_config_path = "tabular_config.yml"
 
     # set initial runtime rate guess for first level models
@@ -49,7 +47,7 @@ class TabularAutoML(AutoMLPreset):
     def __init__(
             self,
             spark: SparkSession,
-            task: Task,
+            task: SparkTask,
             timeout: int = 3600,
             memory_limit: int = 16,
             cpu_limit: int = 4,
@@ -72,7 +70,7 @@ class TabularAutoML(AutoMLPreset):
             config_path = os.path.join(base_dir, self._default_config_path)
         super().__init__(task, timeout, memory_limit, cpu_limit, gpu_ids, timing_params, config_path)
 
-        logger.info("I'm here")
+        self._cacher_key = 'main_cache'
 
         self._spark = spark
         # upd manual params
@@ -135,7 +133,6 @@ class TabularAutoML(AutoMLPreset):
         if not self.general_params["nested_cv"]:
             self.nested_cv_params["cv"] = 1
 
-
     def get_time_score(self, n_level: int, model_type: str, nested: Optional[bool] = None):
 
         if nested is None:
@@ -180,13 +177,13 @@ class TabularAutoML(AutoMLPreset):
             time_score = self.get_time_score(n_level, "lgb", False)
 
             sel_timer_0 = self.timer.get_task_timer("lgb", time_score)
-            selection_feats = LGBSimpleFeatures()
+            selection_feats = SparkLGBSimpleFeatures()
 
-            selection_gbm = BoostLGBM(timer=sel_timer_0, **lgb_params)
+            selection_gbm = SparkBoostLGBM(timer=sel_timer_0, **lgb_params)
             selection_gbm.set_prefix("Selector")
 
             if selection_params["importance_type"] == "permutation":
-                importance = NpPermutationImportanceEstimator()
+                importance = SparkNpPermutationImportanceEstimator()
             else:
                 importance = ModelBasedImportanceEstimator()
 
@@ -201,13 +198,13 @@ class TabularAutoML(AutoMLPreset):
                 time_score = self.get_time_score(n_level, "lgb", False)
 
                 sel_timer_1 = self.timer.get_task_timer("lgb", time_score)
-                selection_feats = LGBSimpleFeatures()
-                selection_gbm = BoostLGBM(timer=sel_timer_1, **lgb_params)
+                selection_feats = SparkLGBSimpleFeatures()
+                selection_gbm = SparkBoostLGBM(timer=sel_timer_1, **lgb_params)
                 selection_gbm.set_prefix("Selector")
 
-                # # TODO: Check about reusing permutation importance
-                importance = NpPermutationImportanceEstimator()
+                importance = SparkNpPermutationImportanceEstimator()
 
+                # TODO: SPARK-LAMA would it work here with SparkNpPermutationImportanceEstimator?
                 extra_selector = NpIterativeFeatureSelector(
                     selection_feats,
                     selection_gbm,
@@ -215,21 +212,22 @@ class TabularAutoML(AutoMLPreset):
                     feature_group_size=selection_params["feature_group_size"],
                     max_features_cnt_in_result=selection_params["max_features_cnt_in_result"],
                 )
-                
+
+                # TODO: SPARK-LAMA would it work here with SparkNpPermutationImportanceEstimator?
                 pre_selector = ComposedSelector([pre_selector, extra_selector])
 
         return pre_selector
 
-    # TODO: SPARK-LAMA rewrite in the descdent
-    def get_linear(self, n_level: int = 1, pre_selector: Optional[SelectionPipeline] = None) -> NestedTabularMLPipeline:
+    def get_linear(self, n_level: int = 1, pre_selector: Optional[SelectionPipeline] = None) -> SparkNestedTabularMLPipeline:
 
         # linear model with l2
         time_score = self.get_time_score(n_level, "linear_l2")
         linear_l2_timer = self.timer.get_task_timer("reg_l2", time_score)
-        linear_l2_model = LinearLBFGS(timer=linear_l2_timer, **self.linear_l2_params)
-        linear_l2_feats = LinearFeatures(output_categories=True, **self.linear_pipeline_params)
+        linear_l2_model = SparkLinearLBFGS(timer=linear_l2_timer, **self.linear_l2_params)
+        linear_l2_feats = SparkLinearFeatures(output_categories=True, **self.linear_pipeline_params)
 
-        linear_l2_pipe = NestedTabularMLPipeline(
+        linear_l2_pipe = SparkNestedTabularMLPipeline(
+            self._cacher_key,
             [linear_l2_model],
             force_calc=True,
             pre_selection=pre_selector,
@@ -246,7 +244,7 @@ class TabularAutoML(AutoMLPreset):
             pre_selector: Optional[SelectionPipeline] = None,
     ):
 
-        gbm_feats = LGBAdvancedPipeline(**self.gbm_pipeline_params)
+        gbm_feats = SparkLGBAdvancedPipeline(**self.gbm_pipeline_params)
 
         ml_algos = []
         force_calc = []
@@ -256,7 +254,7 @@ class TabularAutoML(AutoMLPreset):
             time_score = self.get_time_score(n_level, key)
             gbm_timer = self.timer.get_task_timer(algo_key, time_score)
             if algo_key == "lgb":
-                gbm_model = BoostLGBM(timer=gbm_timer, **self.lgb_params)
+                gbm_model = SparkBoostLGBM(timer=gbm_timer, **self.lgb_params)
             elif algo_key == "cb":
                 # TODO: SPARK-LAMA implement this later
                 raise NotImplementedError("Not supported yet")
@@ -275,13 +273,12 @@ class TabularAutoML(AutoMLPreset):
             ml_algos.append(gbm_model)
             force_calc.append(force)
 
-        gbm_pipe = NestedTabularMLPipeline(
-            ml_algos, force_calc, pre_selection=pre_selector, features_pipeline=gbm_feats, **self.nested_cv_params
+        gbm_pipe = SparkNestedTabularMLPipeline(
+            self._cacher_key, ml_algos, force_calc, pre_selection=pre_selector, features_pipeline=gbm_feats, **self.nested_cv_params
         )
 
         return gbm_pipe
 
-    # TODO: SPARK-LAMA correct it to rewrite only some submethods in the descendant
     def create_automl(self, **fit_args):
         """Create basic automl instance.
 
@@ -323,8 +320,9 @@ class TabularAutoML(AutoMLPreset):
 
             levels.append(lvl)
 
+        # TODO: SPARK-LAMA replace with the weighthed blender
         # blend everything
-        blender = WeightedBlender(max_nonzero_coef=self.general_params["weighted_blender_max_nonzero_coef"])
+        blender = SparkWeightedBlender(max_nonzero_coef=self.general_params["weighted_blender_max_nonzero_coef"])
 
         # initialize
         self._initialize(
@@ -358,80 +356,6 @@ class TabularAutoML(AutoMLPreset):
 
         return read_csv_params
 
-    def _read_data(self,
-                   data: ReadableIntoSparkDf,
-                   features_names: Optional[Sequence[str]] = None,
-                   read_csv_params: Optional[dict] = None) -> Tuple[SparkDataFrame, Optional[RolesDict]]:
-        """Get :class:`~pandas.DataFrame` from different data formats.
-
-          Note:
-              Supported now data formats:
-
-                  - Path to ``.csv``, ``.parquet``, ``.feather`` files.
-                  - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`.
-                    For example, ``{'data': X...}``. In this case,
-                    roles are optional, but `train_features`
-                    and `valid_features` required.
-                  - :class:`pandas.DataFrame`.
-
-          Args:
-              data: Readable to DataFrame data.
-              features_names: Optional features names if ``numpy.ndarray``.
-              n_jobs: Number of processes to read file.
-              read_csv_params: Params to read csv file.
-
-          Returns:
-              Tuple with read data and new roles mapping.
-
-          """
-        if read_csv_params is None:
-            read_csv_params = {}
-
-        if isinstance(data, SparkDataFrame):
-            return data, None
-
-        if isinstance(data, pd.DataFrame):
-            # TODO SPARK-LAMA: Fix schema inference
-            object_cols = [c for c, dtype in dict(data.dtypes).items() if str(dtype) == 'object']
-            for c in object_cols:
-                data[c] = data[c].where(pd.notnull(data[c]), None)
-            return self._spark.createDataFrame(data), None
-
-        # case - dict of array args passed
-        if isinstance(data, dict):
-            # TODO: SPARK-LAMA implement it later
-            raise NotImplementedError("Not supported yet")
-            # df = self._spark.createDataFrame(data=data["data"])
-            # upd_roles = {}
-            # for k in data:
-            #     if k != "data":
-            #         name = "__{0}__".format(k.upper())
-            #         assert name not in df.columns, "Not supported feature name {0}".format(name)
-            #         df[name] = data[k]
-            #         upd_roles[k] = name
-            # return df, upd_roles
-
-        if isinstance(data, str):
-            path: str = data
-            if path.endswith(".feather"):
-                # TODO: SPARK-LAMA implement it later
-                raise NotImplementedError("Not supported yet")
-                # # TODO: check about feather columns arg
-                # data = pd.read_feather(data)
-                # if read_csv_params["usecols"] is not None:
-                #     data = data[read_csv_params["usecols"]]
-                # return data, None
-            if path.endswith(".parquet"):
-                return self._spark.read.parquet(path), None
-                # return pd.read_parquet(data, columns=read_csv_params["usecols"]), None
-            if path.endswith(".csv"):
-                return self._spark.read.csv(path, **read_csv_params), None
-            else:
-                raise ValueError(f"Unsupported data format: {os.path.splitext(path)[1]}")
-
-        raise ValueError("Input data format is not supported")
-
-    # TODO: SPARK-LAMA rewrite in the descdent
     def fit_predict(
             self,
             train_data: ReadableIntoSparkDf,
@@ -490,11 +414,11 @@ class TabularAutoML(AutoMLPreset):
         if upd_roles:
             roles = {**roles, **upd_roles}
         if valid_data is not None:
-            data, _ = self._read_data(valid_data, valid_features, read_csv_params)
+            data, _ = self._read_data(valid_data, valid_features, self.read_csv_params)
 
         oof_pred = super().fit_predict(train, roles=roles, cv_iter=cv_iter, valid_data=valid_data, verbose=verbose)
 
-        return cast(SparkDataset, oof_pred)
+        return oof_pred
 
     # TODO: SPARK-LAMA rewrite in the descdent
     def predict(
@@ -502,64 +426,90 @@ class TabularAutoML(AutoMLPreset):
             data: ReadableIntoSparkDf,
             features_names: Optional[Sequence[str]] = None,
             return_all_predictions: Optional[bool] = None,
+            add_reader_attrs: bool = False
     ) -> SparkDataset:
+        """Get dataset with predictions.
+
+        Almost same as :meth:`lightautoml.automl.base.AutoML.predict`
+        on new dataset, with additional features.
+
+        Additional features - working with different data formats.
+        Supported now:
+
+            - Path to ``.csv``, ``.parquet``, ``.feather`` files.
+            - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`. For example,
+              ``{'data': X...}``. In this case roles are optional,
+              but `train_features` and `valid_features` required.
+            - :class:`pandas.DataFrame`.
+
+        Parallel inference - you can pass ``n_jobs`` to speedup
+        prediction (requires more RAM).
+        Batch_inference - you can pass ``batch_size``
+        to decrease RAM usage (may be longer).
+
+        Args:
+            data: Dataset to perform inference.
+            features_names: Optional features names,
+              if cannot be inferred from `train_data`.
+            batch_size: Batch size or ``None``.
+            n_jobs: Number of jobs.
+            return_all_predictions: if True,
+              returns all model predictions from last level
+
+        Returns:
+            Dataset with predictions.
+
+        """
 
         read_csv_params = self._get_read_csv_params()
+
         data, _ = self._read_data(data, features_names, read_csv_params)
-        pred = super().predict(data, features_names, return_all_predictions)
-        return cast(SparkDataset, pred)
+        pred = super().predict(data, features_names, return_all_predictions, add_reader_attrs)
+        return pred
 
-    # TODO: SPARK-LAMA rewrite in the descdent (or reload read_data)
-    def get_feature_scores(
-            self,
-            calc_method: str = "fast",
-            data: Optional[ReadableToDf] = None,
-            features_names: Optional[Sequence[str]] = None,
-            silent: bool = True,
-    ):
-        if calc_method == "fast":
-            for level in self.levels:
-                for pipe in level:
-                    fi = pipe.pre_selection.get_features_score()
-                    if fi is not None:
-                        used_feats = set(self.collect_used_feats())
-                        fi = fi.reset_index()
-                        fi.columns = ["Feature", "Importance"]
-                        return fi[fi["Feature"].map(lambda x: x in used_feats)]
+    def _read_data(self,
+                   data: ReadableIntoSparkDf,
+                   features_names: Optional[Sequence[str]] = None,
+                   read_csv_params: Optional[dict] = None) -> Tuple[SparkDataFrame, Optional[RolesDict]]:
+        """Get :class:`~pandas.DataFrame` from different data formats.
 
+          Note:
+              Supported now data formats:
+
+                  - Path to ``.csv``, ``.parquet``, ``.feather`` files.
+                  - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`.
+                    For example, ``{'data': X...}``. In this case,
+                    roles are optional, but `train_features`
+                    and `valid_features` required.
+                  - :class:`pandas.DataFrame`.
+
+          Args:
+              data: Readable to DataFrame data.
+              features_names: Optional features names if ``numpy.ndarray``.
+              n_jobs: Number of processes to read file.
+              read_csv_params: Params to read csv file.
+
+          Returns:
+              Tuple with read data and new roles mapping.
+
+          """
+        if read_csv_params is None:
+            read_csv_params = {}
+
+        if isinstance(data, SparkDataFrame):
+            return data, None
+
+        if isinstance(data, str):
+            path: str = data
+            if path.endswith(".parquet"):
+                return self._spark.read.parquet(path), None
+                # return pd.read_parquet(data, columns=read_csv_params["usecols"]), None
+            if path.endswith(".csv"):
+                return self._spark.read.csv(path, **read_csv_params), None
             else:
-                if not silent:
-                    logger.info2("No feature importances to show. Please use another calculation method")
-                return None
+                raise ValueError(f"Unsupported data format: {os.path.splitext(path)[1]}")
 
-        if calc_method != "accurate":
-            if not silent:
-                logger.info2(
-                    "Unknown calc_method. "
-                    + "Currently supported methods for feature importances calculation are 'fast' and 'accurate'."
-                )
-            return None
-
-        if data is None:
-            if not silent:
-                logger.info2("Data parameter is not setup for accurate calculation method. Aborting...")
-            return None
-
-        read_csv_params = self._get_read_csv_params()
-        data, _ = read_data(data, features_names, self.cpu_limit, read_csv_params)
-        used_feats = self.collect_used_feats()
-
-        # TODO: SPARK-LAMA implement it later
-        raise NotImplementedError("Not supported yet")
-        # fi = calc_feats_permutation_imps(
-        #     self,
-        #     used_feats,
-        #     data,
-        #     self.reader.target,
-        #     self.task.get_dataset_metric(),
-        #     silent=silent,
-        # )
-        # return fi
+        raise ValueError("Input data format is not supported")
 
     def get_individual_pdp(
             self,
@@ -656,26 +606,3 @@ class TabularAutoML(AutoMLPreset):
         #     top_n_classes,
         #     datetime_level,
         # )
-
-    def _concatenate_datasets(self, datasets: Sequence[LAMLDataset]) -> LAMLDataset:
-        assert all(isinstance(ds, SparkDataset) for ds in datasets)
-        sdss = [cast(SparkDataset, ds) for ds in datasets]
-        return SparkDataset.concatenate(sdss)
-
-    def _create_validation_iterator(self, train: LAMLDataset, valid: Optional[LAMLDataset], n_folds: Optional[int],
-                                    cv_iter: Optional[Callable]):
-
-        sds = cast(SparkDataset, train)
-
-        if valid:
-            iterator = HoldoutIterator(train, valid)
-        elif cv_iter:
-            raise NotImplementedError("Not supported now")
-        elif train.folds:
-            iterator = FoldsIterator(sds, n_folds)
-        else:
-            iterator = DummyIterator(train)
-
-        logger.info(f"Using train valid iterator of type: {type(iterator)}")
-
-        return iterator

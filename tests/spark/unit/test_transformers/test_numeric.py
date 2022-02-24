@@ -6,12 +6,11 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.transformers.numeric import LogOdds as SparkLogOdds, StandardScaler as SparkStandardScaler, \
-    QuantileBinning as SparkQuantileBinning
-from lightautoml.spark.transformers.numeric import NaNFlags as SparkNaNFlags, FillInf as SparkFillInf, \
-    FillnaMedian as SparkFillnaMedian
+from lightautoml.spark.transformers.numeric import SparkFillInfTransformer, SparkLogOddsTransformer, \
+    SparkNaNFlagsEstimator, SparkFillnaMedianEstimator, SparkQuantileBinningEstimator, SparkStandardScalerEstimator
 from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, StandardScaler, LogOdds, QuantileBinning, FillInf
-from .. import DatasetForTest, spark, compare_by_content, compare_by_metadata
+from .. import DatasetForTest, spark, compare_by_content, compare_by_metadata, compare_sparkml_by_content, \
+    compare_sparkml_by_metadata
 
 # Note:
 # -s means no stdout capturing thus allowing one to see what happens in reality
@@ -40,7 +39,8 @@ def test_fill_inf(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
 
-    compare_by_content(spark, ds, FillInf(), SparkFillInf())
+    compare_sparkml_by_content(spark, ds, FillInf(),
+                               SparkFillInfTransformer(input_cols=ds.features, input_roles=ds.roles))
 
 
 # @pytest.mark.parametrize("dataset", DATASETS)
@@ -62,7 +62,8 @@ def test_nan_flags(spark: SparkSession):
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
 
-    compare_by_content(spark, ds, NaNFlags(nan_rate), SparkNaNFlags(nan_rate))
+    compare_sparkml_by_content(spark, ds, NaNFlags(nan_rate),
+                               SparkNaNFlagsEstimator(input_cols=ds.features, input_roles=ds.roles, nan_rate=nan_rate))
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
@@ -77,7 +78,12 @@ def test_fillna_medians(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
 
-    _, spark_np_ds = compare_by_metadata(spark, ds, FillnaMedian(), SparkFillnaMedian())
+    _, spark_np_ds = compare_sparkml_by_metadata(
+        spark,
+        ds,
+        FillnaMedian(),
+        SparkFillnaMedianEstimator(input_cols=ds.features, input_roles=ds.roles)
+    )
 
     assert ~np.isnan(spark_np_ds.data).all()
 
@@ -91,7 +97,12 @@ def test_standard_scaler(spark: SparkSession):
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    _, spark_np_ds = compare_by_metadata(spark, ds, StandardScaler(), SparkStandardScaler())
+    _, spark_np_ds = compare_sparkml_by_metadata(
+        spark,
+        ds,
+        StandardScaler(),
+        SparkStandardScalerEstimator(input_cols=ds.features, input_roles=ds.roles)
+    )
 
     assert ~np.isnan(spark_np_ds.data).all()
 
@@ -106,7 +117,8 @@ def test_logodds(spark: SparkSession):
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    compare_by_content(spark, ds, LogOdds(), SparkLogOdds())
+    compare_sparkml_by_content(spark, ds, LogOdds(),
+                               SparkLogOddsTransformer(input_cols=ds.features, input_roles=ds.roles))
 
 
 def test_quantile_binning(spark: SparkSession):
@@ -119,7 +131,12 @@ def test_quantile_binning(spark: SparkSession):
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    lama_np_ds, spark_np_ds = compare_by_metadata(spark, ds, QuantileBinning(n_bins), SparkQuantileBinning(n_bins))
+    lama_np_ds, spark_np_ds = compare_sparkml_by_metadata(
+        spark,
+        ds,
+        QuantileBinning(n_bins),
+        SparkQuantileBinningEstimator(input_cols=ds.features, input_roles=ds.roles, nbins=n_bins)
+    )
     # TODO: add more advanced check
 
     assert ~np.isnan(spark_np_ds.data).all()
