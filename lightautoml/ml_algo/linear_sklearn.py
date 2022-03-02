@@ -1,7 +1,6 @@
 """Linear models for tabular datasets."""
 
 import logging
-
 from copy import copy
 from copy import deepcopy
 from typing import Sequence
@@ -9,20 +8,17 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
-
 from sklearn.linear_model import ElasticNet
 from sklearn.linear_model import Lasso
 from sklearn.linear_model import LogisticRegression
 
-from ..dataset.np_pd_dataset import PandasDataset
-from ..utils.tmp_utils import log_data
-from ..validation.base import TrainValidIterator
 from .base import TabularDataset
 from .base import TabularMLAlgo
 from .torch_based.linear_model import TorchBasedLinearEstimator
 from .torch_based.linear_model import TorchBasedLinearRegression
 from .torch_based.linear_model import TorchBasedLogisticRegression
-
+from ..dataset.np_pd_dataset import PandasDataset
+from ..validation.base import TrainValidIterator
 
 logger = logging.getLogger(__name__)
 
@@ -56,26 +52,26 @@ class LinearLBFGS(TabularMLAlgo):
         "max_iter": 100,
         "cs": [
             1e-5,
-            5e-5,
-            1e-4,
-            5e-4,
-            1e-3,
-            5e-3,
-            1e-2,
-            5e-2,
-            1e-1,
-            5e-1,
-            1,
-            5,
-            10,
-            50,
-            100,
-            500,
-            1000,
-            5000,
-            10000,
-            50000,
-            100000,
+            # 5e-5,
+            # 1e-4,
+            # 5e-4,
+            # 1e-3,
+            # 5e-3,
+            # 1e-2,
+            # 5e-2,
+            # 1e-1,
+            # 5e-1,
+            # 1,
+            # 5,
+            # 10,
+            # 50,
+            # 100,
+            # 500,
+            # 1000,
+            # 5000,
+            # 10000,
+            # 50000,
+            # 100000,
         ],
         "early_stopping": 2,
     }

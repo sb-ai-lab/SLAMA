@@ -39,7 +39,7 @@ def test_boostlgbm(spark: SparkSession, config: Dict[str, Any], cv: int):
     dumped_test_ds, _ = test_res
 
     train_valid = SparkHoldoutIterator(dumped_train_ds)
-    ml_algo = SparkBoostLGBM()
+    ml_algo = SparkBoostLGBM(cacher_key='test')
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
     ml_algo = cast(SparkTabularMLAlgo, ml_algo)
     assert ml_algo is not None

@@ -152,7 +152,7 @@ if True:
         # )
 
         # ### Normal way
-        spark_ml_algo = SparkBoostLGBM() if alg == "lgb" else SparkLinearLBFGS()
+        spark_ml_algo = SparkBoostLGBM(cacher_key='example') if alg == "lgb" else SparkLinearLBFGS()
         spark_ml_algo, _ = tune_and_fit_predict(spark_ml_algo, DefaultTuner(), iterator)
         preds = spark_ml_algo.predict(test_sds)
         predict_col = preds.features[0]

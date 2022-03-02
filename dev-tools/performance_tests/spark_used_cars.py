@@ -124,19 +124,13 @@ def calculate_automl(path: str,
             task = SparkTask(task_type)
             train_data, test_data = prepare_test_and_train(spark, path, seed)
 
-            # data_path, ext = os.path.splitext(path)
-            # train_data = spark.read.csv(f"{data_path}_train{ext}", header=True, escape="\"")
-            # test_data = spark.read.csv(f"{data_path}_test{ext}", header=True, escape="\"")
-
-            # test_data_dropped = test_data \
-            #     .drop(F.col(target_col))
             test_data_dropped = test_data
 
             automl = SparkTabularAutoML(
                 spark=spark,
                 task=task,
                 general_params={"use_algos": use_algos},
-                reader_params={"cv": cv},
+                reader_params={"cv": cv, "advanced_roles": False},
                 tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
             )
 
@@ -145,26 +139,7 @@ def calculate_automl(path: str,
                 roles=roles
             )
 
-        # log_data("spark_test_part", {"test": test_data.select(SparkDataset.ID_COLUMN, target_col).toPandas()})
-
         logger.info("Predicting on out of fold")
-
-        # predict_col = oof_predictions.features[0]
-        # oof_preds_for_eval = (
-        #     oof_predictions.data
-        #     .join(train_data, on=SparkDataset.ID_COLUMN)
-        #     .select(SparkDataset.ID_COLUMN, target_col, predict_col)
-        # )
-        #
-        # if metric_name == "mse":
-        #     evaluator = sklearn.metrics.mean_squared_error
-        # elif metric_name == "areaUnderROC":
-        #     evaluator = sklearn.metrics.roc_auc_score
-        # else:
-        #     raise ValueError(f"Metric {metric_name} is not supported")
-        #
-        # oof_preds_for_eval_pdf = oof_preds_for_eval.toPandas()
-        # metric_value = evaluator(oof_preds_for_eval_pdf[target_col].values, oof_preds_for_eval_pdf[predict_col].values)
 
         score = task.get_dataset_metric()
         metric_value = score(oof_predictions)
@@ -174,28 +149,8 @@ def calculate_automl(path: str,
         with log_exec_timer("spark-lama predicting on test") as predict_timer:
             te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
 
-            # te_pred = (
-            #     te_pred.data
-            #     .join(test_data, on=SparkDataset.ID_COLUMN)
-            #     .select(SparkDataset.ID_COLUMN, target_col, te_pred.features[0])
-            # )
-            #
-            # # test_metric_value = evaluator.evaluate(te_pred)
-            # # logger.info(f"{evaluator.getMetricName()} score for test predictions: {test_metric_value}")
-            #
-            # te_pred_pdf = te_pred.toPandas()
-            # test_metric_value = evaluator(te_pred_pdf[target_col].values, te_pred_pdf[predict_col].values)
-
             score = task.get_dataset_metric()
             test_metric_value = score(te_pred)
-
-            # alternative way of measuring (gives the same results)
-            # te_pred_df = te_pred.data.join(
-            #     test_data.select(SparkDataset.ID_COLUMN, F.col(target_col).astype(FloatType()).alias(target_col)),
-            #     on=SparkDataset.ID_COLUMN
-            # )
-            # ds = SparkDataset(te_pred_df, te_pred.roles, te_pred.task, target=target_col)
-            # test_metric_value = score(ds)
 
             logger.info(f"{metric_name} score for test predictions: {test_metric_value}")
 
@@ -231,7 +186,7 @@ def calculate_lgbadv_boostlgb(
                 task = SparkTask(task_type)
                 train_data, test_data = prepare_test_and_train(spark, path, seed)
 
-                sreader = SparkToSparkReader(task=task, cv=3)
+                sreader = SparkToSparkReader(task=task, cv=3, advanced_roles=False)
                 sdataset = sreader.fit_read(train_data, roles=roles)
 
                 ml_alg_kwargs = {
@@ -256,7 +211,7 @@ def calculate_lgbadv_boostlgb(
                 iterator = SparkFoldsIterator(chkp_ds, n_folds=cv)
                 iterator.input_roles = metadata['iterator_input_roles']
 
-            spark_ml_algo = SparkBoostLGBM(freeze_defaults=False)
+            spark_ml_algo = SparkBoostLGBM(cacher_key='main_cache', freeze_defaults=False)
             spark_ml_algo, _ = tune_and_fit_predict(spark_ml_algo, DefaultTuner(), iterator)
 
         return {pipe_timer.name: pipe_timer.duration}

@@ -1,7 +1,6 @@
 """Base classes for machine learning algorithms."""
 
 import logging
-
 from abc import ABC
 from abc import abstractmethod
 from copy import copy
@@ -18,7 +17,6 @@ import numpy as np
 from pyspark.ml import Model
 
 from lightautoml.validation.base import TrainValidIterator
-
 from ..dataset.base import LAMLDataset
 from ..dataset.np_pd_dataset import CSRSparseDataset
 from ..dataset.np_pd_dataset import NumpyDataset
@@ -26,7 +24,7 @@ from ..dataset.np_pd_dataset import PandasDataset
 from ..dataset.roles import NumericRole
 from ..utils.timer import PipelineTimer
 from ..utils.timer import TaskTimer
-from ..utils.tmp_utils import log_data, log_metric, is_datalog_enabled
+from ..utils.tmp_utils import log_metric, is_datalog_enabled
 
 logger = logging.getLogger(__name__)
 TabularDataset = Union[NumpyDataset, CSRSparseDataset, PandasDataset]
@@ -275,8 +273,6 @@ class TabularMLAlgo(MLAlgo):
                 )
             self.timer.set_control_point()
 
-            log_data(f"lama_fit_predict_{type(self).__name__}_{n}", {"train": train, "valid": valid})
-
             model, pred = self.fit_predict_single_fold(train, valid)
 
             if is_datalog_enabled():
@@ -340,8 +336,6 @@ class TabularMLAlgo(MLAlgo):
         assert self.models != [], "Should be fitted first."
         preds_ds = dataset.empty().to_numpy()
         preds_arr = None
-
-        log_data(f"lama_predict_{type(self).__name__}", {"predict": dataset})
 
         for model in self.models:
             if preds_arr is None:

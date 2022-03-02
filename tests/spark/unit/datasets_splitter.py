@@ -3,7 +3,7 @@ import random
 
 from tests.spark.unit.dataset_utils import datasets
 
-dss = [('tiny_used_cars_dataset', datasets()['tiny_used_cars_dataset'])]
+dss = [("used_cars_dataset_tmp", datasets()["used_cars_dataset_tmp"])]
 # dss = [('used_cars_dataset', datasets()['used_cars_dataset'])]
 # dss = datasets().items()
 

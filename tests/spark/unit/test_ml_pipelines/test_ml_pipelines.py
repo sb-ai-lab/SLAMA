@@ -49,7 +49,7 @@ def test_nested_tabular_ml_pipeline_with_linear_bgfs(spark: SparkSession):
     linear_l2_feats = LinearFeatures(**linear_feat_kwargs)
 
     selection_feats = LGBSimpleFeatures()
-    selection_gbm = SparkBoostLGBM()
+    selection_gbm = SparkBoostLGBM(cacher_key='test')
     selection_gbm.set_prefix("Selector")
 
     importance = ModelBasedImportanceEstimator()
@@ -93,11 +93,11 @@ def test_nested_tabular_ml_pipeline_with_boost_lgbm(spark: SparkSession):
         'top_intersections': 4
     }
 
-    ml_model = SparkBoostLGBM()
+    ml_model = SparkBoostLGBM(cacher_key='test')
     ml_model_feats = LGBAdvancedPipeline(**ml_alg_kwargs)
 
     selection_feats = LGBSimpleFeatures()
-    selection_gbm = SparkBoostLGBM()
+    selection_gbm = SparkBoostLGBM(cacher_key='test')
     selection_gbm.set_prefix("Selector")
 
     importance = ModelBasedImportanceEstimator()

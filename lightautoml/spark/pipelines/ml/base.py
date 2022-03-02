@@ -70,6 +70,7 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
 
         # train and apply pre selection
         input_roles = copy(train_valid.input_roles)
+        full_train_roles = copy(train_valid.train.roles)
 
         train_valid = train_valid.apply_selector(self.pre_selection)
 
@@ -84,6 +85,7 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
         for ml_algo, param_tuner, force_calc in zip(self._ml_algos, self.params_tuners, self.force_calc):
             ml_algo = cast(SparkTabularMLAlgo, ml_algo)
             ml_algo, preds = tune_and_fit_predict(ml_algo, param_tuner, train_valid, force_calc)
+            train_valid.train = preds
             if ml_algo is not None:
                 self.ml_algos.append(ml_algo)
                 # preds = cast(SparkDataset, preds)
@@ -108,7 +110,7 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
         # nor input roles of train_valid iterator
         # (for each pipe iterator represent only input columns to the layer,
         # not outputs of other ml pipes in the layer)
-        out_roles.update(train_valid.train.roles)
+        out_roles.update(full_train_roles)
         # we also need update our out_roles with input_roles to replace roles of input of the layer
         # in case they were changed by SparkChangeRolesTransformer
         out_roles.update(input_roles)
@@ -120,7 +122,8 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
         ml_algo_transformers = PipelineModel(stages=[ml_algo.transformer for ml_algo in self.ml_algos])
         self._transformer = PipelineModel(stages=[fp.transformer, ml_algo_transformers, select_transformer])
 
-        val_preds = [ml_algo_transformers.transform(valid_ds.data) for _, full_ds, valid_ds in train_valid]
+        # val_preds = [ml_algo_transformers.transform(valid_ds.data) for _, full_ds, valid_ds in train_valid]
+        val_preds = [preds.data]
         val_preds_df = train_valid.combine_val_preds(val_preds, include_train=True)
         val_preds_df = val_preds_df.select(
             SparkDataset.ID_COLUMN,

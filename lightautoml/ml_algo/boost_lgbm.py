@@ -1,7 +1,6 @@
 """Wrapped LightGBM for tabular datasets."""
 
 import logging
-
 from contextlib import redirect_stdout
 from copy import copy
 from typing import Callable
@@ -11,18 +10,15 @@ from typing import Tuple
 
 import lightgbm as lgb
 import numpy as np
-
 from pandas import Series
 
-from ..pipelines.selection.base import ImportanceEstimator
-from ..utils.logging import LoggerStream
-from ..utils.tmp_utils import log_data
-from ..validation.base import TrainValidIterator
 from .base import TabularDataset
 from .base import TabularMLAlgo
 from .tuning.base import Distribution
 from .tuning.base import SearchSpace
-
+from ..pipelines.selection.base import ImportanceEstimator
+from ..utils.logging import LoggerStream
+from ..validation.base import TrainValidIterator
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +254,6 @@ class BoostLGBM(TabularMLAlgo, ImportanceEstimator):
         lgb_train = lgb.Dataset(train.data, label=train_target, weight=train_weight)
         lgb_valid = lgb.Dataset(valid.data, label=valid_target, weight=valid_weight)
 
-        # TODO: SPARK-LAMA remove later
         with redirect_stdout(LoggerStream(logger, verbose_eval=100)):
             model = lgb.train(
                 params,

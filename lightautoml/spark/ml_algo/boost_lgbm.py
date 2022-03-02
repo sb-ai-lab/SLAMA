@@ -26,6 +26,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
     _name: str = "LightGBM"
 
     _default_params = {
+        # "improvementTolerance": 1e-4,
         "learningRate": 0.05,
         "numLeaves": 128,
         "featureFraction": 0.7,
@@ -34,10 +35,10 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         "maxDepth": -1,
         "minGainToSplit": 0.0,
         "maxBin": 255,
-        "minDataInLeaf": 3,
+        "minDataInLeaf": 5,
         # e.g. num trees
         "numIterations": 3000,
-        "earlyStoppingRound": 100,
+        "earlyStoppingRound": 50,
         # for regression
         "alpha": 1.0,
         "lambdaL1": 0.0,
@@ -64,11 +65,12 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
     }
 
     def __init__(self,
+                 cacher_key: str,
                  default_params: Optional[dict] = None,
                  freeze_defaults: bool = True,
                  timer: Optional[TaskTimer] = None,
                  optimization_search_space: Optional[dict] = {}):
-        SparkTabularMLAlgo.__init__(self, default_params, freeze_defaults, timer, optimization_search_space)
+        SparkTabularMLAlgo.__init__(self, cacher_key, default_params, freeze_defaults, timer, optimization_search_space)
         self._probability_col_name = "probability"
         self._prediction_col_name = "prediction"
         self._raw_prediction_col_name = "raw_prediction"
@@ -151,7 +153,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         elif rows_num <= 100000:
             init_lr = 0.03
-            ntrees = 1200
+            ntrees = 2000
             es = 200
         elif rows_num <= 300000:
             init_lr = 0.04
@@ -281,6 +283,8 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         (
             params,
             verbose_eval,
+            fobj,
+            feval,
         ) = self._infer_params()
 
         logger.info(f"Input cols for the vector assembler: {full.features}")

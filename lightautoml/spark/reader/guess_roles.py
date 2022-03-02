@@ -1,17 +1,17 @@
-from typing import Dict, Optional, Union, List
+from typing import Optional, Union, List
 
 import numpy as np
 import pandas as pd
 from pyspark.ml import Pipeline
-from pyspark.sql import functions as F, Window
-from pyspark.sql.types import IntegerType
+from pyspark.sql import functions as F
+from pyspark.sql.types import IntegerType, StructField, StructType
 
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.reader.guess_roles import calc_ginis, RolesDict
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.transformers.base import SparkChangeRolesTransformer
 from lightautoml.spark.transformers.categorical import SparkLabelEncoderEstimator, SparkFreqEncoderEstimator, \
-    SparkOrdinalEncoderEstimator, SparkTargetEncoderEstimator
+    SparkOrdinalEncoderEstimator, SparkTargetEncoderEstimator, SparkMulticlassTargetEncoderEstimator
 from lightautoml.spark.transformers.numeric import SparkQuantileBinningEstimator
 from lightautoml.transformers.categorical import MultiClassTargetEncoder
 
@@ -62,10 +62,13 @@ def get_score_from_pipe(
     gini_func = get_gini_func(train.target_column)
 
     # schema without target column
-    output_schema = (train.data.select(SparkDataset.ID_COLUMN, *train.features)).schema
+    output_schema = (train.data.select(*train.features)).schema
+    # need to set True
+    output_schema = StructType([StructField(f.name, f.dataType, True) for f in output_schema.fields])
 
     mean_scores = (
         train.data
+        .select(*train.features, train.target_column)
         .mapInPandas(gini_func, output_schema)
         .select([F.mean(c).alias(c) for c in train.features])
     ).toPandas().values.flatten()
@@ -150,7 +153,7 @@ def get_numeric_roles_stat(
 
     # check task specific
     if train.task.name == "multiclass":
-        encoder = MultiClassTargetEncoder
+        encoder = SparkMulticlassTargetEncoderEstimator
     else:
         encoder = SparkTargetEncoderEstimator
 
@@ -160,21 +163,21 @@ def get_numeric_roles_stat(
     # check scores as is
     res["raw_scores"] = get_score_from_pipe(train)
 
-    # check unique values
-    sub_select_columns = []
-    top_select_columns = []
-    for f in train.features:
-        sub_select_columns.append(F.count(F.when(~F.isnan(F.col(f)), F.col(f))).over(Window.partitionBy(F.col(f))).alias(f'{f}_count_values'))
-        top_select_columns.append(F.max(F.col(f'{f}_count_values')).alias(f'{f}_max_count_values'))
-        top_select_columns.append(F.count_distinct(F.when(~F.isnan(F.col(f)), F.col(f))).alias(f'{f}_count_distinct'))
-    df = train.data.select(*train.features, *sub_select_columns)
-    unique_values_stat: Dict = df.select(*top_select_columns).first().asDict()
-
-    # max of frequency of unique values in every column
-    res["top_freq_values"] = np.array([unique_values_stat[f'{f}_max_count_values'] for f in train.features])
-    # how many unique values in every column
-    res["unique"] = np.array([unique_values_stat[f'{f}_count_distinct'] for f in train.features])
-    res["unique_rate"] = res["unique"] / total_number
+    # # check unique values
+    # sub_select_columns = []
+    # top_select_columns = []
+    # for f in train.features:
+    #     sub_select_columns.append(F.count(F.when(~F.isnan(F.col(f)), F.col(f))).over(Window.partitionBy(F.col(f))).alias(f'{f}_count_values'))
+    #     top_select_columns.append(F.max(F.col(f'{f}_count_values')).alias(f'{f}_max_count_values'))
+    #     top_select_columns.append(F.count_distinct(F.when(~F.isnan(F.col(f)), F.col(f))).alias(f'{f}_count_distinct'))
+    # df = train.data.select(*train.features, *sub_select_columns)
+    # unique_values_stat: Dict = df.select(*top_select_columns).first().asDict()
+    #
+    # # max of frequency of unique values in every column
+    # res["top_freq_values"] = np.array([unique_values_stat[f'{f}_max_count_values'] for f in train.features])
+    # # how many unique values in every column
+    # res["unique"] = np.array([unique_values_stat[f'{f}_count_distinct'] for f in train.features])
+    # res["unique_rate"] = res["unique"] / total_number
 
     # check binned categorical score
     quantile_binning = SparkQuantileBinningEstimator(input_cols=train.features,

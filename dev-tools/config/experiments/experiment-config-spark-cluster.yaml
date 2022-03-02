@@ -8,77 +8,43 @@ state_file: 'delete'  # Available values are 'use|ignore|delete', use - skip exp
 # Unique set of parameters for each experiment
 
 experiments:
-  - name: "cmp-all-0"
-    library: [ "spark" ]
-    repeat_rate: 1
-    params:
-      func: [ "calculate_automl" ]
-      dataset: [ "used_cars_dataset_1x_original" ]
-      seed: [ 42 ]
-      cv: [ 5 ]
-      use_algos:
-        - [ [ "linear_l2" ] ]
-    spark_config:
-      spark.executor.instances: [ '1' ]
-      spark.executor.cores: [ '8' ]
-      spark.executor.memory: [ '32g' ]
+#  - name: "cmp-all-0"
+#    library: [ "spark" ]
+#    repeat_rate: 1
+#    params:
+#      func: [ "calculate_automl" ]
+#      dataset: [ "used_cars_dataset_0125x"]
+#      seed: [ 42 ]
+#      cv: [ 5 ]
+#      use_algos:
+#        - [ [ "lgb" ] ]
+#    spark_config:
+#      spark.executor.instances: [ '5' ]
+#      spark.executor.cores: [ '4' ]
+#      spark.executor.memory: [ '16g' ]
   - name: "cmp-all-1"
-    library: ["spark"]
-    repeat_rate: 1
-    params:
-      func: ["calculate_automl"]
-      dataset: ["used_cars_dataset_1x_original"]
-      seed: [42]
-      cv: [5]
-      use_algos:
-        - [["linear_l2"]]
-    spark_config:
-      spark.executor.instances: ['2']
-      spark.executor.cores: ['8']
-      spark.executor.memory: [ '32g' ]
-  - name: "cmp-all-2"
     library: [ "spark" ]
     repeat_rate: 1
     params:
       func: [ "calculate_automl" ]
-      dataset: [ "used_cars_dataset_1x_original" ]
+      dataset: [ "used_cars_dataset_025x" ]
       seed: [ 42 ]
       cv: [ 5 ]
       use_algos:
-        - [ [ "linear_l2" ] ]
+        - [ [ "lgb", "linear_l2" ], [ "lgb"] ]
     spark_config:
-      spark.executor.instances: [ '4' ]
+      spark.executor.instances: [ '7' ]
       spark.executor.cores: [ '8' ]
       spark.executor.memory: [ '32g' ]
 #  - name: "cmp-all-2"
-#    library: [ "spark" ]
+#    library: [ "lama" ]
 #    repeat_rate: 1
 #    params:
-#      func: [ "calculate_automl" ]
-#      dataset: [ "used_cars_dataset_1x" ]
+#      dataset: [ "used_cars_dataset_0125x" ]
 #      seed: [ 42 ]
 #      cv: [ 5 ]
 #      use_algos:
-#        - [ [ "lgb" ], [ "linear_l2" ] ]
-#    spark_config:
-#      spark.executor.instances: [ '1' ]
-#      spark.executor.cores: [ '16' ]
-#      spark.executor.memory: [ '64g' ]
-#  - name: "cmp-all-3"
-#    library: [ "spark" ]
-#    repeat_rate: 1
-#    params:
-#      func: [ "calculate_automl" ]
-#      dataset: [ "used_cars_dataset_2x" ]
-#      seed: [ 42 ]
-#      cv: [ 5 ]
-#      use_algos:
-#        - [ [ "lgb" ], [ "linear_l2" ] ]
-#    spark_config:
-#      spark.executor.instances: [ '4' ]
-#      spark.executor.cores: [ '8' ]
-#      spark.executor.memory: [ '32g' ]
-
+#        - [ [ "lgb" ] ]
 
 # Static parameters for Spark
 default_spark_config: {

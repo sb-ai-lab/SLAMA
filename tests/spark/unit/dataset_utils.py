@@ -154,6 +154,182 @@ all_datastes = {
         }
     },
 
+    "used_cars_dataset_head60k": {
+        "path": "/opt/spark_data/head60k_0125x_cleaned.csv",
+        "train_path": "/opt/spark_data/head60k_0125x_cleaned_train.csv",
+        "test_path": "/opt/spark_data/head60k_0125x_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+    "used_cars_dataset_head62_5k": {
+        "path": "/opt/spark_data/head62_5k_0125x_cleaned.csv",
+        "train_path": "/opt/spark_data/head62_5k_0125x_cleaned_train.csv",
+        "test_path": "/opt/spark_data/head62_5k_0125x_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+    "used_cars_dataset_head100k": {
+        "path": "/opt/spark_data/head100k_0125x_cleaned.csv",
+        "train_path": "/opt/spark_data/head100k_0125x_cleaned_train.csv",
+        "test_path": "/opt/spark_data/head100k_0125x_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+    "used_cars_dataset_head65k": {
+        "path": "/opt/spark_data/head65k_0125x_cleaned.csv",
+        "train_path": "/opt/spark_data/head65k_0125x_cleaned_train.csv",
+        "test_path": "/opt/spark_data/head65k_0125x_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+
+    "used_cars_dataset_head70k": {
+        "path": "/opt/spark_data/head70k_0125x_cleaned.csv",
+        "train_path": "/opt/spark_data/head70k_0125x_cleaned_train.csv",
+        "test_path": "/opt/spark_data/head70k_0125x_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+    "used_cars_dataset_head75k": {
+        "path": "/opt/spark_data/head75k_0125x_cleaned.csv",
+        "train_path": "/opt/spark_data/head75k_0125x_cleaned_train.csv",
+        "test_path": "/opt/spark_data/head75k_0125x_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+    "used_cars_dataset_tmp": {
+        "path": "/opt/spark_data/tmp_cleaned.csv",
+        "train_path": "/opt/spark_data/tmp_cleaned_train.csv",
+        "test_path": "/opt/spark_data/tmp_cleaned_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ["dealer_zip", "description", "listed_date",
+                     "year", 'Unnamed: 0', '_c0',
+                     'sp_id', 'sp_name', 'trimId',
+                     'trim_name', 'major_options', 'main_picture_url',
+                     'interior_color', 'exterior_color'],
+            # "numeric": ['latitude', 'longitude', 'mileage']
+            "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
     "used_cars_dataset_0125x": {
         "path": "/opt/spark_data/0125x_cleaned.csv",
         "train_path": "/opt/spark_data/0125x_cleaned_train.csv",
@@ -245,6 +421,25 @@ all_datastes = {
                      'interior_color', 'exterior_color'],
             # "numeric": ['latitude', 'longitude', 'mileage']
             "numeric": ['longitude', 'mileage']
+        },
+        "dtype": {
+            'fleet': 'str', 'frame_damaged': 'str',
+            'has_accidents': 'str', 'isCab': 'str',
+            'is_cpo': 'str', 'is_new': 'str',
+            'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
+        }
+    },
+
+    "used_cars_dataset_no_cols_limit": {
+        "path": "/opt/spark_data/small_used_cars_data.csv",
+        "train_path": "/opt/spark_data/small_used_cars_data_train.csv",
+        "test_path": "/opt/spark_data/small_used_cars_data_test.csv",
+        "task_type": "reg",
+        "metric_name": "mse",
+        "target_col": "price",
+        "roles": {
+            "target": "price",
+            "drop": ['Unnamed: 0', '_c0'],
         },
         "dtype": {
             'fleet': 'str', 'frame_damaged': 'str',
@@ -375,6 +570,8 @@ all_datastes = {
         "roles": {"target": "movedin"},
     }
 }
+
+
 def datasets() -> Dict[str, Any]:
 
     return all_datastes
@@ -418,7 +615,7 @@ def prepared_datasets(spark: SparkSession,
         train_df = spark.read.csv(train_path, header=True, escape="\"")
         test_df = spark.read.csv(test_path, header=True, escape="\"")
 
-        sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv)
+        sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv, advanced_roles=False)
         train_ds = sreader.fit_read(train_df, roles=roles)
         test_ds = sreader.read(test_df, add_array_attrs=True)
 
@@ -432,7 +629,7 @@ def prepared_datasets(spark: SparkSession,
     return sds
 
 
-def get_test_datasets(dataset:Optional[str] = None,  setting: str = "all") -> List[Dict[str, Any]]:
+def get_test_datasets(dataset: Optional[str] = None,  setting: str = "all") -> List[Dict[str, Any]]:
     dss = datasets()
 
     if dataset is not None:

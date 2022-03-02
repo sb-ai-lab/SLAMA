@@ -1,4 +1,3 @@
-import functools
 import logging
 from typing import Tuple, cast, List, Optional, Union
 
@@ -8,8 +7,7 @@ from pyspark.ml.functions import vector_to_array, array_to_vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
 from pyspark.ml.util import MLWritable
-from pyspark.sql import functions as F, Column
-from pyspark.sql.functions import isnan
+from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType
 
 from lightautoml.dataset.roles import NumericRole, ColumnRole
@@ -17,13 +15,9 @@ from lightautoml.ml_algo.base import MLAlgo
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.pipelines.base import InputFeaturesAndRoles
-from lightautoml.spark.tasks.base import SparkTask
 from lightautoml.spark.utils import Cacher
 from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
 from lightautoml.utils.timer import TaskTimer
-from lightautoml.utils.tmp_utils import log_data
-
-# from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
 
 logger = logging.getLogger(__name__)
 
@@ -38,23 +32,27 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
 
     def __init__(
             self,
+            cacher_key: str,
             default_params: Optional[dict] = None,
             freeze_defaults: bool = True,
             timer: Optional[TaskTimer] = None,
             optimization_search_space: Optional[dict] = {},
     ):
         super().__init__(default_params, freeze_defaults, timer, optimization_search_space)
+        self._cacher_key = cacher_key
         self.n_classes: Optional[int] = None
         # names of columns that should contain predictions of individual models
         self._models_prediction_columns: Optional[List[str]] = None
         self._transformer: Optional[Transformer] = None
 
-        self._prediction_col = f"prediction_{self._name}"
+        # self._prediction_col = f"prediction_{self._name}"
         self._prediction_role = None
 
     @property
     def prediction_feature(self) -> str:
-        return self._prediction_col
+        # return self._prediction_col
+        return f"prediction_{self._name}"
+
 
     @property
     def prediction_role(self) -> ColumnRole:
@@ -92,9 +90,6 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
         logger.info(f"Input columns for MLALgo: {sorted(train_valid_iterator.input_features)}")
         logger.info(f"Train size for MLAlgo: {train_valid_iterator.train.data.count()}")
 
-        prob = train_valid_iterator.train.task.name in ["binary", "multiclass"]
-        self._prediction_role = NumericRole(np.float32, force_input=True, prob=prob)
-
         # log_data(f"spark_fit_predict_{type(self).__name__}", {"train": train_valid_iterator.train.to_pandas()})
 
         assert self.is_fitted is False, "Algo is already fitted"
@@ -115,12 +110,25 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
         valid_ds = cast(SparkDataset, train_valid_iterator.get_validation_data())
 
         # spark
+        prob = train_valid_iterator.train.task.name in ["binary", "multiclass"]
         outp_dim = 1
         if self.task.name == "multiclass":
             outp_dim = valid_ds.data.select(F.max(valid_ds.target_column).alias("max")).first()
             outp_dim = outp_dim["max"] + 1
+            self._prediction_role = NumericVectorOrArrayRole(outp_dim,
+                                                             f"{self.prediction_feature}" + "_{}",
+                                                             np.float32,
+                                                             force_input=True,
+                                                             prob=True)
         elif self.task.name == "binary":
             outp_dim = 2
+            self._prediction_role = NumericVectorOrArrayRole(outp_dim,
+                                                             f"{self.prediction_feature}" + "_{}",
+                                                             np.float32,
+                                                             force_input=True,
+                                                             prob=True)
+        else:
+            self._prediction_role = NumericRole(np.float32, force_input=True, prob=False)
 
         self.n_classes = outp_dim
 
@@ -173,7 +181,7 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
         ]
         full_preds_df = train_valid_iterator.combine_val_preds(preds_dfs, include_train=False)
         full_preds_df = self._build_averaging_transformer().transform(full_preds_df)
-        full_preds_df = Cacher(key='main_cache').fit(full_preds_df).transform(full_preds_df)
+        full_preds_df = Cacher(key=self._cacher_key).fit(full_preds_df).transform(full_preds_df)
 
         # create Spark MLlib Transformer and save to property var
         self._transformer = self._build_transformer()

@@ -48,15 +48,13 @@ def calculate_automl(path: str,
             task=task,
             timeout=3600 * 3,
             general_params={"use_algos": use_algos},
-            reader_params={"cv": cv}
+            reader_params={"cv": cv, "advanced_roles": False}
         )
 
         oof_predictions = automl.fit_predict(
             train_data,
             roles=roles
         )
-
-    log_data("lama_test_part", {"test": test_data})
 
     if metric_name == "mse":
         evaluator = sklearn.metrics.mean_squared_error

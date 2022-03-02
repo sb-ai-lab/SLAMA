@@ -28,7 +28,7 @@ def test_lgb_simple_pipeline(spark: SparkSession):
             }
 
     df = spark.read.csv(path, header=True, escape="\"")
-    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=2)
+    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=2, advanced_roles=False)
     sdataset = sreader.fit_read(df, roles=roles)
 
     fp = SparkLGBSimpleFeatures(sdataset.roles)
@@ -56,7 +56,7 @@ def test_lgb_advanced_pipeline(spark: SparkSession):
             }
 
     df = spark.read.csv(path, header=True, escape="\"")
-    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=2)
+    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=2, advanced_roles=False)
     sdataset = sreader.fit_read(df, roles=roles)
 
     # features = copy(sdataset.features)

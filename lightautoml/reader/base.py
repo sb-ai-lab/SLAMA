@@ -1,7 +1,6 @@
 """Reader and its derivatives."""
 
 import logging
-
 from copy import deepcopy
 from typing import Any
 from typing import Dict
@@ -14,10 +13,17 @@ from typing import cast
 
 import numpy as np
 import pandas as pd
-
 from pandas import DataFrame
 from pandas import Series
 
+from .guess_roles import calc_category_rules
+from .guess_roles import calc_encoding_rules
+from .guess_roles import get_category_roles_stat
+from .guess_roles import get_null_scores
+from .guess_roles import get_numeric_roles_stat
+from .guess_roles import rule_based_cat_handler_guess
+from .guess_roles import rule_based_roles_guess
+from .utils import set_sklearn_folds
 from ..dataset.base import array_attr_roles
 from ..dataset.base import valid_array_attributes
 from ..dataset.np_pd_dataset import PandasDataset
@@ -28,15 +34,6 @@ from ..dataset.roles import DropRole
 from ..dataset.roles import NumericRole
 from ..dataset.utils import roles_parser
 from ..tasks import Task
-from .guess_roles import calc_category_rules
-from .guess_roles import calc_encoding_rules
-from .guess_roles import get_category_roles_stat
-from .guess_roles import get_null_scores
-from .guess_roles import get_numeric_roles_stat
-from .guess_roles import rule_based_cat_handler_guess
-from .guess_roles import rule_based_roles_guess
-from .utils import set_sklearn_folds
-from ..utils.tmp_utils import log_data
 
 logger = logging.getLogger(__name__)
 
@@ -378,16 +375,13 @@ class PandasToPandasReader(Reader):
         # get dataset
         dataset = PandasDataset(train_data[self.used_features], self.roles, task=self.task, **kwargs)
 
-        # TODO: uncomment after tests
-        # if self.advanced_roles:
-        #     new_roles = self.advanced_roles_guess(dataset, manual_roles=parsed_roles)
-        #
-        #     droplist = [x for x in new_roles if new_roles[x].name == "Drop" and not self._roles[x].force_input]
-        #     self.upd_used_features(remove=droplist)
-        #     self._roles = {x: new_roles[x] for x in new_roles if x not in droplist}
-        #     dataset = PandasDataset(train_data[self.used_features], self.roles, task=self.task, **kwargs)
+        if self.advanced_roles:
+            new_roles = self.advanced_roles_guess(dataset, manual_roles=parsed_roles)
 
-        log_data("lama_reader_fit_read", {"train": dataset.to_pandas()})
+            droplist = [x for x in new_roles if new_roles[x].name == "Drop" and not self._roles[x].force_input]
+            self.upd_used_features(remove=droplist)
+            self._roles = {x: new_roles[x] for x in new_roles if x not in droplist}
+            dataset = PandasDataset(train_data[self.used_features], self.roles, task=self.task, **kwargs)
 
         return dataset
 
@@ -537,8 +531,6 @@ class PandasToPandasReader(Reader):
                 kwargs[array_attr] = val
 
         dataset = PandasDataset(data[self.used_features], roles=self.roles, task=self.task, **kwargs)
-
-        log_data("lama_reader_read", {"predict": dataset.to_pandas()})
 
         return dataset
 

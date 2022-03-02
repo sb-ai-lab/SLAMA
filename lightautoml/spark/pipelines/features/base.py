@@ -219,6 +219,7 @@ class SparkFeaturesPipeline(InputFeaturesAndRoles, OutputFeaturesAndRoles, Featu
         for layer in tr_layers:
             cols_to_remove = []
             output_cols = []
+            layer_model = Pipeline(stages=layer).fit(current_train)
             for tr in layer:
                 tr = cast(SparkColumnsAndRoles, tr)
                 if tr.getDoReplaceColumns():
@@ -236,7 +237,7 @@ class SparkFeaturesPipeline(InputFeaturesAndRoles, OutputFeaturesAndRoles, Featu
             cols_to_remove = set(c for c in cols_to_remove if c not in fp_input_features)
 
             cacher = Cacher(self._cacher_key)
-            pipe = Pipeline(stages=list(layer) + [DropColumnsTransformer(list(cols_to_remove)), cacher])
+            pipe = Pipeline(stages=[layer_model, DropColumnsTransformer(list(cols_to_remove)), cacher])
             stages.append(pipe.fit(current_train))
             current_train = cacher.dataset
 
@@ -592,6 +593,7 @@ class SparkTabularDataFeatures:
         # if self.subsample:
         #     sdf = sdf.sample(withReplacement=False, fraction=self.subsample, seed=self.random_state)
 
+        # TODO SPARK-LAMA: To improve performance we have used approx_count_distinct() instead of count_distinct()
         sdf = sdf.select([F.approx_count_distinct(col).alias(col) for col in feats])
         result = sdf.collect()[0]
 

@@ -64,7 +64,7 @@ class DummyMLAlgo(SparkTabularMLAlgo):
 
     def __init__(self, n_classes: int, name: str):
         self._name = name
-        super().__init__()
+        super().__init__(cacher_key='dummy_ml_algo')
         self.n_classes = n_classes
 
     def fit_predict_single_fold(self, fold_prediction_column: str, full: SparkDataset, train: SparkDataset,
@@ -164,7 +164,7 @@ class DummyTabularAutoML(SparkAutoMLPreset):
 
         first_level = [
             SparkMLPipeline(cacher_key, ml_algos=[DummyMLAlgo(self._n_classes, name=f"dummy_0_{i}")])
-            for i in range(1)
+            for i in range(3)
         ]
         second_level = [
             SparkMLPipeline(cacher_key, ml_algos=[DummyMLAlgo(self._n_classes, name=f"dummy_1_{i}")])
@@ -172,9 +172,8 @@ class DummyTabularAutoML(SparkAutoMLPreset):
         ]
 
         levels = [first_level, second_level]
-        # levels = [first_level]
 
-        blender = SparkWeightedBlender()
+        blender = SparkWeightedBlender(max_iters=0, max_inner_iters=1)
 
         self._initialize(
             reader,

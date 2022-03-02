@@ -1,6 +1,7 @@
+import logging
 from abc import ABC
 from copy import copy
-from typing import List, Optional, Sequence, Tuple, cast
+from typing import List, Optional, Sequence, Tuple, cast, Callable
 
 import numpy as np
 from pyspark.ml import Transformer
@@ -10,17 +11,19 @@ from pyspark.ml.util import MLWritable
 from pyspark.sql import functions as F
 from pyspark.sql.functions import isnan
 
-from lightautoml.automl.blend import Blender, \
-    WeightedBlender as LAMAWeightedBlender
+from lightautoml.automl.blend import WeightedBlender
+from lightautoml.dataset.np_pd_dataset import NumpyDataset
 from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.reader.base import RolesDict
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.ml_algo.base import AveragingTransformer
 from lightautoml.spark.pipelines.ml.base import SparkMLPipeline
-from lightautoml.spark.tasks.base import DEFAULT_PREDICTION_COL_NAME
+from lightautoml.spark.tasks.base import DEFAULT_PREDICTION_COL_NAME, SparkTask
 from lightautoml.spark.transformers.base import ColumnsSelectorTransformer
-from lightautoml.spark.utils import NoOpTransformer
+
+
+logger = logging.getLogger(__name__)
 
 
 class SparkBlender(ABC):
@@ -33,11 +36,11 @@ class SparkBlender(ABC):
     """
 
     def __init__(self):
-        super().__init__()
         self._transformer = None
         self._single_prediction_col_name = DEFAULT_PREDICTION_COL_NAME
         self._pred_role: Optional[ColumnRole] = None
         self._output_roles: Optional[RolesDict] = None
+        self._task: Optional[SparkTask] = None
 
     @property
     def output_roles(self) -> RolesDict:
@@ -56,6 +59,7 @@ class SparkBlender(ABC):
     def fit_predict(
         self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]
     ) -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
+        logger.info(f"Blender {type(self)} starting fit_predict")
 
         if len(pipes) == 1 and len(pipes[0].ml_algos) == 1:
             self._transformer = ColumnsSelectorTransformer(
@@ -67,7 +71,19 @@ class SparkBlender(ABC):
 
         self._set_metadata(predictions, pipes)
 
-        return self._fit_predict(predictions, pipes)
+        result = self._fit_predict(predictions, pipes)
+
+        logger.info(f"Blender {type(self)} finished fit_predict")
+
+        return result
+
+    def predict(self, predictions: SparkDataset) -> SparkDataset:
+        sdf = self._transformer.transform(predictions.data)
+
+        sds = predictions.empty()
+        sds.set_data(sdf, list(self.output_roles.keys()), self.output_roles)
+
+        return sds
 
     def _fit_predict(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]) \
         -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
@@ -95,6 +111,7 @@ class SparkBlender(ABC):
 
     def _set_metadata(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]):
         self._pred_role = predictions.roles[pipes[0].ml_algos[0].prediction_feature]
+        self._output_roles = {self._single_prediction_col_name: self._pred_role}
 
         if isinstance(self._pred_role, NumericVectorOrArrayRole):
             self._outp_dim = self._pred_role.size
@@ -102,6 +119,7 @@ class SparkBlender(ABC):
             self._outp_dim = 1
         self._outp_prob = predictions.task.name in ["binary", "multiclass"]
         self._score = predictions.task.get_dataset_metric()
+        self._task = predictions.task
 
     def _make_single_pred_ds(self, predictions: SparkDataset, pred_col: str) -> SparkDataset:
         pred_sdf = predictions.data.select(
@@ -128,7 +146,7 @@ class SparkBlender(ABC):
         return self._score(dataset, True)
 
 
-class SparkBestModelSelector(SparkBlender):
+class SparkBestModelSelector(SparkBlender, WeightedBlender):
     def _fit_predict(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]) \
             -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
         """Simple fit - just take one best.
@@ -170,120 +188,65 @@ class SparkBestModelSelector(SparkBlender):
         return best_pred, [best_pipe]
 
 
-class SparkWeightedBlender(SparkBlender):
-    def __init__(self, max_nonzero_coef: float = 0.05):
-        super().__init__()
-        self.wts = None
-        self._max_nonzero_coef = max_nonzero_coef
+class SparkWeightedBlender(SparkBlender, WeightedBlender):
+    def __init__(self, max_iters: int = 5, max_inner_iters: int = 7, max_nonzero_coef: float = 0.05,):
+        SparkBlender.__init__(self)
+        WeightedBlender.__init__(self, max_iters, max_inner_iters, max_nonzero_coef)
+        self._predictions_dataset: Optional[SparkDataset] = None
 
-    def _fit_predict(self,
-                     predictions: SparkDataset,
-                     pipes: Sequence[SparkMLPipeline]
-                     ) -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
+    def _get_weighted_pred(self,
+                           splitted_preds: Sequence[str],
+                           wts: Optional[np.ndarray],
+                           remove_splitted_preds_cols: Optional[List[str]] = None) -> SparkDataset:
+        avr = self._build_avr_transformer(splitted_preds, wts, remove_splitted_preds_cols)
 
-        pred_cols = [pred_col for pred_col, _, _ in self.split_models(predictions, pipes)]
+        weighted_preds_sdf = avr.transform(self._predictions_dataset.data)
 
-        self._transformer = WeightedBlenderTransformer(
-            task_name=predictions.task.name,
-            input_cols=pred_cols,
+        wpreds_sds = self._predictions_dataset.empty()
+        wpreds_sds.set_data(weighted_preds_sdf, list(self.output_roles.keys()), self.output_roles)
+
+        return wpreds_sds
+
+    def _build_avr_transformer(self, splitted_preds: Sequence[str],
+                               wts: Optional[np.ndarray],
+                               remove_splitted_preds_cols: Optional[List[str]] = None) -> AveragingTransformer:
+        remove_cols = list(splitted_preds)
+
+        if remove_splitted_preds_cols is not None:
+            remove_cols.extend(remove_splitted_preds_cols)
+
+        return AveragingTransformer(
+            task_name=self._task.name,
+            input_cols=list(splitted_preds),
             output_col=self._single_prediction_col_name,
-            remove_cols=pred_cols,
-            wts=self.wts
+            remove_cols=remove_cols,
+            convert_to_array_first=True,
+            weights=(wts * len(wts)).tolist(),
+            dim_num=self._outp_dim
         )
 
-        df = self._transformer.transform(predictions.data)
+    def _fit_predict(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]) \
+            -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
 
-        if predictions.task.name in ["binary", "multiclass"]:
-            assert isinstance(self._pred_role, NumericVectorOrArrayRole)
-            output_role = NumericVectorOrArrayRole(
-                self._pred_role.size,
-                f"WeightedBlend_{{}}",
-                dtype=np.float32,
-                prob=self._outp_prob,
-                is_vector=self._pred_role.is_vector
-            )
-        else:
-            output_role = NumericRole(np.float32, prob=self._outp_prob)
+        self._predictions_dataset = predictions
 
-        roles = {f: predictions.roles[f] for f in predictions.features if f not in pred_cols}
-        roles[self._single_prediction_col_name] = output_role
-        pred_ds = predictions.empty()
-        pred_ds.set_data(df, df.columns, roles)
+        sm = self.split_models(predictions, pipes)
+        pred_cols = [pred_col for pred_col, _, _ in sm]
+        pipe_idx = np.array([pidx for _, _, pidx in sm])
 
-        self._output_roles = copy(roles)
+        wts = self._optimize(pred_cols)
 
-        return pred_ds, pipes
+        reweighted_pred_cols = [x for (x, w) in zip(pred_cols, wts) if w > 0]
+        removed_cols = [x for x in pred_cols if x not in reweighted_pred_cols]
+        _, self.wts = self._prune_pipe(pipes, wts, pipe_idx)
+        pipes = cast(Sequence[SparkMLPipeline], pipes)
 
-    def fit_predict(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]) -> Tuple[
-        SparkDataset, Sequence[SparkMLPipeline]]:
+        self._transformer = self._build_avr_transformer(reweighted_pred_cols, self.wts,
+                                                        remove_splitted_preds_cols=removed_cols)
+        outp = self._get_weighted_pred(reweighted_pred_cols, self.wts,
+                                       remove_splitted_preds_cols=removed_cols)
 
-        pred_cols = [pred_col for pred_col, _, _ in self.split_models(predictions, pipes)]
-
-        length = len(pred_cols)
-
-        if self.wts is None:
-            self.wts = np.array([1.0 / length for col in pred_cols])
-        else:
-            assert len(self.wts) == length, 'Number of prediction cols and number of col weights must be equal'
-            self.wts = np.array([w for col, w in zip(pred_cols, self.wts)])
-
-        return super().fit_predict(predictions, pipes)
-
-
-class WeightedBlenderTransformer(Transformer, HasInputCols, HasOutputCol, MLWritable):
-    taskName = Param(Params._dummy(), "taskName", "task name")
-    removeCols = Param(Params._dummy(), "removeCols", "cols to remove")
-    wts = Param(Params._dummy(), "wts", "weights")
-
-    def __init__(self,
-                 task_name: str,
-                 input_cols: List[str],
-                 output_col: str,
-                 wts: Optional[np.ndarray] = None,
-                 remove_cols: Optional[List[str]] = None):
-        super().__init__()
-        self.set(self.taskName, task_name)
-        self.set(self.inputCols, input_cols)
-        self.set(self.outputCol, output_col)
-        if not remove_cols:
-            remove_cols = []
-        self.set(self.removeCols, remove_cols)
-        self.set(self.wts, wts)
-
-    def getRemoveCols(self) -> List[str]:
-        return self.getOrDefault(self.removeCols)
-
-    def getWts(self) -> List[str]:
-        return self.getOrDefault(self.wts)
-
-    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
-        wts = self.getWts()
-        pred_cols = self.getInputCols()
-        if self.getOrDefault(self.taskName) in ["binary", "multiclass"]:
-            def sum_arrays(x):
-                is_all_nth_elements_nan = sum(F.when(isnan(x[c]), 1).otherwise(0) for c in pred_cols) == len(pred_cols)
-                sum_weights_where_nan = sum(F.when(isnan(x[c]), wts[c]).otherwise(0.0) for c in pred_cols)
-                sum_weights_where_nonnan = sum(F.when(isnan(x[c]), 0.0).otherwise(wts[c]) for c in pred_cols)
-                # sum of non-nan nth elements multiplied by normalized weights
-                weighted_sum = sum(F.when(isnan(x[c]), 0).otherwise(x[c]*(wts[c]+wts[c]*sum_weights_where_nan/sum_weights_where_nonnan)) for c in pred_cols)
-                return F.when(is_all_nth_elements_nan, float('nan')) \
-                        .otherwise(weighted_sum)
-            out_col = F.transform(F.arrays_zip(*pred_cols), sum_arrays).alias(self.getOutputCol())
-        else:
-            is_all_columns_nan = sum(F.when(isnan(F.col(c)), 1).otherwise(0) for c in pred_cols) == len(pred_cols)
-            sum_weights_where_nan = sum(F.when(isnan(F.col(c)), wts[c]).otherwise(0.0) for c in pred_cols)
-            sum_weights_where_nonnan = sum(F.when(isnan(F.col(c)), 0.0).otherwise(wts[c]) for c in pred_cols)
-            # sum of non-nan predictions multiplied by normalized weights
-            weighted_sum = sum(F.when(isnan(F.col(c)), 0).otherwise(F.col(c)*(wts[c]+wts[c]*sum_weights_where_nan/sum_weights_where_nonnan)) for c in pred_cols)
-            out_col = F.when(is_all_columns_nan, float('nan')).otherwise(weighted_sum).alias(self.getOutputCol())
-
-        cols_to_remove = set(self.getRemoveCols())
-        cols_to_select = [c for c in dataset.columns if c not in cols_to_remove]
-        out_df = dataset.select(*cols_to_select, out_col)
-        return out_df
-
-    def write(self):
-        pass
+        return outp, pipes
 
 
 class SparkMeanBlender(SparkBlender):

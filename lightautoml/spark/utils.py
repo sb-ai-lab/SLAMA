@@ -38,11 +38,11 @@ def spark_session(session_args: Optional[dict] = None, master: str = "local[]", 
             .builder
             .appName("SPARK-LAMA-app")
             .master(master)
+            .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.jar")
             .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
             .config("spark.sql.shuffle.partitions", "16")
-            # .config("spark.driver.extraJavaOptions", "-Ddev.ludovic.netlib.blas.nativeLibPath=/usr/lib64/libopenblaso-r0.3.17.so")
-            # .config("spark.executor.extraJavaOptions", "-Ddev.ludovic.netlib.blas.nativeLibPath=/usr/lib64/libopenblaso-r0.3.17.so")
+            .config("spark.kryoserializer.buffer.max", "512m")
             .config("spark.driver.cores", "4")
             .config("spark.driver.memory", "16g")
             .config("spark.cores.max", "16")
@@ -83,13 +83,14 @@ def spark_session(session_args: Optional[dict] = None, master: str = "local[]", 
 
 
 @contextmanager
-def log_exec_time(name: Optional[str] = None):
+def log_exec_time(name: Optional[str] = None, write_log=True):
 
-    # Add file handler for INFO 
-    file_handler_info = logging.FileHandler(f'/tmp/{name}_log.log.log', mode='a')
-    file_handler_info.setFormatter(logging.Formatter('%(message)s'))
-    file_handler_info.setLevel(logging.INFO)
-    logger.addHandler(file_handler_info)
+    # Add file handler for INFO
+    if write_log:
+        file_handler_info = logging.FileHandler(f'/tmp/{name}_log.log.log', mode='a')
+        file_handler_info.setFormatter(logging.Formatter('%(message)s'))
+        file_handler_info.setLevel(logging.INFO)
+        logger.addHandler(file_handler_info)
 
     start = datetime.now()
 
@@ -225,12 +226,14 @@ class Cacher(Estimator):
     def _fit(self, dataset):
         ds = dataset.cache()
         logger.info(f"Cacher {self._key}. Starting to materialize data.")
-        # ds.write.mode('overwrite').format('noop').save()
-        ds.count()
+        ds.write.mode('overwrite').format('noop').save()
+        # ds.count()
         logger.info(f"Cacher {self._key}. Finished data materialization.")
 
         previous_ds = self._cacher_dict.get(self._key, None)
         if previous_ds is not None:
+            import traceback
+            logger.info(f"Removing cache for key: {self._key}. \n {traceback.format_stack()}")
             previous_ds.unpersist()
 
         self._cacher_dict[self._key] = ds

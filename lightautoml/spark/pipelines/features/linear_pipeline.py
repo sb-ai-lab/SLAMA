@@ -55,7 +55,7 @@ class SparkLinearFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
             feats_imp=feats_imp,
             auto_unique_co=auto_unique_co,
             output_categories=output_categories,
-            ascending_by_cardinality=False,
+            ascending_by_cardinality=True,
         )
         # self._input_features = input_features
         # self._input_roles = input_roles

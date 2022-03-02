@@ -55,18 +55,21 @@ class SparkBaseTrainValidIterator(TrainValidIterator, InputFeaturesAndRoles, ABC
             Dataset with selected features.
 
         """
+        sel_train_valid = copy(self)
+        sel_train_valid.train = self.train[:, list(self.input_roles.keys())]
+
         if not selector.is_fitted:
-            selector.fit(self)
+            selector.fit(sel_train_valid)
+            # sfp = cast(SparkFeaturesPipeline, selector.features_pipeline)
+            # if sfp is not None:
+            #     sfp.release_cache()
+
         train_valid = copy(self)
         # we don't need to create transformer for subselecting
         # because train_valid.input_roles is used in fit_... methods
         # of features pipelines and ml_algo to define columns they work with
         train_valid.input_roles = {feat: self.input_roles[feat]
                                    for feat in selector.selected_features}
-
-        sfp = cast(SparkFeaturesPipeline, selector.features_pipeline)
-        if sfp is not None:
-            sfp.release_cache()
 
         return train_valid
 

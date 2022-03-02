@@ -89,7 +89,7 @@ with spark_session(master="local[4]") as spark:
 
     print("=========================Spark==================================")
     train_valid = SparkFoldsIterator(dumped_train_ds)
-    ml_algo = ml_algo_spark_clazz()
+    ml_algo = ml_algo_spark_clazz(cacher_key='example',)
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
     ml_algo = cast(SparkTabularMLAlgo, ml_algo)
     assert ml_algo is not None
