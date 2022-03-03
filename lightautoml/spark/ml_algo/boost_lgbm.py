@@ -1,9 +1,11 @@
 import logging
 import multiprocessing
+import warnings
 from copy import copy
-from typing import Callable, Dict, Optional, Tuple, Union, cast
+from typing import Dict, Optional, Tuple, Union, cast
 
 import pandas as pd
+import pyspark.sql.functions as F
 from pandas import Series
 from pyspark.ml import Transformer, PipelineModel
 from pyspark.ml.feature import VectorAssembler
@@ -26,7 +28,6 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
     _name: str = "LightGBM"
 
     _default_params = {
-        # "improvementTolerance": 1e-4,
         "learningRate": 0.05,
         "numLeaves": 128,
         "featureFraction": 0.7,
@@ -43,8 +44,6 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         "alpha": 1.0,
         "lambdaL1": 0.0,
         "lambdaL2": 0.0,
-        # seeds
-        # "baggingSeed": 42
     }
 
     # mapping between metric name defined via SparkTask
@@ -69,13 +68,19 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
                  default_params: Optional[dict] = None,
                  freeze_defaults: bool = True,
                  timer: Optional[TaskTimer] = None,
-                 optimization_search_space: Optional[dict] = {}):
+                 optimization_search_space: Optional[dict] = {},
+                 use_single_dataset_mode: bool = True,
+                 max_validation_size: int = 1_000_000,
+                 seed: int = 42):
         SparkTabularMLAlgo.__init__(self, cacher_key, default_params, freeze_defaults, timer, optimization_search_space)
         self._probability_col_name = "probability"
         self._prediction_col_name = "prediction"
         self._raw_prediction_col_name = "raw_prediction"
         self._assembler = None
         self._drop_cols_transformer = None
+        self._use_single_dataset_mode = use_single_dataset_mode
+        self._max_validation_size = max_validation_size
+        self._seed = seed
 
     def _infer_params(self) -> Tuple[dict, int]:
         """Infer all parameters in lightgbm format.
@@ -317,13 +322,27 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         else:
             params["numThreads"] = max(int(train.spark_session.conf.get("spark.executor.cores", "1")) - 1, 1)
 
+        train_data = full.data
+        valid_size = train_data.where(F.col(self.validation_column) == 1).count()
+        max_val_size = self._max_validation_size
+        if valid_size > max_val_size:
+            warnings.warn(f"Maximum validation size for SparkBoostLGBM is exceeded: {valid_size} > {max_val_size}. "
+                          f"Reducing validation size down to maximum.", category=RuntimeWarning)
+            rest_cols = list(train_data.columns)
+            rest_cols.remove(self.validation_column)
+
+            replace_col = F.when(F.rand(self._seed) < (float(max_val_size) / valid_size), F.lit(1)).otherwise(F.lit(0))
+            reduced_val_col = F.when(F.col(self.validation_column) == 1, replace_col).otherwise(F.col(self.validation_column))
+
+            train_data = train_data.select(*rest_cols,  reduced_val_col.alias(self.validation_column))
+
         lgbm = LGBMBooster(
             **params,
             featuresCol=self._assembler.getOutputCol(),
             labelCol=full.target_column,
             validationIndicatorCol=self.validation_column,
             verbosity=verbose_eval,
-            useSingleDatasetMode=True,
+            useSingleDatasetMode=self._use_single_dataset_mode,
             isProvideTrainingMetric=True
         )
 
@@ -332,9 +351,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         if full.task.name == "reg":
             lgbm.setAlpha(0.5).setLambdaL1(0.0).setLambdaL2(0.0)
 
-        temp_sdf = self._assembler.transform(full.data)
-
-        ml_model = lgbm.fit(temp_sdf)
+        ml_model = lgbm.fit(self._assembler.transform(train_data))
 
         val_pred = ml_model.transform(self._assembler.transform(valid.data))
         val_pred = DropColumnsTransformer(

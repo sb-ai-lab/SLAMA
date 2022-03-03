@@ -382,21 +382,21 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                     continue
                 kwargs[array_attr] = col_name
 
-        transformer = self.make_transformer()
-        transformer.setAddArrayAttrs(add_array_attrs)
+        transformer = self.make_transformer(add_array_attrs)
         data = transformer.transform(data)
 
         dataset = SparkDataset(data, roles=self.roles, task=self.task, **kwargs)
 
         return dataset
 
-    def make_transformer(self):
+    def make_transformer(self, add_array_attrs: bool = False):
         roles = {f: self.roles[f] for f in self.used_features}
         transformer = SparkToSparkReaderTransformer(
             self.task.name,
             self.class_mapping,
             copy(self.used_array_attrs),
-            roles
+            roles,
+            add_array_attrs
         )
         return transformer
 
@@ -699,12 +699,14 @@ class SparkToSparkReaderTransformer(Transformer, SparkReaderHelper):
                  task_name: str,
                  class_mapping: Optional[Dict],
                  used_array_attrs: Dict[str, str],
-                 roles: Dict[str, ColumnRole]):
+                 roles: Dict[str, ColumnRole],
+                 add_array_attrs: bool = False):
         super().__init__()
         self.set(self.taskName, task_name)
         self.set(self.classMapping, class_mapping)
         self.set(self.usedArrayAttrs, used_array_attrs)
         self.set(self.roles, roles)
+        self.set(self.addArrayAttrs, add_array_attrs)
 
     def getTaskName(self) -> str:
         return self.getOrDefault(self.taskName)

@@ -148,3 +148,33 @@ spec:
   resources:
     requests:
       storage: '1000Gi'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mnt-nfs
+  namespace: spark-lama-exps
+spec:
+  volumeName: pv-mnt-nfs
+  storageClassName: nfs
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: '100Gi'
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-mnt-nfs
+spec:
+  capacity:
+    storage: '100Gi'
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+  hostPath:
+    path: /mnt/nfs
+    type: Directory

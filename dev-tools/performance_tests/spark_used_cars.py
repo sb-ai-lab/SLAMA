@@ -10,9 +10,11 @@ import shutil
 from typing import Dict, Any, Optional, Tuple, cast
 
 import yaml
+from pyspark.ml.feature import VectorAssembler
 from pyspark.sql import functions as F, SparkSession
 
 from dataset_utils import datasets
+from lightautoml.dataset.roles import NumericRole, CategoryRole
 from lightautoml.ml_algo.tuning.base import DefaultTuner
 from lightautoml.ml_algo.utils import tune_and_fit_predict
 from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector, ModelBasedImportanceEstimator
@@ -23,9 +25,13 @@ from lightautoml.spark.pipelines.features.lgb_pipeline import SparkLGBAdvancedPi
 from lightautoml.spark.pipelines.ml.base import SparkMLPipeline
 from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.spark.tasks.base import SparkTask as SparkTask
+from lightautoml.spark.transformers.categorical import SparkLabelEncoderEstimator
 from lightautoml.spark.utils import spark_session, log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.spark.validation.iterators import SparkFoldsIterator
 from lightautoml.utils.tmp_utils import log_data, LAMA_LIBRARY
+from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +223,62 @@ def calculate_lgbadv_boostlgb(
         return {pipe_timer.name: pipe_timer.duration}
 
 
+def calculate_pure_boostlgb(
+        path: str,
+        task_type: str,
+        seed: int = 42,
+        cv: int = 5,
+        roles: Optional[Dict] = None,
+        spark_config: Optional[Dict[str, Any]] = None,
+        checkpoint_path: Optional[str] = None,
+        **_) -> Dict[str, Any]:
+    if not spark_config:
+        spark_args = {"master": "local[4]"}
+    else:
+        spark_args = {'session_args': spark_config}
+    with spark_session(**spark_args) as spark:
+        data = [
+            {'_id': i, 'a': i, 'b': i + 10, 'c': i * 10, 'target': i, 'is_val': i % 2} for i in range(100)
+        ]
+
+        df = spark.createDataFrame(data)
+        ds = SparkDataset(df,
+                          {'a': CategoryRole(np.float32), 'b': CategoryRole(np.float32), 'c': CategoryRole(np.float32)},
+                          task=SparkTask('reg'),
+                          target='target')
+
+        est = SparkLabelEncoderEstimator(input_cols=ds.features, input_roles=ds.roles)
+        est.fit(ds.data)
+
+        _assembler = VectorAssembler(
+            inputCols=['a', 'b', 'c'],
+            outputCol=f"vassembler_features",
+            handleInvalid="keep"
+        )
+
+        params = {'learningRate': 0.01, 'numLeaves': 32, 'featureFraction': 1, 'baggingFraction': 0.7, 'baggingFreq': 1,
+         'maxDepth': -1, 'minGainToSplit': 0.0, 'maxBin': 255, 'minDataInLeaf': 5, 'numIterations': 3000,
+         'earlyStoppingRound': 200, 'numThreads': 3, 'objective': 'regression', 'metric': 'mse'}
+
+        lgbm = LightGBMRegressor(
+            **params,
+            featuresCol=_assembler.getOutputCol(),
+            labelCol='target',
+            validationIndicatorCol='is_val',
+            verbosity=1,
+            useSingleDatasetMode=True,
+            isProvideTrainingMetric=True
+        )
+
+        temp_sdf = _assembler.transform(df)
+        ml_model = lgbm.fit(temp_sdf)
+
+        print("Success")
+
+        return {"Success": "true"}
+
+
+
 if __name__ == "__main__":
     logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="/tmp/lama.log"))
     logging.basicConfig(level=logging.INFO, format=VERBOSE_LOGGING_FORMAT)
@@ -236,6 +298,8 @@ if __name__ == "__main__":
         func = calculate_automl
     elif func_name == "calculate_lgbadv_boostlgb":
         func = calculate_lgbadv_boostlgb
+    elif func_name == "calculate_pure_boostlgb":
+        func = calculate_pure_boostlgb
     else:
         raise ValueError(f"Incorrect func name: {func_name}. "
                          f"Only the following are supported: "

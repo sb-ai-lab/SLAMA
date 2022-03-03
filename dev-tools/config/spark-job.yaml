@@ -3,11 +3,13 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   namespace: spark-lama-exps
-  name: exp-test
+  name: debug-job
 spec:
   template:
     metadata:
       name: exp-test-pod
+      labels:
+        app: debug-job
     spec:
       serviceAccountName: spark
       automountServiceAccountToken: true
@@ -16,20 +18,57 @@ spec:
           persistentVolumeClaim:
             claimName: spark-lama-data
             readOnly: True
-        - name: scripts-volume
-          configMap:
-            name: exp-test-scripts
+        - name: exp-results-vol
+          persistentVolumeClaim:
+            claimName: exp-results-vol
+            readOnly: False
+        - name: mnt-nfs
+          persistentVolumeClaim:
+            claimName: mnt-nfs
+            readOnly: False
       containers:
       - name: spark
+#        image: node2.bdcl:5000/spark-py-lama:lama-v3.2.0
         image: node2.bdcl:5000/spark-lama:3.9-3.2.0
-        command: [ "python" ]
-        args: ["/scripts/spark_used_cars.py", "1"]
+        command: [ "sleep" ]
+        args: ["600"]
         imagePullPolicy: Always
         volumeMounts:
-          - mountPath: /spark_data
+          - mountPath: /opt/spark_data
             name: spark-lama-data
             readOnly: true
-          - name: scripts-volume
-            mountPath: /scripts
+          - name: exp-results-vol
+            mountPath: /exp_results
+          - name: mnt-nfs
+            mountPath: /mnt/nfs
+            readOnly: False
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "4000m"
+          limits:
+            memory: "16Gi"
+            cpu: "4000m"
       restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values: [node10.bdcl]
   backoffLimit: 0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: spark-lama-exps
+  name: debug-job
+spec:
+  type: NodePort
+  selector:
+    app: debug-job
+  ports:
+    - port: 4040
+      targetPort: 4040

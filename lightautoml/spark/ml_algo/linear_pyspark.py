@@ -37,26 +37,26 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         "regParam":
         [
             1e-5,
-            # 5e-5,
-            # 1e-4,
-            # 5e-4,
-            # 1e-3,
-            # 5e-3,
-            # 1e-2,
-            # 5e-2,
-            # 1e-1,
-            # 5e-1,
-            # 1,
-            # 5,
-            # 10,
-            # 50,
-            # 100,
-            # 500,
-            # 1000,
-            # 5000,
-            # 10000,
-            # 50000,
-            # 100000,
+            5e-5,
+            1e-4,
+            5e-4,
+            1e-3,
+            5e-3,
+            1e-2,
+            5e-2,
+            1e-1,
+            5e-1,
+            1,
+            5,
+            10,
+            50,
+            100,
+            500,
+            1000,
+            5000,
+            10000,
+            50000,
+            100000,
         ],
         "early_stopping": 2,
     }
@@ -67,7 +67,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
                  freeze_defaults: bool = True,
                  timer: Optional[TaskTimer] = None,
                  optimization_search_space: Optional[dict] = {}):
-        super().__init__(cacher_key)
+        super().__init__(cacher_key, default_params, freeze_defaults, timer, optimization_search_space)
 
         self._prediction_col = f"prediction_{self._name}"
         self.task = None

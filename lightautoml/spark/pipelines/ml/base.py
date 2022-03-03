@@ -137,7 +137,7 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
 
         return val_preds_ds
 
-    def predict(self, dataset: LAMLDataset) -> LAMLDataset:
+    def predict(self, dataset: SparkDataset) -> SparkDataset:
         """Predict on new dataset.
 
         Args:
@@ -147,18 +147,12 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
             Dataset with predictions of all trained models.
 
         """
-        dataset = self.pre_selection.select(dataset)
-        dataset = self.features_pipeline.transform(dataset)
-        dataset = self.post_selection.select(dataset)
+        out_sdf = self.transformer.transform(dataset.data)
 
-        predictions: List[SparkDataset] = []
+        out_roles = copy(dataset.roles)
+        out_roles.update(self.output_roles)
 
-        dataset = cast(SparkDataset, dataset)
+        out_ds = dataset.empty()
+        out_ds.set_data(out_sdf, list(out_roles.keys()), out_roles)
 
-        for model in self.ml_algos:
-            pred = cast(SparkDataset, model.predict(dataset))
-            predictions.append(pred)
-
-        result = SparkDataset.concatenate(predictions)
-
-        return result
+        return out_ds

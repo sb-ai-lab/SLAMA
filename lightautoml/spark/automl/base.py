@@ -352,7 +352,7 @@ class SparkAutoML:
             -> Tuple[Transformer, RolesDict]:
         stages = []
         if not no_reader:
-            stages.append(self.reader.make_transformer())
+            stages.append(self.reader.make_transformer(add_array_attrs=True))
 
         ml_pipes = [ml_pipe.transformer for level in self.levels for ml_pipe in level]
         stages.extend(ml_pipes)
