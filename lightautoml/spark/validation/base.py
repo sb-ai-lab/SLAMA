@@ -60,9 +60,9 @@ class SparkBaseTrainValidIterator(TrainValidIterator, InputFeaturesAndRoles, ABC
 
         if not selector.is_fitted:
             selector.fit(sel_train_valid)
-            # sfp = cast(SparkFeaturesPipeline, selector.features_pipeline)
-            # if sfp is not None:
-            #     sfp.release_cache()
+            sfp = cast(SparkFeaturesPipeline, selector.features_pipeline)
+            if sfp is not None:
+                sfp.release_cache()
 
         train_valid = copy(self)
         # we don't need to create transformer for subselecting

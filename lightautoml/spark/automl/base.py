@@ -259,9 +259,6 @@ class SparkAutoML:
         blended_prediction, last_pipes = self.blender.fit_predict(level_predictions, pipes)
         self.levels.append(last_pipes)
 
-        # TODO: SPARK-LAMA fix it later
-        # self.reader.upd_used_features(remove=list(set(self.reader.used_features) - set(self.collect_used_feats())))
-
         del self._levels
 
         oof_pred = level_predictions if self.return_all_predictions else blended_prediction

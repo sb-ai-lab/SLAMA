@@ -23,6 +23,7 @@ from lightautoml.spark.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPi
 from lightautoml.spark.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
 from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.spark.tasks.base import SparkTask
+from lightautoml.spark.utils import Cacher
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +204,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
 
                 importance = SparkNpPermutationImportanceEstimator()
 
-                # TODO: SPARK-LAMA would it work here with SparkNpPermutationImportanceEstimator?
                 extra_selector = NpIterativeFeatureSelector(
                     selection_feats,
                     selection_gbm,
@@ -212,7 +212,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                     max_features_cnt_in_result=selection_params["max_features_cnt_in_result"],
                 )
 
-                # TODO: SPARK-LAMA would it work here with SparkNpPermutationImportanceEstimator?
                 pre_selector = ComposedSelector([pre_selector, extra_selector])
 
         return pre_selector
@@ -419,7 +418,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
 
         return oof_pred
 
-    # TODO: SPARK-LAMA rewrite in the descdent
     def predict(
             self,
             data: ReadableIntoSparkDf,
@@ -465,6 +463,11 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         data, _ = self._read_data(data, features_names, read_csv_params)
         pred = super().predict(data, features_names, return_all_predictions, add_reader_attrs)
         return pred
+
+    def release_cache(self):
+        sdf = Cacher.get_dataset_by_key(self._cacher_key)
+        if sdf is not None:
+            sdf.unpersist()
 
     def _read_data(self,
                    data: ReadableIntoSparkDf,

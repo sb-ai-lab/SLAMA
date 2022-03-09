@@ -133,4 +133,6 @@ if __name__ == "__main__":
 
     print(f"EXP-RESULT: {result}")
 
+    automl.release_cache()
+
     spark.stop()
