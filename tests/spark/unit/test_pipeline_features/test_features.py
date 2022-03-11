@@ -1,15 +1,13 @@
-import logging
+import logging.config
 import logging.config
 import os
-from typing import Dict, Any, cast
+from typing import Dict, Any, cast, Optional
 
-import numpy as np
 import pandas as pd
 import pytest
 from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
-from lightautoml.dataset.roles import CategoryRole
 from lightautoml.ml_algo.boost_lgbm import BoostLGBM
 from lightautoml.ml_algo.linear_sklearn import LinearLBFGS
 from lightautoml.ml_algo.tuning.base import DefaultTuner
@@ -26,7 +24,7 @@ from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.spark.validation.iterators import SparkFoldsIterator
 from lightautoml.tasks import Task
 from lightautoml.validation.np_iterators import FoldsIterator
-from .. import DatasetForTest, spark as spark_sess
+from .. import spark as spark_sess
 from ..dataset_utils import get_test_datasets, prepared_datasets, load_dump_if_exist, dump_data
 
 spark = spark_sess
@@ -35,6 +33,9 @@ spark = spark_sess
 DATASETS_ARG = {"dataset": "lama_test_dataset"}
 
 CV = 5
+
+# otherwise holdout is used
+USE_FOLDS_VALIDATION = True
 
 ml_alg_kwargs = {
     'auto_unique_co': 10,
@@ -142,6 +143,15 @@ def compare_feature_pipelines(spark: SparkSession, cv: int, ds_config: Dict[str,
     slama_feats = slama_pipeline.fit_transform(spark_train_ds)
     slama_lf_pds = cast(PandasDataset, slama_feats.to_pandas())
 
+    # TODO: should be in the very end
+    # now process test part of the data
+    slama_test_feats = slama_pipeline.transform(spark_test_ds)
+    # dumping resulting datasets
+    chkp_train_path = os.path.join(checkpoint_fp_dir, f"dump_{pipeline_name}_{ds_name}_{cv}_train.dump")
+    chkp_test_path = os.path.join(checkpoint_fp_dir, f"dump_{pipeline_name}_{ds_name}_{cv}_test.dump")
+    dump_data(chkp_train_path, slama_feats[:, slama_pipeline.output_features], cv=cv)
+    dump_data(chkp_test_path, slama_test_feats[:, slama_pipeline.output_features], cv=cv)
+
     # assert sorted(slama_pipeline.output_features) == sorted(lf_pds.features)
     assert sorted(slama_pipeline.output_features) == sorted([f for f in lf_pds.features])
     assert len(set(spark_train_ds.features).difference(slama_feats.features)) == 0
@@ -157,22 +167,15 @@ def compare_feature_pipelines(spark: SparkSession, cv: int, ds_config: Dict[str,
     ]
     assert len(not_equal_roles) == 0, f"Roles are different: {not_equal_roles}"
 
-    # now process test part of the data
-    slama_test_feats = slama_pipeline.transform(spark_test_ds)
-
     assert set(slama_feats.features) == set(slama_test_feats.features)
     assert slama_feats.roles == slama_test_feats.roles
-
-    # dumping resulting datasets
-    chkp_train_path = os.path.join(checkpoint_fp_dir, f"dump_{pipeline_name}_{ds_name}_{cv}_train.dump")
-    chkp_test_path = os.path.join(checkpoint_fp_dir, f"dump_{pipeline_name}_{ds_name}_{cv}_test.dump")
-    dump_data(chkp_train_path, slama_feats[:, slama_pipeline.output_features], cv=cv)
-    dump_data(chkp_test_path, slama_test_feats[:, slama_pipeline.output_features], cv=cv)
 
 
 def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, Any],
                                fp_lama_clazz, ml_algo_lama_clazz, ml_algo_spark_clazz,
-                               pipeline_name: str, ml_alg_kwargs):
+                               pipeline_name: str, ml_alg_kwargs,
+                               ml_kwargs_lama: Optional[Dict[str, Any]] = None,
+                               ml_kwargs_spark: Optional[Dict[str, Any]] = None):
     checkpoint_dir = '/opt/test_checkpoints/feature_pipelines'
     path = config['path']
     task_name = config['task_type']
@@ -191,22 +194,12 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     dumped_train_ds, _ = train_res
     dumped_test_ds, _ = test_res
 
-    # test_ds = dumped_test_ds.to_pandas() if ml_algo_lama_clazz == BoostLGBM else dumped_test_ds.to_pandas().to_numpy()
+    if not ml_kwargs_lama:
+        ml_kwargs_lama = dict()
 
-    # Process spark-based features with LAMA
-    # pds = dumped_train_ds.to_pandas() if ml_algo_lama_clazz == BoostLGBM else dumped_train_ds.to_pandas().to_numpy()
+    if not ml_kwargs_spark:
+        ml_kwargs_spark = dict()
 
-    # train_valid = FoldsIterator(pds)
-    # ml_algo = ml_algo_lama_clazz()
-    # ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
-    # assert ml_algo is not None
-    # test_pred = ml_algo.predict(test_ds)
-    # score = train_valid.train.task.get_dataset_metric()
-    # lama_on_spark_oof_metric = score(oof_pred)
-    # lama_on_spark_test_metric = score(test_pred)
-
-    # compare with native features of LAMA
-    # train_valid = FoldsIterator(pds)
     read_csv_args = {'dtype': config['dtype']} if 'dtype' in config else dict()
     train_pdf = pd.read_csv(config['train_path'], **read_csv_args)
     test_pdf = pd.read_csv(config['test_path'], **read_csv_args)
@@ -219,7 +212,9 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     lama_test_feats = lama_pipeline.transform(test_ds)
     lama_feats = lama_feats if ml_algo_lama_clazz == BoostLGBM else lama_feats.to_numpy()
     train_valid = FoldsIterator(lama_feats.to_numpy())
-    ml_algo = ml_algo_lama_clazz()
+    if not USE_FOLDS_VALIDATION:
+        train_valid = train_valid.convert_to_holdout_iterator()
+    ml_algo = ml_algo_lama_clazz(**ml_kwargs_lama)
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
     assert ml_algo is not None
     test_pred = ml_algo.predict(lama_test_feats)
@@ -228,18 +223,10 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     lama_oof_metric = score(oof_pred)
     lama_test_metric = score(test_pred)
 
-    sdf = dumped_train_ds.data.replace(float('nan'), 0.0, subset=[
-        f for f in dumped_train_ds.features if f.startswith("ord_")
-    ])
-
-    # new_dumped_train_ds = dumped_train_ds.empty()
-    # new_dumped_train_ds.set_data(sdf, dumped_train_ds.features, dumped_train_ds.roles)
-    # dumped_train_ds = new_dumped_train_ds
-    #
-    # # dumped_train_ds = dumped_train_ds[:, [f for f in dumped_train_ds.features if not f.startswith('ord_')]]
-
     train_valid = SparkFoldsIterator(dumped_train_ds)
-    ml_algo = ml_algo_spark_clazz(cacher_key='test')
+    if not USE_FOLDS_VALIDATION:
+        train_valid = train_valid.convert_to_holdout_iterator()
+    ml_algo = ml_algo_spark_clazz(cacher_key='test', **ml_kwargs_spark)
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
     ml_algo = cast(SparkTabularMLAlgo, ml_algo)
     assert ml_algo is not None
@@ -248,8 +235,9 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     spark_based_oof_metric = score(oof_pred[:, ml_algo.prediction_feature])
     spark_based_test_metric = score(test_pred[:, ml_algo.prediction_feature])
 
-    print(f"LAMA oof: {lama_oof_metric}. Spark oof: {spark_based_oof_metric}")
-    print(f"LAMA test: {lama_test_metric}. Spark test: {spark_based_test_metric}")
+    # TODO: SPARK-LAMA temporary commenting this section to make smoke test
+    print(f"LAMA oof: {lama_oof_metric}. Lama test: {lama_test_metric}")
+    print(f"Spark oof: {spark_based_oof_metric}. Spark test: {spark_based_test_metric}")
 
     max_diff_in_percents = 0.05
 
@@ -300,7 +288,9 @@ def test_quality_lgbsimple_features(spark: SparkSession, config: Dict[str, Any],
 @pytest.mark.parametrize("config,cv", [(ds, CV) for ds in get_test_datasets(**DATASETS_ARG)])
 def test_quality_mlalgo_linearlgbfs(spark: SparkSession, config: Dict[str, Any], cv: int):
     compare_mlalgos_by_quality(spark, cv, config, LinearFeatures, LinearLBFGS, SparkLinearLBFGS, 'linear_features',
-                               ml_alg_kwargs)
+                               ml_alg_kwargs,
+                               ml_kwargs_lama={"default_params": {"cs": [1e-5]}},
+                               ml_kwargs_spark={"default_params": {"regParam": [1e-5]}})
 
 
 @pytest.mark.parametrize("config,cv", [(ds, CV) for ds in get_test_datasets(**DATASETS_ARG)])
