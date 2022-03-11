@@ -30,12 +30,13 @@ from ..dataset_utils import get_test_datasets, prepared_datasets, load_dump_if_e
 spark = spark_sess
 
 # DATASETS_ARG = {"setting": "reg+binary"}
-DATASETS_ARG = {"dataset": "lama_test_dataset"}
+# DATASETS_ARG = {"dataset": "lama_test_dataset"}
+DATASETS_ARG = {"setting": "all-tasks"}
 
 CV = 5
 
 # otherwise holdout is used
-USE_FOLDS_VALIDATION = True
+USE_FOLDS_VALIDATION = False
 
 ml_alg_kwargs = {
     'auto_unique_co': 10,

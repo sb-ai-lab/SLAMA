@@ -209,14 +209,23 @@ class SparkLinearFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
                                                     input_roles=sparse_pipe.get_output_roles(),
                                                     role=CategoryRole(np.float32))
             else:
-                if self.sparse_ohe == "auto":
-                    final = SparkOHEEncoderEstimator(input_cols=sparse_pipe.get_output_cols(),
-                                                     input_roles=sparse_pipe.get_output_roles(),
-                                                     total_feats_cnt=train.shape[1])
-                else:
-                    final = SparkOHEEncoderEstimator(input_cols=sparse_pipe.get_output_cols(),
-                                                     input_roles=sparse_pipe.get_output_roles(),
-                                                     make_sparse=self.sparse_ohe)
+                assert target_encoder is not None, "Cannot process sparse features cause target encoder is None"
+                final = target_encoder(
+                    input_cols=sparse_pipe.get_output_cols(),
+                    input_roles=sparse_pipe.get_output_roles(),
+                    task_name=train.task.name,
+                    folds_column=train.folds_column,
+                    target_column=train.target_column,
+                    do_replace_columns=True
+                )
+                # if self.sparse_ohe == "auto":
+                #     final = SparkOHEEncoderEstimator(input_cols=sparse_pipe.get_output_cols(),
+                #                                      input_roles=sparse_pipe.get_output_roles(),
+                #                                      total_feats_cnt=train.shape[1])
+                # else:
+                #     final = SparkOHEEncoderEstimator(input_cols=sparse_pipe.get_output_cols(),
+                #                                      input_roles=sparse_pipe.get_output_roles(),
+                #                                      make_sparse=self.sparse_ohe)
             sparse_pipe = SparkSequentialTransformer([sparse_pipe, final])
 
             transformers_list.append(sparse_pipe)
