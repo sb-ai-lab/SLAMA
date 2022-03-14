@@ -22,7 +22,6 @@ spark = spark_sess
 
 CV = 5
 
-
 DATASETS = [
 
     # DatasetForTest("unit/resources/datasets/dataset_23_cmc.csv", default_role=CategoryRole(np.int32)),

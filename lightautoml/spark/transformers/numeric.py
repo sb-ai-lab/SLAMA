@@ -11,6 +11,7 @@ from lightautoml.dataset.base import RolesDict
 
 from lightautoml.dataset.roles import ColumnRole, NumericRole, CategoryRole
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
+from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTransformer, ObsoleteSparkTransformer
 from lightautoml.transformers.numeric import numeric_check
 
@@ -69,7 +70,7 @@ class SparkNaNFlagsEstimator(SparkBaseEstimator):
         )
 
 
-class SparkNaNFlagsTransformer(SparkBaseTransformer):
+class SparkNaNFlagsTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     # TODO: the value is copied from the corresponding LAMA transformer.
@@ -101,7 +102,7 @@ class SparkNaNFlagsTransformer(SparkBaseTransformer):
         return out_sdf
 
 
-class SparkFillInfTransformer(SparkBaseTransformer):
+class SparkFillInfTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "fillinf"
@@ -175,7 +176,7 @@ class SparkFillnaMedianEstimator(SparkBaseEstimator):
                                             do_replace_columns=self.getDoReplaceColumns())
 
 
-class SparkFillnaMedianTransformer(SparkBaseTransformer):
+class SparkFillnaMedianTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     """Fillna with median."""
 
     _fit_checks = (numeric_check,)
@@ -216,7 +217,7 @@ class SparkFillnaMedianTransformer(SparkBaseTransformer):
         return out_sdf
 
 
-class SparkLogOddsTransformer(SparkBaseTransformer):
+class SparkLogOddsTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     """Convert probs to logodds."""
 
     _fit_checks = (numeric_check,)
@@ -303,7 +304,7 @@ class SparkStandardScalerEstimator(SparkBaseEstimator):
                                               do_replace_columns=self.getDoReplaceColumns())
 
 
-class SparkStandardScalerTransformer(SparkBaseTransformer):
+class SparkStandardScalerTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     """Classic StandardScaler."""
 
     _fit_checks = (numeric_check,)
@@ -383,7 +384,7 @@ class SparkQuantileBinningEstimator(SparkBaseEstimator):
         )
 
 
-class SparkQuantileBinningTransformer(SparkBaseTransformer):
+class SparkQuantileBinningTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "qntl"

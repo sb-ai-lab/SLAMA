@@ -4,6 +4,7 @@ from typing import Tuple
 
 import pyspark.sql.functions as F
 from pyspark.sql import SparkSession
+from pyspark.ml import PipelineModel
 
 from lightautoml.spark.automl.presets.tabular_presets import SparkTabularAutoML
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
@@ -101,6 +102,9 @@ if __name__ == "__main__":
 
     logger.info(f"score for out-of-fold predictions: {metric_value}")
 
+    transformer = automl.make_transformer()
+    transformer.write().overwrite().save("/tmp/automl_pipeline")
+
     with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
         te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
 
@@ -121,6 +125,20 @@ if __name__ == "__main__":
         ))
 
         logger.info(f"score for test predictions: {test_metric_value}")
+
+    with log_exec_timer("spark-lama predicting on test (#3 way)") as predict_timer_3:
+        pipeline_model = PipelineModel.load("/tmp/automl_pipeline")
+        te_pred = pipeline_model.transform(test_data_dropped)
+
+        pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
+        score = task.get_dataset_metric()
+        test_metric_value = score(te_pred.select(
+            SparkDataset.ID_COLUMN,
+            F.col(roles['target']).alias('target'),
+            F.col(pred_column).alias('prediction')
+        ))
+
+        logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
 
     logger.info("Predicting is finished")
 

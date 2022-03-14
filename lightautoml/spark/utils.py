@@ -7,6 +7,7 @@ from typing import Optional, Tuple, Dict
 
 from pyspark import RDD
 from pyspark.ml import Transformer, Estimator
+from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
 from pyspark.sql import SparkSession
 
 from lightautoml.spark.dataset.base import SparkDataFrame
@@ -186,7 +187,7 @@ def cache(df: SparkDataFrame) -> SparkDataFrame:
     return df
 
 
-class NoOpTransformer(Transformer):
+class NoOpTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):
     def __init__(self, name: Optional[str] = None):
         super().__init__()
         self._name = name

@@ -9,7 +9,7 @@ from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import ColumnRole
 from lightautoml.dataset.utils import concatenate
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
-from lightautoml.spark.mlwriters import TmpСommonMLWriter
+from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from lightautoml.spark.utils import log_exec_time
 from lightautoml.transformers.base import LAMLTransformer, ColumnsSelector as LAMAColumnsSelector, \
     ChangeRoles as LAMAChangeRoles
@@ -18,7 +18,7 @@ from lightautoml.transformers.base import Roles
 from pyspark.ml import Transformer, Estimator
 from pyspark.ml.param.shared import HasInputCols, HasOutputCols, TypeConverters
 from pyspark.ml.param.shared import Param, Params
-from pyspark.ml.util import MLReadable, MLWritable, MLWriter
+from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class SparkColumnsAndRoles(HasInputCols, HasOutputCols, HasInputRoles, HasOutput
         return new_ds
 
 
-class SparkBaseEstimator(Estimator, SparkColumnsAndRoles, MLWritable, ABC):
+class SparkBaseEstimator(Estimator, SparkColumnsAndRoles, ABC):
     _fit_checks = ()
     _fname_prefix = ""
 
@@ -118,12 +118,9 @@ class SparkBaseEstimator(Estimator, SparkColumnsAndRoles, MLWritable, ABC):
         new_roles.update({feat: self._output_role for feat in self.getOutputCols()})
         return new_roles
 
-    def write(self) -> MLWriter:
-        "Returns MLWriter instance that can save the Estimator instance."
-        return TmpСommonMLWriter(self.uid)
 
 
-class SparkBaseTransformer(Transformer, SparkColumnsAndRoles, MLWritable, ABC):
+class SparkBaseTransformer(Transformer, SparkColumnsAndRoles, ABC):
     _fname_prefix = ""
 
     def __init__(self,
@@ -155,10 +152,6 @@ class SparkBaseTransformer(Transformer, SparkColumnsAndRoles, MLWritable, ABC):
             self.set(self.columnsToReplace, self.getInputCols() if do_replace_columns else [])
 
     _transform_checks = ()
-
-    def write(self) -> MLWriter:
-        "Returns MLWriter instance that can save the Transformer instance."
-        return TmpСommonMLWriter(self.uid)
 
     def _make_output_df(self, input_df: SparkDataFrame, cols_to_add: List[Union[str, Column]]):
         return input_df.select('*', *cols_to_add)
@@ -300,12 +293,12 @@ class ObsoleteSparkTransformer(LAMLTransformer):
         return new_roles
 
 
-class ColumnsSelectorTransformer(Transformer, HasInputCols, HasOutputCols):
+class ColumnsSelectorTransformer(Transformer, HasInputCols, HasOutputCols, DefaultParamsWritable, DefaultParamsReadable):
     optionalCols = Param(Params._dummy(), "optionalCols", "optional column names.", typeConverter=TypeConverters.toListString)
 
     def __init__(self,
-                 input_cols: Optional[List[str]] = None,
-                 optional_cols: Optional[List[str]] = None):
+                 input_cols: Optional[List[str]] = [],
+                 optional_cols: Optional[List[str]] = []):
         super().__init__()
         optional_cols = optional_cols if optional_cols else []
         assert len(set(input_cols).intersection(set(optional_cols))) == 0, \
@@ -325,7 +318,7 @@ class ColumnsSelectorTransformer(Transformer, HasInputCols, HasOutputCols):
         return dataset.select(*self.getInputCols(), *present_opt_cols)
 
 
-class DropColumnsTransformer(Transformer):
+class DropColumnsTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):
     colsToRemove = Param(Params._dummy(), "colsToRemove", "columns to be removed",
                          typeConverter=TypeConverters.toListString)
 
@@ -333,7 +326,7 @@ class DropColumnsTransformer(Transformer):
                                  "optional columns to be removed (if they appear in the dataset)",
                                  typeConverter=TypeConverters.toListString)
 
-    def __init__(self, remove_cols: List[str], optional_remove_cols: Optional[List[str]] = None):
+    def __init__(self, remove_cols: List[str] = [], optional_remove_cols: Optional[List[str]] = None):
         super().__init__()
         self.set(self.colsToRemove, remove_cols)
         self.set(self.optionalColsToRemove, optional_remove_cols if optional_remove_cols else [])
@@ -352,7 +345,7 @@ class DropColumnsTransformer(Transformer):
         return dataset
 
 
-class SparkChangeRolesTransformer(SparkBaseTransformer):
+class SparkChangeRolesTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     # Note: this trasnformer cannot be applied directly to input columns of a feature pipeline
     def __init__(self, 
                  input_cols: List[str],

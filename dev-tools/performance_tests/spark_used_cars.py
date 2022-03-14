@@ -129,7 +129,6 @@ def calculate_automl(path: str,
         with log_exec_timer("spark-lama training") as train_timer:
             task = SparkTask(task_type)
             train_data, test_data = prepare_test_and_train(spark, path, seed)
-
             test_data_dropped = test_data
 
             automl = SparkTabularAutoML(

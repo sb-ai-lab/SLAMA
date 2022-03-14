@@ -17,6 +17,7 @@ from sklearn.utils.murmurhash import murmurhash3_32
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
+from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable, SparkLabelEncoderTransformerMLReadable, SparkLabelEncoderTransformerMLWritable
 from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTransformer
 from lightautoml.transformers.categorical import categorical_check, encoding_check, oof_task_check, \
     multiclass_task_check
@@ -141,7 +142,7 @@ class SparkLabelEncoderEstimator(SparkBaseEstimator, TypesHelper):
                                             indexer_model=self.indexer_model)
 
 
-class SparkLabelEncoderTransformer(SparkBaseTransformer, TypesHelper):
+class SparkLabelEncoderTransformer(SparkBaseTransformer, TypesHelper, SparkLabelEncoderTransformerMLWritable, SparkLabelEncoderTransformerMLReadable):
     _transform_checks = ()
     _fname_prefix = "le"
 
@@ -479,12 +480,10 @@ class SparkOHEEncoderEstimator(SparkBaseEstimator):
         dtype: type = np.float32,
     ):
         """
-
         Args:
             make_sparse: Create sparse matrix.
             total_feats_cnt: Initial features number.
             dtype: Dtype of new features.
-
         """
         super().__init__(input_cols,
                          input_roles,
@@ -502,15 +501,11 @@ class SparkOHEEncoderEstimator(SparkBaseEstimator):
 
     def _fit(self, sdf: SparkDataFrame) -> Transformer:
         """Calc output shapes.
-
         Automatically do ohe in sparse form if approximate fill_rate < `0.2`.
-
         Args:
             dataset: Pandas or Numpy dataset of categorical features.
-
         Returns:
             self.
-
         """
 
         maxs = [F.max(c).alias(f"max_{c}") for c in self.getInputCols()]
@@ -541,7 +536,7 @@ class SparkOHEEncoderEstimator(SparkBaseEstimator):
         )
 
 
-class OHEEncoderTransformer(SparkBaseTransformer):
+class OHEEncoderTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
     """OHEEncoder Transformer"""
 
     _fit_checks = (categorical_check, encoding_check)
@@ -565,13 +560,10 @@ class OHEEncoderTransformer(SparkBaseTransformer):
 
     def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
         """Transform categorical dataset to ohe.
-
         Args:
             dataset: Pandas or Numpy dataset of categorical features.
-
         Returns:
             Numpy dataset with encoded labels.
-
         """
         output = self._ohe_transformer.transform(sdf)
 
@@ -721,7 +713,7 @@ class SparkTargetEncoderEstimator(SparkBaseEstimator):
         )
 
 
-class SparkTargetEncoderTransformer(SparkBaseTransformer):
+class SparkTargetEncoderTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
 
     _fit_checks = (categorical_check, oof_task_check, encoding_check)
     _transform_checks = ()
@@ -931,7 +923,7 @@ class SparkMulticlassTargetEncoderEstimator(SparkBaseEstimator):
         )
 
 
-class SparkMultiTargetEncoderTransformer(SparkBaseTransformer):
+class SparkMultiTargetEncoderTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
 
     _fit_checks = (categorical_check, multiclass_task_check, encoding_check)
     _transform_checks = ()

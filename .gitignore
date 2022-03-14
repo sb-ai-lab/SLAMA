@@ -163,3 +163,5 @@ requirements.txt
 jars_cache
 dumps
 *.orig
+
+jars/*

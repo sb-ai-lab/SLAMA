@@ -11,6 +11,7 @@ from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkD
 
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
+from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from lightautoml.transformers.datetime import datetime_check, date_attrs
 
 from lightautoml.spark.dataset.base import SparkDataset
@@ -81,7 +82,7 @@ class SparkDatetimeHelper:
     _transform_checks = ()
 
 
-class SparkTimeToNumTransformer(SparkBaseTransformer, SparkDatetimeHelper):
+class SparkTimeToNumTransformer(SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable):
     basic_time = "2020-01-01"
     _fname_prefix = "dtdiff"
 
@@ -106,7 +107,7 @@ class SparkTimeToNumTransformer(SparkBaseTransformer, SparkDatetimeHelper):
         return df
 
 
-class SparkBaseDiffTransformer(SparkBaseTransformer, SparkDatetimeHelper):
+class SparkBaseDiffTransformer(SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable):
     _fname_prefix = "basediff"
 
     baseNames = Param(Params._dummy(), "baseNames",
@@ -159,7 +160,7 @@ class SparkBaseDiffTransformer(SparkBaseTransformer, SparkDatetimeHelper):
         return df
 
 
-class SparkDateSeasonsTransformer(SparkBaseTransformer, SparkDatetimeHelper):
+class SparkDateSeasonsTransformer(SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable):
     _fname_prefix = "season"
 
     def __init__(self,

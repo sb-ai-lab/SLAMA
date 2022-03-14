@@ -129,6 +129,19 @@ if __name__ == "__main__":
         test_score = score(test_pred_df)
         logger.info(f"Test score (#2 way): {test_score}")
 
+        transformer.write().overwrite().save("/tmp/reader_and_spark_ml_pipe_lgb")
+
+        # 3. third way (via loaded Spark ML Pipeline)
+        pipeline_model = PipelineModel.load("/tmp/reader_and_spark_ml_pipe_lgb")
+        test_pred_df = pipeline_model.transform(test_df)
+        test_pred_df = test_pred_df.select(
+            SparkDataset.ID_COLUMN,
+            F.col(roles['target']).alias('target'),
+            F.col(spark_ml_algo.prediction_feature).alias('prediction')
+        )
+        test_score = score(test_pred_df)
+        logger.info(f"Test score (#3 way): {test_score}")
+
     logger.info("Finished")
 
     spark.stop()
