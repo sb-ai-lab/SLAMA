@@ -164,4 +164,4 @@ jars_cache
 dumps
 *.orig
 
-jars/*
+jars/*.jar
