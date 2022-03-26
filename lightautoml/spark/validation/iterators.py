@@ -2,7 +2,7 @@ import functools
 import logging
 from typing import Optional, cast, Tuple, Iterable, Sequence
 
-from lightautoml.dataset.base import LAMLDataset
+from lightautoml.dataset.base import LAMLDataset, RolesDict
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
 from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
 from lightautoml.validation.base import TrainValidIterator, HoldoutIterator
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class SparkDummyIterator(SparkBaseTrainValidIterator):
-    def __init__(self, train: SparkDataset):
-        super().__init__(train)
+    def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):
+        super().__init__(train, input_roles)
         self._curr_idx = 0
 
     def __iter__(self) -> Iterable:
@@ -56,12 +56,12 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
         sds = cast(SparkDataset, self.train)
         assert sds.folds_column is not None, \
             "Cannot convert to Holdout iterator when folds_column is not defined"
-        return SparkHoldoutIterator(self.train)
+        return SparkHoldoutIterator(self.train, self.input_roles)
 
 
 class SparkHoldoutIterator(SparkBaseTrainValidIterator):
-    def __init__(self, train: SparkDataset):
-        super().__init__(train)
+    def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):
+        super().__init__(train, input_roles)
         self._curr_idx = 0
 
     def __iter__(self) -> Iterable:
@@ -119,7 +119,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
     Folds should be defined in Reader, based on cross validation method.
     """
 
-    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None):
+    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None, input_roles: Optional[RolesDict] = None):
         """Creates iterator.
 
         Args:
@@ -127,7 +127,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             n_folds: Number of folds.
 
         """
-        super().__init__(train)
+        super().__init__(train, input_roles)
 
         num_folds = train.data.select(F.max(train.folds_column).alias('max')).first()['max']
         self.n_folds = num_folds + 1
@@ -192,7 +192,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             new hold-out-iterator.
 
         """
-        return SparkHoldoutIterator(self.train)
+        return SparkHoldoutIterator(self.train, self.input_roles)
 
     def combine_val_preds(self, val_preds: Sequence[SparkDataFrame], include_train: bool = False) -> SparkDataFrame:
         assert len(val_preds) > 0

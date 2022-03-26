@@ -1,7 +1,7 @@
 ---
 calculation_scripts:
-  spark: spark_used_cars.py
-  lama: lama_used_cars.py
+  spark: dev-tools/experiments/spark_experiments.py
+  lama: dev-tools/experiments/lama_experiments.py
 state_file: 'delete'  # Available values are 'use|ignore|delete', use - skip experiments in state file, ignore - don`t skip experiments, delete - delete experiments in state file
 
 # Unique set of parameters for each experiment

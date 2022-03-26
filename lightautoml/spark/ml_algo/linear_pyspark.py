@@ -185,6 +185,8 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             if es >= early_stopping:
                 break
 
+        logger.info("fit_predict single fold finished in LinearLBGFS")
+
         return best_model, best_val_pred, fold_prediction_column
 
     def predict_single_fold(self,
@@ -238,6 +240,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             Dataset with predicted values.
 
         """
+        logger.info("Starting LinearLGBFS")
         self.timer.start()
 
         self.input_roles = train_valid_iterator.input_roles
@@ -251,4 +254,8 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             outputCol=f"{self._name}_vassembler_features"
         )
 
-        return super().fit_predict(train_valid_iterator)
+        result = super().fit_predict(train_valid_iterator)
+
+        logger.info("LinearLGBFS is finished")
+
+        return result

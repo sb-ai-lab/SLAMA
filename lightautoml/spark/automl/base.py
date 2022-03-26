@@ -391,7 +391,7 @@ class SparkAutoML:
 
         tdf = train.data.select(*tcols, F.lit(0).alias(folds_col))
         vdf = valid.data.select(*vcols, F.lit(1).alias(folds_col))
-        sdf = tdf.unionByName(vdf)
+        sdf = tdf.unionByName(vdf).coalesce(tdf.rdd.getNumPartitions())
 
         dataset = train.empty()
         dataset.set_data(sdf, sdf.columns, train.roles)

@@ -7,18 +7,16 @@ state_file: 'delete'  # Available values are 'use|ignore|delete', use - skip exp
 
 # Unique set of parameters for each experiment
 experiments:
-  - name: "cmp-all-0125x"
+  - name: "cmp-cat-te"
     library: [ "spark" ]
     repeat_rate: 1
     params:
-      func: [ "calculate_automl" ]
-      dataset: [ "used_cars_dataset_1x" ]
+      func: [ "calculate_cat_te" ]
+      dataset: [ "used_cars_dataset_4x" ]
       seed: [ 42 ]
-      cv: [ 2 ]
-      use_algos:
-        - [ [ "linear_l2" ] ]
-    checkpoint_path: [ "/tmp/results/linear_chkp_cmp_all/linear_fp_used_cars_dataset_1x/" ]
+      cv: [ 5 ]
+      checkpoint_path: [ "/tmp/results/te_chkp_cmp/cat_te_used_cars_dataset_4x/" ]
     spark_config:
-      spark.executor.instances: [ '4' ]
+      spark.executor.instances: [ '8' ]
       spark.executor.cores: [ '8' ]
       spark.executor.memory: [ '32g' ]

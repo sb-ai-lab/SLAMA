@@ -43,21 +43,23 @@ def prepare_test_and_train(spark: SparkSession, path:str, seed: int) -> Tuple[Sp
 
 def get_spark_session():
     if os.environ.get("SCRIPT_ENV", None) == "cluster":
-        return SparkSession.builder.getOrCreate()
+        spark_sess = SparkSession.builder.getOrCreate()
+    else:
+        spark_sess = (
+            SparkSession
+            .builder
+            .master("local[*]")
+            .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.jar")
+            .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
+            .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
+            .config("spark.sql.shuffle.partitions", "16")
+            .config("spark.driver.memory", "6g")
+            .config("spark.executor.memory", "6g")
+            .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+            .getOrCreate()
+        )
 
-    spark_sess = (
-        SparkSession
-        .builder
-        .master("local[*]")
-        .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.jar")
-        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
-        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-        .config("spark.sql.shuffle.partitions", "16")
-        .config("spark.driver.memory", "6g")
-        .config("spark.executor.memory", "6g")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .getOrCreate()
-    )
+    spark_sess.sparkContext.setLogLevel("WARN")
 
     return spark_sess
 
@@ -131,16 +133,20 @@ if __name__ == "__main__":
 
         transformer.write().overwrite().save("/tmp/reader_and_spark_ml_pipe_lgb")
 
-        # 3. third way (via loaded Spark ML Pipeline)
-        pipeline_model = PipelineModel.load("/tmp/reader_and_spark_ml_pipe_lgb")
-        test_pred_df = pipeline_model.transform(test_df)
-        test_pred_df = test_pred_df.select(
-            SparkDataset.ID_COLUMN,
-            F.col(roles['target']).alias('target'),
-            F.col(spark_ml_algo.prediction_feature).alias('prediction')
-        )
-        test_score = score(test_pred_df)
-        logger.info(f"Test score (#3 way): {test_score}")
+        # TODO: SPARK-LAMA temporary commenting
+        # import time
+        # # time.sleep(6000)
+        #
+        # # 3. third way (via loaded Spark ML Pipeline)
+        # pipeline_model = PipelineModel.load("/tmp/reader_and_spark_ml_pipe_lgb")
+        # test_pred_df = pipeline_model.transform(test_df)
+        # test_pred_df = test_pred_df.select(
+        #     SparkDataset.ID_COLUMN,
+        #     F.col(roles['target']).alias('target'),
+        #     F.col(spark_ml_algo.prediction_feature).alias('prediction')
+        # )
+        # test_score = score(test_pred_df)
+        # logger.info(f"Test score (#3 way): {test_score}")
 
     logger.info("Finished")
 

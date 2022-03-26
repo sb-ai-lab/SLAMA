@@ -19,14 +19,15 @@ logger = logging.getLogger(__name__)
 
 def calculate_quality(calc_automl: Callable, delete_dir: bool = True):
 
-    # dataset_name = "used_cars_dataset"
-    dataset_name = "lama_test_dataset"
+    # dataset_name = "used_cars_dataset_0125x"
+    dataset_name = "used_cars_dataset_head2x60k"
+    # dataset_name = "lama_test_dataset"
 
     config = copy(datasets()[dataset_name])
-    config["use_algos"] = [["lgb", "linear_l2"], ["lgb"]]
+    # config["use_algos"] = [["lgb", "linear_l2"], ["lgb"]]
     # config["use_algos"] = [["lgb", "linear_l2"]]
     # config["use_algos"] = [["linear_l2"], ["lgb"]]
-    # config["use_algos"] = [["lgb"]]
+    config["use_algos"] = [["lgb"]]
     # config["use_algos"] = [["linear_l2"]]
 
     cv = 5
@@ -54,6 +55,6 @@ def calculate_quality(calc_automl: Callable, delete_dir: bool = True):
 
 
 if __name__ == "__main__":
-    # calculate_quality(lama_automl)
-    calculate_quality(spark_automl, delete_dir=False)
+    calculate_quality(lama_automl)
+    # calculate_quality(spark_automl, delete_dir=False)
     # calculate_quality(calculate_lgbadv_boostlgb, delete_dir=False)

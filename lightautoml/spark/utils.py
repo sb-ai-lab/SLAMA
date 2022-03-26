@@ -225,17 +225,14 @@ class Cacher(Estimator):
         self._dataset: Optional[SparkDataFrame] = None
 
     def _fit(self, dataset):
-        ds = dataset.cache()
         logger.info(f"Cacher {self._key}. Starting to materialize data.")
-        ds.write.mode('overwrite').format('noop').save()
-        # ds.count()
+        ds = dataset.localCheckpoint(eager=True)
         logger.info(f"Cacher {self._key}. Finished data materialization.")
 
         previous_ds = self._cacher_dict.get(self._key, None)
         if previous_ds is not None:
             import traceback
             logger.info(f"Removing cache for key: {self._key}. \n {traceback.format_stack()}")
-            previous_ds.unpersist()
 
         self._cacher_dict[self._key] = ds
 

@@ -1,5 +1,6 @@
 """Basic classes for features generation."""
 import itertools
+import logging
 from copy import copy
 from dataclasses import dataclass
 from typing import Any, Callable, cast, Set, Union, Dict
@@ -32,6 +33,9 @@ from lightautoml.spark.transformers.categorical import SparkTargetEncoderEstimat
 from lightautoml.spark.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer
 from lightautoml.spark.transformers.numeric import SparkQuantileBinningEstimator
 from lightautoml.spark.utils import NoOpTransformer, Cacher, EmptyCacher
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_graph(begin: SparkEstOrTrans):
@@ -142,6 +146,8 @@ class SparkFeaturesPipeline(InputFeaturesAndRoles, OutputFeaturesAndRoles, Featu
             Dataset with new features.
 
         """
+        logger.info("SparkFeaturePipeline is started")
+
         assert self.input_features is not None, "Input features should be provided before the fit_transform"
         assert self.input_roles is not None, "Input roles should be provided before the fit_transform"
 
@@ -154,6 +160,8 @@ class SparkFeaturesPipeline(InputFeaturesAndRoles, OutputFeaturesAndRoles, Featu
         roles.update(self._output_roles)
         transformed_ds = train.empty()
         transformed_ds.set_data(fitted_pipe.sdf, features, roles)
+
+        logger.info("SparkFeaturePipeline is finished")
 
         return transformed_ds
 

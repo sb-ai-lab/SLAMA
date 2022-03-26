@@ -23,4 +23,6 @@ RUN pip install /tmp/LightAutoML-0.3.0-py3-none-any.whl
 
 COPY jars /root/jars
 
+ENV PYSPARK_PYTHON=python3
+
 WORKDIR /root

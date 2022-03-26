@@ -13,6 +13,12 @@ then
   echo "REPO var is not defined"
 fi
 
+if [[ -z "${IMAGE_TAG}" ]]
+then
+  IMAGE_TAG="lama-v3.2.0-nikolay"
+fi
+
+
 APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 
 function build_jars() {
@@ -41,13 +47,13 @@ function build_pyspark_images() {
     && rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz
 
   # create images with names:
-  # - ${REPO}/spark:lama-v3.2.0
-  # - ${REPO}/spark-py:lama-v3.2.0
-  ./spark/bin/docker-image-tool.sh -r "${REPO}" -t lama-v3.2.0 \
+  # - ${REPO}/spark:${IMAGE_TAG}
+  # - ${REPO}/spark-py:${IMAGE_TAG}
+  ./spark/bin/docker-image-tool.sh -r "${REPO}" -t ${IMAGE_TAG} \
     -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
     build
 
-  ./spark/bin/docker-image-tool.sh -r "${REPO}" -t lama-v3.2.0 push
+  ./spark/bin/docker-image-tool.sh -r "${REPO}" -t ${IMAGE_TAG} push
 }
 
 function build_lama_image() {
@@ -56,11 +62,11 @@ function build_lama_image() {
   poetry build
 
   docker build \
-    -t ${REPO}/spark-py-lama:lama-v3.2.0 \
+    -t ${REPO}/spark-py-lama:${IMAGE_TAG} \
     -f docker/spark-lama/spark-py-lama.dockerfile \
     .
 
-  docker push ${REPO}/spark-py-lama:lama-v3.2.0
+  docker push ${REPO}/spark-py-lama:${IMAGE_TAG}
 
   rm -rf dist
 }
@@ -79,7 +85,7 @@ function submit_job() {
   spark-submit \
     --master k8s://${APISERVER} \
     --deploy-mode cluster \
-    --conf "spark.kubernetes.container.image=${REPO}/spark-py-lama:lama-v3.2.0" \
+    --conf "spark.kubernetes.container.image=${REPO}/spark-py-lama:${IMAGE_TAG}" \
     --conf 'spark.kubernetes.namespace='${KUBE_NAMESPACE} \
     --conf 'spark.kubernetes.authenticate.driver.serviceAccountName=spark' \
     --conf 'spark.kubernetes.memoryOverheadFactor=0.4' \
@@ -94,11 +100,11 @@ function submit_job() {
     --conf 'spark.executor.extraClassPath=/root/.ivy2/jars/com.azure_azure-ai-textanalytics-5.1.4.jar:/root/.ivy2/jars/com.azure_azure-core-1.22.0.jar:/root/.ivy2/jars/com.azure_azure-core-http-netty-1.11.2.jar:/root/.ivy2/jars/com.azure_azure-storage-blob-12.14.2.jar:/root/.ivy2/jars/com.azure_azure-storage-common-12.14.1.jar:/root/.ivy2/jars/com.azure_azure-storage-internal-avro-12.1.2.jar:/root/.ivy2/jars/com.beust_jcommander-1.27.jar:/root/.ivy2/jars/com.chuusai_shapeless_2.12-2.3.2.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-core-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-databind-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.dataformat_jackson-dataformat-xml-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.datatype_jackson-datatype-jsr310-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.module_jackson-module-jaxb-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.woodstox_woodstox-core-6.2.4.jar:/root/.ivy2/jars/com.github.vowpalwabbit_vw-jni-8.9.1.jar:/root/.ivy2/jars/com.jcraft_jsch-0.1.54.jar:/root/.ivy2/jars/com.linkedin.isolation-forest_isolation-forest_3.2.0_2.12-2.0.8.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-cognitive_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-core_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-deep-learning_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-lightgbm_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-opencv_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-vw_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.cntk_cntk-2.4.jar:/root/.ivy2/jars/com.microsoft.cognitiveservices.speech_client-jar-sdk-1.14.0.jar:/root/.ivy2/jars/com.microsoft.ml.lightgbm_lightgbmlib-3.2.110.jar:/root/.ivy2/jars/com.microsoft.onnxruntime_onnxruntime_gpu-1.8.1.jar:/root/.ivy2/jars/commons-codec_commons-codec-1.10.jar:/root/.ivy2/jars/commons-logging_commons-logging-1.2.jar:/root/.ivy2/jars/io.netty_netty-buffer-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http2-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-socks-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-common-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-proxy-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-native-macos-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-tcnative-boringssl-static-2.0.43.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-native-epoll-4.1.68.Final-linux-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-kqueue-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-unix-common-4.1.68.Final.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-core-1.0.11.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-http-1.0.11.jar:/root/.ivy2/jars/io.projectreactor_reactor-core-3.4.10.jar:/root/.ivy2/jars/io.spray_spray-json_2.12-1.3.2.jar:/root/.ivy2/jars/jakarta.activation_jakarta.activation-api-1.2.1.jar:/root/.ivy2/jars/jakarta.xml.bind_jakarta.xml.bind-api-2.3.2.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpclient-4.5.6.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpcore-4.4.10.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpmime-4.5.6.jar:/root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.2.0.jar:/root/.ivy2/jars/org.beanshell_bsh-2.0b4.jar:/root/.ivy2/jars/org.codehaus.woodstox_stax2-api-4.2.1.jar:/root/.ivy2/jars/org.openpnp_opencv-3.2.0-1.jar:/root/.ivy2/jars/org.reactivestreams_reactive-streams-1.0.3.jar:/root/.ivy2/jars/org.scalactic_scalactic_2.12-3.0.5.jar:/root/.ivy2/jars/org.scala-lang_scala-reflect-2.12.4.jar:/root/.ivy2/jars/org.slf4j_slf4j-api-1.7.32.jar:/root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar:/root/.ivy2/jars/org.testng_testng-6.8.8.jar:/root/.ivy2/jars/org.tukaani_xz-1.8.jar:/root/.ivy2/jars/org.typelevel_macro-compat_2.12-1.1.1.jar:/root/jars/spark-lightautoml_2.12-0.1.jar' \
     --conf 'spark.driver.extraClassPath=/root/.ivy2/jars/com.azure_azure-ai-textanalytics-5.1.4.jar:/root/.ivy2/jars/com.azure_azure-core-1.22.0.jar:/root/.ivy2/jars/com.azure_azure-core-http-netty-1.11.2.jar:/root/.ivy2/jars/com.azure_azure-storage-blob-12.14.2.jar:/root/.ivy2/jars/com.azure_azure-storage-common-12.14.1.jar:/root/.ivy2/jars/com.azure_azure-storage-internal-avro-12.1.2.jar:/root/.ivy2/jars/com.beust_jcommander-1.27.jar:/root/.ivy2/jars/com.chuusai_shapeless_2.12-2.3.2.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-core-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-databind-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.dataformat_jackson-dataformat-xml-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.datatype_jackson-datatype-jsr310-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.module_jackson-module-jaxb-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.woodstox_woodstox-core-6.2.4.jar:/root/.ivy2/jars/com.github.vowpalwabbit_vw-jni-8.9.1.jar:/root/.ivy2/jars/com.jcraft_jsch-0.1.54.jar:/root/.ivy2/jars/com.linkedin.isolation-forest_isolation-forest_3.2.0_2.12-2.0.8.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-cognitive_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-core_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-deep-learning_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-lightgbm_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-opencv_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-vw_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.cntk_cntk-2.4.jar:/root/.ivy2/jars/com.microsoft.cognitiveservices.speech_client-jar-sdk-1.14.0.jar:/root/.ivy2/jars/com.microsoft.ml.lightgbm_lightgbmlib-3.2.110.jar:/root/.ivy2/jars/com.microsoft.onnxruntime_onnxruntime_gpu-1.8.1.jar:/root/.ivy2/jars/commons-codec_commons-codec-1.10.jar:/root/.ivy2/jars/commons-logging_commons-logging-1.2.jar:/root/.ivy2/jars/io.netty_netty-buffer-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http2-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-socks-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-common-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-proxy-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-native-macos-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-tcnative-boringssl-static-2.0.43.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-native-epoll-4.1.68.Final-linux-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-kqueue-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-unix-common-4.1.68.Final.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-core-1.0.11.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-http-1.0.11.jar:/root/.ivy2/jars/io.projectreactor_reactor-core-3.4.10.jar:/root/.ivy2/jars/io.spray_spray-json_2.12-1.3.2.jar:/root/.ivy2/jars/jakarta.activation_jakarta.activation-api-1.2.1.jar:/root/.ivy2/jars/jakarta.xml.bind_jakarta.xml.bind-api-2.3.2.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpclient-4.5.6.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpcore-4.4.10.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpmime-4.5.6.jar:/root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.2.0.jar:/root/.ivy2/jars/org.beanshell_bsh-2.0b4.jar:/root/.ivy2/jars/org.codehaus.woodstox_stax2-api-4.2.1.jar:/root/.ivy2/jars/org.openpnp_opencv-3.2.0-1.jar:/root/.ivy2/jars/org.reactivestreams_reactive-streams-1.0.3.jar:/root/.ivy2/jars/org.scalactic_scalactic_2.12-3.0.5.jar:/root/.ivy2/jars/org.scala-lang_scala-reflect-2.12.4.jar:/root/.ivy2/jars/org.slf4j_slf4j-api-1.7.32.jar:/root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar:/root/.ivy2/jars/org.testng_testng-6.8.8.jar:/root/.ivy2/jars/org.tukaani_xz-1.8.jar:/root/.ivy2/jars/org.typelevel_macro-compat_2.12-1.1.1.jar:/root/jars/spark-lightautoml_2.12-0.1.jar' \
     --conf 'spark.driver.cores=4' \
-    --conf 'spark.driver.memory=32g' \
-    --conf 'spark.executor.instances=4' \
-    --conf 'spark.executor.cores=4' \
-    --conf 'spark.executor.memory=16g' \
-    --conf 'spark.cores.max=16' \
+    --conf 'spark.driver.memory=16g' \
+    --conf 'spark.executor.instances=8' \
+    --conf 'spark.executor.cores=8' \
+    --conf 'spark.executor.memory=32g' \
+    --conf 'spark.cores.max=8' \
     --conf 'spark.memory.fraction=0.6' \
     --conf 'spark.memory.storageFraction=0.5' \
     --conf 'spark.sql.autoBroadcastJoinThreshold=100MB' \
@@ -130,6 +136,26 @@ function port_forward() {
 
   svc_name=$(kubectl -n ${KUBE_NAMESPACE} get svc -l spark-app-selector=${spark_app_selector} -o jsonpath='{.items[0].metadata.name}')
   kubectl -n spark-lama-exps port-forward svc/${svc_name} 9040:4040
+}
+
+function port_forward_by_expname() {
+  expname=$1
+  port=$2
+  spark_app_selector=$(kubectl -n spark-lama-exps get pod -l spark-role=driver,expname=${expname} -o jsonpath='{.items[0].metadata.labels.spark-app-selector}')
+  svc_name=$(kubectl -n ${KUBE_NAMESPACE} get svc -l spark-app-selector=${spark_app_selector} -o jsonpath='{.items[0].metadata.name}')
+  kubectl -n spark-lama-exps port-forward svc/${svc_name} ${port}:4040
+}
+
+function logs_by_expname() {
+  expname=$1
+
+  kubectl -n spark-lama-exps logs -l spark-role=driver,expname=${expname}
+}
+
+function logs_ex_by_expname() {
+  expname=$1
+
+  kubectl -n spark-lama-exps logs -l spark-role=executor,expname=${expname}
 }
 
 function help() {
@@ -194,6 +220,18 @@ function main () {
 
     "port-forward")
         port_forward "${@}"
+        ;;
+
+    "port-forward-by-expname")
+        port_forward_by_expname "${@}"
+        ;;
+
+    "logs-by-expname")
+        logs_by_expname "${@}"
+        ;;
+
+    "logs-ex-by-expname")
+        logs_ex_by_expname "${@}"
         ;;
 
     "help")

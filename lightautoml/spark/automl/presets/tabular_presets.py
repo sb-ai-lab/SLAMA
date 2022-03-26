@@ -412,7 +412,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         if upd_roles:
             roles = {**roles, **upd_roles}
         if valid_data is not None:
-            data, _ = self._read_data(valid_data, valid_features, self.read_csv_params)
+            valid_data, _ = self._read_data(valid_data, valid_features, self.read_csv_params)
 
         oof_pred = super().fit_predict(train, roles=roles, cv_iter=cv_iter, valid_data=valid_data, verbose=verbose)
 
