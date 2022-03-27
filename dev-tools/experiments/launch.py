@@ -7,10 +7,10 @@ from typing import Callable
 
 from dataset_utils import datasets
 
-from lama_used_cars import calculate_automl as lama_automl
+from lama_experiments import calculate_automl as lama_automl
 from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.utils.tmp_utils import LOG_DATA_DIR, log_config
-from spark_used_cars import calculate_automl as spark_automl, calculate_lgbadv_boostlgb
+from spark_experiments import calculate_automl as spark_automl, calculate_lgbadv_boostlgb
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 def calculate_quality(calc_automl: Callable, delete_dir: bool = True):
 
     # dataset_name = "used_cars_dataset_0125x"
-    dataset_name = "used_cars_dataset_head2x60k"
+    # dataset_name = "used_cars_dataset_head2x60k"
     # dataset_name = "lama_test_dataset"
+    dataset_name = "ipums_97"
 
     config = copy(datasets()[dataset_name])
     # config["use_algos"] = [["lgb", "linear_l2"], ["lgb"]]
