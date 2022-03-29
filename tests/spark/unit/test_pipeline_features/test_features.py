@@ -29,7 +29,8 @@ from ..dataset_utils import get_test_datasets, prepared_datasets, load_dump_if_e
 
 spark = spark_sess
 
-DATASETS_ARG = {"dataset": "lama_test_dataset"}
+# DATASETS_ARG = {"dataset": "lama_test_dataset"}
+DATASETS_ARG = {"setting": "binary"}
 
 CV = 5
 

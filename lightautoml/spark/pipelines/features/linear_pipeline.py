@@ -144,8 +144,8 @@ class SparkLinearFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
         seas_cats = self.get_datetime_seasons(train, CategoryRole(np.int32))
         if seas_cats is not None:
             # sparse_list.append(SequentialTransformer([seas_cats, LabelEncoder()]))
-            label_encoder_stage = SparkLabelEncoderEstimator(input_cols=seas_cats.outputCols(),
-                                                             input_roles=seas_cats.outputRoles(),
+            label_encoder_stage = SparkLabelEncoderEstimator(input_cols=seas_cats.getOutputCols(),
+                                                             input_roles=seas_cats.getOutputRoles(),
                                                              do_replace_columns=True)
             sparse_list.append(SparkSequentialTransformer([seas_cats, label_encoder_stage]))
 

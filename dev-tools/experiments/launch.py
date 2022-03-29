@@ -1,3 +1,4 @@
+import logging
 import logging.config
 import os
 import shutil
@@ -12,7 +13,7 @@ from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.utils.tmp_utils import LOG_DATA_DIR, log_config
 from spark_experiments import calculate_automl as spark_automl, calculate_lgbadv_boostlgb
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='./lama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 

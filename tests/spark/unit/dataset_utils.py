@@ -646,6 +646,11 @@ def get_test_datasets(dataset: Optional[str] = None,  setting: str = "all") -> L
             dss['lama_test_dataset'],
             dss["ailerons_dataset"],
         ]
+    elif setting == "binary":
+        return [
+            dss['lama_test_dataset'],
+            dss["ailerons_dataset"],
+        ]
     elif setting == "one_reg+one_binary":
         return [
             dss['used_cars_dataset'],

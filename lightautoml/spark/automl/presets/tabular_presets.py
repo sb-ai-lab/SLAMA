@@ -1,11 +1,16 @@
 import logging
 import os
 from copy import deepcopy, copy
-from typing import Optional, Sequence, Iterable, Union, Tuple
+from typing import Optional, Sequence, Iterable, Union, Tuple, List
+import numpy as np
 
+from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F, types as SparkTypes, Window
+from tqdm import tqdm
 
 from lightautoml.automl.presets.base import upd_params
+from lightautoml.automl.presets.utils import plot_pdp_with_distribution
 from lightautoml.dataset.base import RolesDict
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
 from lightautoml.pipelines.selection.base import SelectionPipeline, ComposedSelector
@@ -14,6 +19,7 @@ from lightautoml.pipelines.selection.permutation_importance_based import NpItera
 from lightautoml.reader.tabular_batch_generator import ReadableToDf
 from lightautoml.spark.automl.blend import SparkWeightedBlender, SparkBestModelSelector
 from lightautoml.spark.automl.presets.base import SparkAutoMLPreset
+from lightautoml.spark.automl.presets.utils import calc_feats_permutation_imps, replace_dayofweek_in_date, replace_month_in_date, replace_year_in_date
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
 from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
 from lightautoml.spark.ml_algo.linear_pyspark import SparkLinearLBFGS
@@ -473,7 +479,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                    data: ReadableIntoSparkDf,
                    features_names: Optional[Sequence[str]] = None,
                    read_csv_params: Optional[dict] = None) -> Tuple[SparkDataFrame, Optional[RolesDict]]:
-        """Get :class:`~pandas.DataFrame` from different data formats.
+        """Get :class:`~pyspark.sql.DataFrame` from different data formats.
 
           Note:
               Supported now data formats:
@@ -513,70 +519,285 @@ class SparkTabularAutoML(SparkAutoMLPreset):
 
         raise ValueError("Input data format is not supported")
 
+    def get_feature_scores(
+        self,
+        calc_method: str = "fast",
+        data: Optional[ReadableIntoSparkDf] = None,
+        features_names: Optional[Sequence[str]] = None,
+        silent: bool = True,
+    ):
+        if calc_method == "fast":
+            for level in self.levels:
+                for pipe in level:
+                    fi = pipe.pre_selection.get_features_score()
+                    if fi is not None:
+                        used_feats = set(self.collect_used_feats())
+                        fi = fi.reset_index()
+                        fi.columns = ["Feature", "Importance"]
+                        return fi[fi["Feature"].map(lambda x: x in used_feats)]
+
+            else:
+                if not silent:
+                    logger.info2("No feature importances to show. Please use another calculation method")
+                return None
+
+        if calc_method != "accurate":
+            if not silent:
+                logger.info2(
+                    "Unknown calc_method. "
+                    + "Currently supported methods for feature importances calculation are 'fast' and 'accurate'."
+                )
+            return None
+
+        if data is None:
+            if not silent:
+                logger.info2("Data parameter is not setup for accurate calculation method. Aborting...")
+            return None
+
+        read_csv_params = self._get_read_csv_params()
+        data, _ = self._read_data(data, features_names, read_csv_params)
+        used_feats = self.collect_used_feats()
+        fi = calc_feats_permutation_imps(
+            self,
+            used_feats,
+            data,
+            self.task.get_dataset_metric(),
+            silent=silent,
+        )
+        return fi
+
+    @staticmethod
+    def get_histogram(data: SparkDataFrame, column: str, n_bins: int) -> Tuple[List, np.ndarray]:
+        assert n_bins >= 2, "n_bins must be equal 2 or more"
+        bin_edges, counts = data \
+            .select(F.col(column).cast("double")) \
+            .where(F.col(column).isNotNull()) \
+            .rdd.map(lambda x : x[0]) \
+            .histogram(n_bins)
+        bin_edges = np.array(bin_edges)
+        return counts, bin_edges
+
+    @staticmethod
+    def get_pdp_data_numeric_feature(df: SparkDataFrame,
+                                    feature_name: str,
+                                    model: PipelineModel,
+                                    prediction_col: str,
+                                    n_bins: int,
+                                    ice_fraction: float = 1.0,
+                                    ice_fraction_seed: int = 42) -> Tuple[List, List, List]:
+        counts, bin_edges = SparkTabularAutoML.get_histogram(df, feature_name, n_bins)
+        grid = (bin_edges[:-1] + bin_edges[1:]) / 2
+        ys = []
+        sample_df = df.select(*[c for c in df.columns if c != feature_name]) \
+                        .sample(fraction=ice_fraction, seed=ice_fraction_seed) \
+                        .cache()
+        for i in tqdm(grid):
+            # replace feature column values with constant
+            sdf = sample_df.select('*', F.lit(i).alias(feature_name))
+
+            # infer via transformer
+            preds = model.transform(sdf)
+            # TODO: SPARK-LAMA remove this line after passing the "prediction_col" parameter 
+            prediction_col = next(c for c in preds.columns if c.startswith('prediction'))
+            preds = np.array(preds.select(prediction_col).collect())
+            # when preds.shape is (n, 1, k) we change it to (n, k),
+            # where n is number of rows and k is number of classes
+            if len(preds.shape) == 3:
+                preds = np.squeeze(preds, axis=1)
+            ys.append(preds)
+
+        sample_df.unpersist()
+
+        return grid, ys, counts
+
+    @staticmethod
+    def get_pdp_data_categorical_feature(df: SparkDataFrame,
+                                         feature_name: str,
+                                         model: PipelineModel,
+                                         prediction_col: str,
+                                         n_top_cats: int,
+                                         ice_fraction: float = 1.0,
+                                         ice_fraction_seed: int = 42) -> Tuple[List, List, List]:
+        """Returns grid, ys, counts to plot PDP
+
+        Args:
+            df (SparkDataFrame): Spark DataFrame with `feature_name` column
+            feature_name (str): feature column name
+            model (PipelineModel): Spark Pipeline Model
+            prediction_col (str): prediction column to be created by the `model`
+            n_top_cats (int): param to selection top n categories
+        
+        Returns:
+            Tuple[List, List, List]:
+            `grid` is list of categories,
+            `ys` is list of predictions by category,
+            `counts` is numbers of values by category
+        """
+        feature_cnt = df.where(F.col(feature_name).isNotNull()) \
+                        .groupBy(feature_name) \
+                        .count() \
+                        .orderBy(F.desc("count")) \
+                        .collect()
+        grid = [row[feature_name] for row in feature_cnt[:n_top_cats]]
+        counts = [row["count"] for row in feature_cnt[:n_top_cats]]
+        ys = []
+        sample_df = df.select(*[c for c in df.columns if c != feature_name]) \
+                        .sample(fraction=ice_fraction, seed=ice_fraction_seed) \
+                        .cache()
+        for i in tqdm(grid):
+            sdf = sample_df.select('*', F.lit(i).alias(feature_name))
+            preds = model.transform(sdf)
+            # TODO: SPARK-LAMA remove this line after passing the "prediction_col" parameter 
+            prediction_col = next(c for c in preds.columns if c.startswith('prediction'))
+            preds = np.array(preds.select(prediction_col).collect())
+            # when preds.shape is (n, 1, k) we change it to (n, k),
+            # where n is number of rows and k is number of classes
+            if len(preds.shape) == 3:
+                preds = np.squeeze(preds, axis=1)
+            ys.append(preds)
+        if len(feature_cnt) > n_top_cats:
+
+            # unique other categories
+            unique_other_categories = [row[feature_name] for row in feature_cnt[n_top_cats:]]
+
+            # get non-top categories, natural distributions is important here
+            w = Window().orderBy(F.lit('A'))  # window without sorting
+            other_categories_collection = df.select(feature_name) \
+                .filter(F.col(feature_name).isin(unique_other_categories)) \
+                .select(F.row_number().over(w).alias("row_num"), feature_name) \
+                .collect()
+            
+            # dict with key=%row number% and value=%category%
+            other_categories_dict = {x["row_num"]: x[feature_name] for x in other_categories_collection}
+            max_row_num = len(other_categories_collection)
+
+            def get_category_by_row_num(row_num):
+                if (remainder := row_num % max_row_num) == 0:
+                    key = max_row_num
+                else:
+                    key = remainder
+                return other_categories_dict[key]
+            get_category_udf = F.udf(get_category_by_row_num, SparkTypes.StringType())
+
+            # add row number to main dataframe and exclude feature_name column
+            sdf = sample_df.select('*', F.row_number().over(w).alias("row_num"))
+
+            all_columns_except_row_num = [f for f in sdf.columns if f != "row_num"]
+            feature_col = get_category_udf(F.col("row_num")).alias(feature_name)
+            # exclude row number from dataframe
+            # and add back feature_name column filled with other categories same distribution
+            sdf = sdf.select(*all_columns_except_row_num, feature_col)
+
+            preds = model.transform(sdf)
+            preds = np.array(preds.select(prediction_col).collect())
+            # when preds.shape is (n, 1, k) we change it to (n, k),
+            # where n is number of rows and k is number of classes
+            if len(preds.shape) == 3:
+                preds = np.squeeze(preds, axis=1)
+
+            grid.append("<OTHER>")
+            ys.append(preds)
+            counts.append(sum([row["count"] for row in feature_cnt[n_top_cats:]]))
+
+        sample_df.unpersist()
+
+        return grid, ys, counts
+
+    @staticmethod
+    def get_pdp_data_datetime_feature(df: SparkDataFrame,
+                                      feature_name: str,
+                                      model: PipelineModel,
+                                      prediction_col: str,
+                                      datetime_level: str,
+                                      reader,
+                                      ice_fraction: float = 1.0,
+                                      ice_fraction_seed: int = 42) -> Tuple[List, List, List]:
+        df = reader.read(df).data
+        if datetime_level == "year":
+            feature_cnt = df.groupBy(F.year(feature_name).alias("year")).count().orderBy(F.asc("year")).collect()
+            grid = [x["year"] for x in feature_cnt]
+            counts = [row["count"] for row in feature_cnt]
+            replace_date_element_udf = F.udf(replace_year_in_date, SparkTypes.DateType())
+        elif datetime_level == "month":
+            feature_cnt = df.groupBy(F.month(feature_name).alias("month")).count().orderBy(F.asc("month")).collect()
+            grid = np.arange(1, 13)
+            grid = grid.tolist()
+            counts = [0] * 12
+            for row in feature_cnt:
+                counts[row["month"]-1] = row["count"]
+            replace_date_element_udf = F.udf(replace_month_in_date, SparkTypes.DateType())
+        else:
+            feature_cnt = df.groupBy(F.dayofweek(feature_name).alias("dayofweek")).count().orderBy(F.asc("dayofweek")).collect()
+            grid = np.arange(7)
+            grid = grid.tolist()
+            counts = [0] * 7
+            for row in feature_cnt:
+                counts[row["dayofweek"]-1] = row["count"]
+            replace_date_element_udf = F.udf(replace_dayofweek_in_date, SparkTypes.DateType())
+        ys = []
+        sample_df = df.sample(fraction=ice_fraction, seed=ice_fraction_seed) \
+                      .cache()
+        for i in tqdm(grid):
+            feature_col = replace_date_element_udf(F.col(feature_name), F.lit(i)).alias(feature_name)
+            sdf = sample_df.select(*[c for c in sample_df.columns if c != feature_name], feature_col)
+            preds = model.transform(sdf)
+            # TODO: SPARK-LAMA remove this line after passing the "prediction_col" parameter 
+            prediction_col = next(c for c in preds.columns if c.startswith('prediction'))
+            preds = np.array(preds.select(prediction_col).collect())
+            # when preds.shape is (n, 1, k) we change it to (n, k),
+            # where n is number of rows and k is number of classes
+            if len(preds.shape) == 3:
+                preds = np.squeeze(preds, axis=1)
+            ys.append(preds)
+
+        return grid, ys, counts
+
     def get_individual_pdp(
             self,
-            test_data: ReadableToDf,
+            test_data: SparkDataFrame,
             feature_name: str,
             n_bins: Optional[int] = 30,
             top_n_categories: Optional[int] = 10,
             datetime_level: Optional[str] = "year",
+            ice_fraction: float = 1.0,
+            ice_fraction_seed: int = 42
     ):
-        # TODO: SPARK-LAMA implement it later
-        raise NotImplementedError("Not supported yet")
-        # assert feature_name in self.reader._roles
-        # assert datetime_level in ["year", "month", "dayofweek"]
-        # test_i = test_data.copy()
-        # # Numerical features
-        # if self.reader._roles[feature_name].name == "Numeric":
-        #     counts, bin_edges = np.histogram(test_data[feature_name].dropna(), bins=n_bins)
-        #     grid = (bin_edges[:-1] + bin_edges[1:]) / 2
-        #     ys = []
-        #     for i in tqdm(grid):
-        #         test_i[feature_name] = i
-        #         preds = self.predict(test_i).data
-        #         ys.append(preds)
-        # # Categorical features
-        # if self.reader._roles[feature_name].name == "Category":
-        #     feature_cnt = test_data[feature_name].value_counts()
-        #     grid = list(feature_cnt.index.values[:top_n_categories])
-        #     counts = list(feature_cnt.values[:top_n_categories])
-        #     ys = []
-        #     for i in tqdm(grid):
-        #         test_i[feature_name] = i
-        #         preds = self.predict(test_i).data
-        #         ys.append(preds)
-        #     if len(feature_cnt) > top_n_categories:
-        #         freq_mapping = {feature_cnt.index[i]: i for i, _ in enumerate(feature_cnt)}
-        #         # add "OTHER" class
-        #         test_i = test_data.copy()
-        #         # sample from other classes with the same distribution
-        #         test_i[feature_name] = (
-        #             test_i[feature_name][np.array([freq_mapping[k] for k in test_i[feature_name]]) > top_n_categories]
-        #                 .sample(n=test_data.shape[0], replace=True)
-        #                 .values
-        #         )
-        #         preds = self.predict(test_i).data
-        #         grid.append("<OTHER>")
-        #         ys.append(preds)
-        #         counts.append(feature_cnt.values[top_n_categories:].sum())
-        # # Datetime Features
-        # if self.reader._roles[feature_name].name == "Datetime":
-        #     test_data_read = self.reader.read(test_data)
-        #     feature_datetime = pd.arrays.DatetimeArray(test_data_read._data[feature_name])
-        #     if datetime_level == "year":
-        #         grid = np.unique([i.year for i in feature_datetime])
-        #     elif datetime_level == "month":
-        #         grid = np.arange(1, 13)
-        #     else:
-        #         grid = np.arange(7)
-        #     ys = []
-        #     for i in tqdm(grid):
-        #         test_i[feature_name] = change_datetime(feature_datetime, datetime_level, i)
-        #         preds = self.predict(test_i).data
-        #         ys.append(preds)
-        #     counts = Counter([getattr(i, datetime_level) for i in feature_datetime])
-        #     counts = [counts[i] for i in grid]
-        # return grid, ys, counts
+        assert feature_name in self.reader._roles
+        assert datetime_level in ["year", "month", "dayofweek"]
+        assert ice_fraction > 0 and ice_fraction <= 1.0
+
+        pipeline_model = self.make_transformer()
+
+        # Numerical features
+        if self.reader._roles[feature_name].name == "Numeric":
+            return self.get_pdp_data_numeric_feature(test_data,
+                                                     feature_name,
+                                                     pipeline_model,
+                                                     "prediction",
+                                                     n_bins,
+                                                     ice_fraction,
+                                                     ice_fraction_seed)
+        # Categorical features
+        elif self.reader._roles[feature_name].name == "Category":
+            return self.get_pdp_data_categorical_feature(test_data,
+                                                         feature_name,
+                                                         pipeline_model,
+                                                         "prediction",
+                                                         top_n_categories,
+                                                         ice_fraction,
+                                                         ice_fraction_seed)
+        # Datetime Features
+        elif self.reader._roles[feature_name].name == "Datetime":
+            return self.get_pdp_data_datetime_feature(test_data,
+                                                      feature_name,
+                                                      pipeline_model,
+                                                      "prediction",
+                                                      datetime_level,
+                                                      self.reader,
+                                                      ice_fraction,
+                                                      ice_fraction_seed)
+        else:
+            raise ValueError("Supported only Numeric, Category or Datetime feature")
 
     def plot_pdp(
             self,
@@ -587,24 +808,36 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             top_n_categories: Optional[int] = 10,
             top_n_classes: Optional[int] = 10,
             datetime_level: Optional[str] = "year",
+            ice_fraction: float = 1.0,
+            ice_fraction_seed: int = 42
     ):
-        # TODO: SPARK-LAMA implement it later
-        raise NotImplementedError("Not supported yet")
-        # grid, ys, counts = self.get_individual_pdp(
-        #     test_data=test_data,
-        #     feature_name=feature_name,
-        #     n_bins=n_bins,
-        #     top_n_categories=top_n_categories,
-        #     datetime_level=datetime_level,
-        # )
-        # plot_pdp_with_distribution(
-        #     test_data,
-        #     grid,
-        #     ys,
-        #     counts,
-        #     self.reader,
-        #     feature_name,
-        #     individual,
-        #     top_n_classes,
-        #     datetime_level,
-        # )
+        grid, ys, counts = self.get_individual_pdp(
+            test_data=test_data,
+            feature_name=feature_name,
+            n_bins=n_bins,
+            top_n_categories=top_n_categories,
+            datetime_level=datetime_level,
+            ice_fraction=ice_fraction,
+            ice_fraction_seed=ice_fraction_seed
+        )
+
+        HISTOGRAM_DATA_ROWS_LIMIT = 2000
+        rows_count = test_data.count()
+        if rows_count > HISTOGRAM_DATA_ROWS_LIMIT:
+            fraction = HISTOGRAM_DATA_ROWS_LIMIT/rows_count
+            test_data = test_data.sample(fraction=fraction)
+        if self.reader._roles[feature_name].name == "Numeric":
+            test_data = test_data.select(F.col(feature_name).cast("double")).toPandas()
+        else:
+            test_data = test_data.select(feature_name).toPandas()
+        plot_pdp_with_distribution(
+            test_data,
+            grid,
+            ys,
+            counts,
+            self.reader,
+            feature_name,
+            individual,
+            top_n_classes,
+            datetime_level,
+        )
