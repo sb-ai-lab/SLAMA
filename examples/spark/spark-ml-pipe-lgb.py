@@ -68,7 +68,7 @@ if __name__ == "__main__":
     spark = get_spark_session()
 
     seed = 42
-    cv = 3
+    cv = 5
     path = "/opt/spark_data/sampled_app_train.csv"
     task_type = "binary"
     roles = {"target": "TARGET", "drop": ["SK_ID_CURR"]}
@@ -133,20 +133,16 @@ if __name__ == "__main__":
 
         transformer.write().overwrite().save("/tmp/reader_and_spark_ml_pipe_lgb")
 
-        # TODO: SPARK-LAMA temporary commenting
-        # import time
-        # # time.sleep(6000)
-        #
-        # # 3. third way (via loaded Spark ML Pipeline)
-        # pipeline_model = PipelineModel.load("/tmp/reader_and_spark_ml_pipe_lgb")
-        # test_pred_df = pipeline_model.transform(test_df)
-        # test_pred_df = test_pred_df.select(
-        #     SparkDataset.ID_COLUMN,
-        #     F.col(roles['target']).alias('target'),
-        #     F.col(spark_ml_algo.prediction_feature).alias('prediction')
-        # )
-        # test_score = score(test_pred_df)
-        # logger.info(f"Test score (#3 way): {test_score}")
+        # 3. third way (via loaded Spark ML Pipeline)
+        pipeline_model = PipelineModel.load("/tmp/reader_and_spark_ml_pipe_lgb")
+        test_pred_df = pipeline_model.transform(test_df)
+        test_pred_df = test_pred_df.select(
+            SparkDataset.ID_COLUMN,
+            F.col(roles['target']).alias('target'),
+            F.col(spark_ml_algo.prediction_feature).alias('prediction')
+        )
+        test_score = score(test_pred_df)
+        logger.info(f"Test score (#3 way): {test_score}")
 
     logger.info("Finished")
 

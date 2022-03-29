@@ -181,7 +181,10 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
         ]
         full_preds_df = train_valid_iterator.combine_val_preds(preds_dfs, include_train=False)
         full_preds_df = self._build_averaging_transformer().transform(full_preds_df)
-        full_preds_df = Cacher(key=self._cacher_key).fit(full_preds_df).transform(full_preds_df)
+
+        cacher = Cacher(key=self._cacher_key)
+        cacher.fit(full_preds_df)
+        full_preds_df = cacher.dataset
 
         # create Spark MLlib Transformer and save to property var
         self._transformer = self._build_transformer()

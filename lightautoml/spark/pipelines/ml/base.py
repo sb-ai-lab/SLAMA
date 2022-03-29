@@ -1,25 +1,19 @@
 """Base classes for MLPipeline."""
-import functools
 import uuid
 from copy import copy
 from typing import List, cast, Sequence, Union, Tuple, Optional
 
-from numpy import format_parser
 from pyspark.ml import Transformer, PipelineModel
 
-from lightautoml.validation.base import TrainValidIterator
-from ..base import InputFeaturesAndRoles, OutputFeaturesAndRoles
-from ..features.base import SparkFeaturesPipeline, SelectTransformer, SparkEmptyFeaturePipeline
-from ...dataset.roles import NumericVectorOrArrayRole
-from ...transformers.base import ColumnsSelectorTransformer
-from ...utils import Cacher, NoOpTransformer
-from ...dataset.base import LAMLDataset, SparkDataset, SparkDataFrame
+from ..base import OutputFeaturesAndRoles
+from ..features.base import SparkFeaturesPipeline, SparkEmptyFeaturePipeline
+from ...dataset.base import LAMLDataset, SparkDataset
 from ...ml_algo.base import SparkTabularMLAlgo
+from ...transformers.base import ColumnsSelectorTransformer
+from ...utils import Cacher
 from ...validation.base import SparkBaseTrainValidIterator
-from ....dataset.base import RolesDict
 from ....ml_algo.tuning.base import ParamsTuner
 from ....ml_algo.utils import tune_and_fit_predict
-from ....pipelines.features.base import FeaturesPipeline
 from ....pipelines.ml.base import MLPipeline as LAMAMLPipeline
 from ....pipelines.selection.base import SelectionPipeline
 
@@ -131,9 +125,12 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
             train_valid.train.folds_column,
             *list(out_roles.keys())
         )
-        val_preds_df = Cacher(key=self._cacher_key).fit(val_preds_df).transform(val_preds_df)
+
+        cacher = Cacher(key=self._cacher_key)
+        cacher.fit(val_preds_df)
+        val_preds_df = cacher.dataset
         val_preds_ds = train_valid.train.empty()
-        val_preds_ds.set_data(val_preds_df, None, out_roles)
+        val_preds_ds.set_data(val_preds_df, list(out_roles.keys()), out_roles)
 
         return val_preds_ds
 

@@ -33,9 +33,10 @@ spark = spark_sess
 DATASETS_ARG = {"setting": "binary"}
 
 CV = 5
+seed = 42
 
 # otherwise holdout is used
-USE_FOLDS_VALIDATION = False
+USE_FOLDS_VALIDATION = True
 
 ml_alg_kwargs = {
     'auto_unique_co': 10,
@@ -90,13 +91,14 @@ def compare_feature_pipelines_by_quality(spark: SparkSession, cv: int, config: D
     train_pdf = pd.read_csv(config['train_path'], **read_csv_args)
     test_pdf = pd.read_csv(config['test_path'], **read_csv_args)
     # train_pdf, test_pdf = train_test_split(pdf, test_size=0.2, random_state=100)
-    reader = PandasToPandasReader(task=Task(train_valid.train.task.name), cv=cv, advanced_roles=False)
+    reader = PandasToPandasReader(task=Task(train_valid.train.task.name), cv=cv, advanced_roles=False, random_state=seed)
     train_ds = reader.fit_read(train_pdf, roles=config['roles'])
     test_ds = reader.read(test_pdf, add_array_attrs=True)
     lama_pipeline = fp_lama_clazz(**ml_alg_kwargs)
     lama_feats = lama_pipeline.fit_transform(train_ds)
     lama_test_feats = lama_pipeline.transform(test_ds)
     lama_feats = lama_feats if ml_algo_lama_clazz == BoostLGBM else lama_feats.to_numpy()
+
     train_valid = FoldsIterator(lama_feats.to_numpy())
     ml_algo = ml_algo_lama_clazz()
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
@@ -204,7 +206,7 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     train_pdf = pd.read_csv(config['train_path'], **read_csv_args)
     test_pdf = pd.read_csv(config['test_path'], **read_csv_args)
     # train_pdf, test_pdf = train_test_split(pdf, test_size=0.2, random_state=100)
-    reader = PandasToPandasReader(task=Task(task_name), cv=cv, advanced_roles=False)
+    reader = PandasToPandasReader(task=Task(task_name), cv=cv, advanced_roles=False, random_state=seed)
     train_ds = reader.fit_read(train_pdf, roles=config['roles'])
     test_ds = reader.read(test_pdf, add_array_attrs=True)
     lama_pipeline = fp_lama_clazz(**ml_alg_kwargs)
@@ -214,7 +216,7 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     train_valid = FoldsIterator(lama_feats.to_numpy())
     if not USE_FOLDS_VALIDATION:
         train_valid = train_valid.convert_to_holdout_iterator()
-    ml_algo = ml_algo_lama_clazz(**ml_kwargs_lama)
+    ml_algo = ml_algo_lama_clazz(freeze_defaults=False, **ml_kwargs_lama)
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
     assert ml_algo is not None
     test_pred = ml_algo.predict(lama_test_feats)
@@ -223,10 +225,10 @@ def compare_mlalgos_by_quality(spark: SparkSession, cv: int, config: Dict[str, A
     lama_oof_metric = score(oof_pred)
     lama_test_metric = score(test_pred)
 
-    train_valid = SparkFoldsIterator(dumped_train_ds)
+    train_valid = SparkFoldsIterator(dumped_train_ds, n_folds=cv, seed=seed)
     if not USE_FOLDS_VALIDATION:
         train_valid = train_valid.convert_to_holdout_iterator()
-    ml_algo = ml_algo_spark_clazz(cacher_key='test', **ml_kwargs_spark)
+    ml_algo = ml_algo_spark_clazz(cacher_key='test', freeze_defaults=False, **ml_kwargs_spark)
     ml_algo, oof_pred = tune_and_fit_predict(ml_algo, DefaultTuner(), train_valid)
     ml_algo = cast(SparkTabularMLAlgo, ml_algo)
     assert ml_algo is not None

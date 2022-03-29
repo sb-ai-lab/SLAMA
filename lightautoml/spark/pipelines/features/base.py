@@ -254,9 +254,7 @@ class SparkFeaturesPipeline(InputFeaturesAndRoles, OutputFeaturesAndRoles, Featu
         return FittedPipe(current_train, PipelineModel(stages=stages), roles=fp_output_roles)
 
     def release_cache(self):
-        sdf = Cacher.get_dataset_by_key(self._cacher_key)
-        if sdf is not None:
-            sdf.unpersist()
+        Cacher.release_cache_by_key(self._cacher_key)
 
 
 class SparkTabularDataFeatures:

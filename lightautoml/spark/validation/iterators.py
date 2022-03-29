@@ -119,7 +119,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
     Folds should be defined in Reader, based on cross validation method.
     """
 
-    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None, input_roles: Optional[RolesDict] = None):
+    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None, input_roles: Optional[RolesDict] = None, seed: Optional[float] = None):
         """Creates iterator.
 
         Args:
@@ -127,6 +127,17 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             n_folds: Number of folds.
 
         """
+        # TODO: SPARK-LAMA for debug only, remove later
+        if seed is not None:
+            t_df = (
+                train.data
+                .drop(train.folds_column)
+                .select('*', F.floor(F.rand(seed) * n_folds).astype('int').alias(train.folds_column))
+            )
+            new_train = train.empty()
+            new_train.set_data(t_df, train.features, train.roles)
+            train = new_train
+
         super().__init__(train, input_roles)
 
         num_folds = train.data.select(F.max(train.folds_column).alias('max')).first()['max']

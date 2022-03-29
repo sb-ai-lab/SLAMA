@@ -3,8 +3,8 @@ import os
 from typing import Tuple
 
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
 from pyspark.ml import PipelineModel
+from pyspark.sql import SparkSession
 
 from lightautoml.spark.automl.presets.tabular_presets import SparkTabularAutoML
 from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
@@ -32,6 +32,8 @@ def prepare_test_and_train(spark: SparkSession, path:str, seed: int) -> Tuple[Sp
     train_data.write.mode('overwrite').format('noop').save()
     test_data.write.mode('overwrite').format('noop').save()
 
+    data.unpersist()
+
     return train_data, test_data
 
 
@@ -46,12 +48,17 @@ def get_spark_session():
             .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.jar")
             .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
+            .config("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
+            .config("spark.cleaner.referenceTracking", "true")
+            .config("spark.cleaner.periodicGC.interval", "1min")
             .config("spark.sql.shuffle.partitions", "16")
             .config("spark.driver.memory", "12g")
             .config("spark.executor.memory", "12g")
             .config("spark.sql.execution.arrow.pyspark.enabled", "true")
             .getOrCreate()
         )
+
+    spark_sess.sparkContext.setCheckpointDir("/tmp/spark_checkpoints")
 
     spark_sess.sparkContext.setLogLevel("WARN")
 
@@ -62,8 +69,9 @@ if __name__ == "__main__":
     spark = get_spark_session()
 
     seed = 42
-    cv = 2
+    cv = 5
     use_algos = [["lgb", "linear_l2"], ["lgb"]]
+
     path = "/opt/spark_data/small_used_cars_data_cleaned.csv"
     task_type = "reg"
     roles = {
@@ -86,7 +94,7 @@ if __name__ == "__main__":
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
-            lgb_params={'use_single_dataset_mode': True, "default_params": {"numIterations": 500}},
+            lgb_params={'use_single_dataset_mode': True},
             linear_l2_params={"default_params": {"regParam": [1]}},
             reader_params={"cv": cv, "advanced_roles": False}
         )
@@ -104,8 +112,14 @@ if __name__ == "__main__":
     logger.info(f"score for out-of-fold predictions: {metric_value}")
 
     transformer = automl.make_transformer()
+
+    # we delete this variable to make garbage collection of a local checkpoint
+    # used to produce Spark DataFrame with predictions possible
+    del oof_predictions
+    automl.release_cache()
+
     with log_exec_timer("saving model") as saving_timer:
-        transformer.write().overwrite().save("hdfs://node21.bdcl:9000/automl_pipeline")
+        transformer.write().overwrite().save("/tmp/automl_pipeline")
 
     with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
         te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
@@ -128,11 +142,8 @@ if __name__ == "__main__":
 
         logger.info(f"score for test predictions: {test_metric_value}")
 
-        expected_predictions_sum = te_pred.select(F.sum(pred_column).alias("sum")).collect()[0]["sum"]
-        logger.info(f"expected predictions sum: {expected_predictions_sum}")
-
     with log_exec_timer("Loading model time") as loading_timer:
-        pipeline_model = PipelineModel.load("hdfs://node21.bdcl:9000/automl_pipeline")
+        pipeline_model = PipelineModel.load("/tmp/automl_pipeline")
 
     with log_exec_timer("spark-lama predicting on test (#3 way)") as predict_timer_3:
         te_pred = pipeline_model.transform(test_data_dropped)
@@ -147,9 +158,6 @@ if __name__ == "__main__":
 
         logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
 
-        actual_predictions_sum = te_pred.select(F.sum(pred_column).alias("sum")).collect()[0]["sum"]
-        logger.info(f"actual predictions sum: {actual_predictions_sum}")
-
     logger.info("Predicting is finished")
 
     result = {
@@ -163,6 +171,7 @@ if __name__ == "__main__":
 
     print(f"EXP-RESULT: {result}")
 
-    automl.release_cache()
+    train_data.unpersist()
+    test_data.unpersist()
 
     spark.stop()

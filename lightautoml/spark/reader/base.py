@@ -72,7 +72,9 @@ class SparkReaderHelper:
             )
 
         if cacher_key is not None:
-            train_data = Cacher(key=cacher_key).fit(train_data).transform(train_data)
+            cacher = Cacher(key=cacher_key)
+            cacher.fit(train_data)
+            train_data = cacher.dataset
 
         return train_data
 

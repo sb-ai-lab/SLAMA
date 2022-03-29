@@ -294,7 +294,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         multilevel_avail = fit_args["valid_data"] is None and fit_args["cv_iter"] is None
 
         self.infer_auto_params(train_data, multilevel_avail)
-        reader = SparkToSparkReader(task=self.task, **self.reader_params)
+        reader = SparkToSparkReader(cacher_key=self._cacher_key, task=self.task, **self.reader_params)
 
         pre_selector = self.get_selector(cacher_key='selector_cache')
 
@@ -471,9 +471,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         return pred
 
     def release_cache(self):
-        sdf = Cacher.get_dataset_by_key(self._cacher_key)
-        if sdf is not None:
-            sdf.unpersist()
+        Cacher.release_cache_by_key(self._cacher_key)
 
     def _read_data(self,
                    data: ReadableIntoSparkDf,
