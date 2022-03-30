@@ -108,10 +108,6 @@ def log_exec_time(name: Optional[str] = None, write_log=True):
 class log_exec_timer:
     def __init__(self, name: Optional[str] = None):
         self.name = name
-        file_handler_info = logging.FileHandler(f'./{name}_log.log', mode='w')
-        file_handler_info.setFormatter(logging.Formatter('%(message)s'))
-        file_handler_info.setLevel(logging.INFO)
-        logger.addHandler(file_handler_info)
         self._start = None
         self._duration = None
 

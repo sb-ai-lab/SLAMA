@@ -185,8 +185,8 @@ def calculate_automl(
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
-            lgb_params={'use_single_dataset_mode': True, "default_params": {"numIterations": 500}, "freeze_defaults": True},
-            linear_l2_params={"default_params": {"regParam": [1]}},
+            lgb_params={'use_single_dataset_mode': True},
+            # linear_l2_params={"default_params": {"regParam": [1]}},
             reader_params={"cv": cv, "advanced_roles": False},
             tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
         )
@@ -203,6 +203,8 @@ def calculate_automl(
 
     logger.info(f"{metric_name} score for out-of-fold predictions: {metric_value}")
 
+    automl.release_cache()
+
     with log_exec_timer("spark-lama predicting on test") as predict_timer:
         te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
 
@@ -213,9 +215,12 @@ def calculate_automl(
 
     logger.info("Predicting is finished")
 
-    return {"metric_value": metric_value, "test_metric_value": test_metric_value,
-            "train_duration_secs": train_timer.duration,
-            "predict_duration_secs": predict_timer.duration}
+    return {
+        "metric_value": metric_value,
+        "test_metric_value": test_metric_value,
+        "train_duration_secs": train_timer.duration,
+        "predict_duration_secs": predict_timer.duration
+    }
 
 
 def calculate_lgbadv_boostlgb(
@@ -285,7 +290,7 @@ def calculate_lgbadv_boostlgb(
 
             stest, _ = test_chkp
 
-        iterator = iterator.convert_to_holdout_iterator()
+        # iterator = iterator.convert_to_holdout_iterator()
         # iterator = SparkDummyIterator(iterator.train, iterator.input_roles)
 
         score = task.get_dataset_metric()

@@ -15,7 +15,7 @@ from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.spark.tasks.base import SparkTask as SparkTask
 from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.tasks import Task
-from . import spark as spark_sess
+from .. import spark as spark_sess
 from ..dataset_utils import get_test_datasets, prepared_datasets
 
 spark = spark_sess

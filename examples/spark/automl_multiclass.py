@@ -1,83 +1,35 @@
 import logging.config
-import os
+
 import pytest
-
-from typing import List
-from typing import Tuple
-
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
 from pyspark.ml import PipelineModel
+from pyspark.sql import functions as F
 
+from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
 from lightautoml.spark.automl.presets.tabular_presets import SparkTabularAutoML
-from lightautoml.spark.dataset.base import SparkDataFrame
 from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.tasks.base import SparkTask
 from lightautoml.spark.utils import VERBOSE_LOGGING_FORMAT
 from lightautoml.spark.utils import log_exec_timer
 from lightautoml.spark.utils import logging_config
 
-
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
 logging.basicConfig(level=logging.INFO, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
-def prepare_test_and_train(spark: SparkSession, path:str, seed: int) -> Tuple[SparkDataFrame, SparkDataFrame]:
-    data = spark.read.csv(path, header=True, escape="\"")
-
-    data = data.select(
-        '*',
-        F.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN),
-        F.rand(seed).alias('is_test')
-    ).cache()
-    data.write.mode('overwrite').format('noop').save()
-
-    train_data = data.where(F.col('is_test') < 0.8).drop('is_test').cache()
-    test_data = data.where(F.col('is_test') >= 0.8).drop('is_test').cache()
-
-    train_data.write.mode('overwrite').format('noop').save()
-    test_data.write.mode('overwrite').format('noop').save()
-
-    return train_data, test_data
-
-
-def get_spark_session():
-    if os.environ.get("SCRIPT_ENV", None) == "cluster":
-        return SparkSession.builder.getOrCreate()
-
-    spark_sess = (
-        SparkSession
-        .builder
-        .master("local[10]")
-        .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.jar")
-        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
-        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-        .config("spark.sql.shuffle.partitions", "16")
-        .config("spark.driver.memory", "12g")
-        .config("spark.executor.memory", "12g")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .getOrCreate()
-    )
-
-    return spark_sess
-
 
 if __name__ == "__main__":
     spark = get_spark_session()
-    spark.sparkContext.setLogLevel("ERROR")
 
     seed = 42
     cv = 2
     use_algos = [["lgb"]]
-    task_type = "multiclass"
-    path = "/opt/spark_data/ipums_97.csv"
-    metric_name = "crossentropy"
-    roles = {"target": "movedin"}
+    dataset_name = "ipums_97"
+    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
     train_data, test_data = prepare_test_and_train(spark, path, seed)
 
     with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type, metric=metric_name)
+        task = SparkTask(task_type)
 
         automl = SparkTabularAutoML(
             spark=spark,

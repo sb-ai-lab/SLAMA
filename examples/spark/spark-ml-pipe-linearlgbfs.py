@@ -1,17 +1,15 @@
 import logging.config
 import logging.config
-import os
-from typing import Tuple
 
 import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel
-from pyspark.sql import SparkSession
 
+from examples_utils import get_spark_session, get_dataset_attrs, prepare_test_and_train
 from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector, ModelBasedImportanceEstimator
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
 from lightautoml.spark.ml_algo.linear_pyspark import SparkLinearLBFGS
-from lightautoml.spark.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline, SparkLGBSimpleFeatures
+from lightautoml.spark.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from lightautoml.spark.pipelines.features.linear_pipeline import SparkLinearFeatures
 from lightautoml.spark.pipelines.ml.base import SparkMLPipeline
 from lightautoml.spark.reader.base import SparkToSparkReader
@@ -24,54 +22,13 @@ logging.basicConfig(level=logging.INFO, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
 
-def prepare_test_and_train(spark: SparkSession, path:str, seed: int) -> Tuple[SparkDataFrame, SparkDataFrame]:
-    data = spark.read.csv(path, header=True, escape="\"")  # .repartition(4)
-
-    data = data.select(
-        '*',
-        F.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN),
-        F.rand(seed).alias('is_test')
-    ).cache()
-    data.write.mode('overwrite').format('noop').save()
-
-    train_data = data.where(F.col('is_test') < 0.8).drop('is_test').cache()
-    test_data = data.where(F.col('is_test') >= 0.8).drop('is_test').cache()
-
-    train_data.write.mode('overwrite').format('noop').save()
-    test_data.write.mode('overwrite').format('noop').save()
-
-    return train_data, test_data
-
-
-def get_spark_session():
-    if os.environ.get("SCRIPT_ENV", None) == "cluster":
-        return SparkSession.builder.getOrCreate()
-
-    spark_sess = (
-        SparkSession
-        .builder
-        .master("local[*]")
-        .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.jar")
-        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
-        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-        .config("spark.sql.shuffle.partitions", "16")
-        .config("spark.driver.memory", "6g")
-        .config("spark.executor.memory", "6g")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .getOrCreate()
-    )
-
-    return spark_sess
-
-
 if __name__ == "__main__":
     spark = get_spark_session()
 
     seed = 42
     cv = 3
-    path = "/opt/spark_data/sampled_app_train.csv"
-    task_type = "binary"
-    roles = {"target": "TARGET", "drop": ["SK_ID_CURR"]}
+    dataset_name = "lama_test_dataset"
+    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
     ml_alg_kwargs = {
         'auto_unique_co': 10,

@@ -48,7 +48,8 @@ def calculate_automl(path: str,
             task=task,
             timeout=3600 * 3,
             general_params={"use_algos": use_algos},
-            reader_params={"cv": cv, "advanced_roles": False}
+            reader_params={"cv": cv, "advanced_roles": False},
+            tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
         )
 
         oof_predictions = automl.fit_predict(
@@ -56,41 +57,68 @@ def calculate_automl(path: str,
             roles=roles
         )
 
-    if metric_name == "mse":
-        evaluator = sklearn.metrics.mean_squared_error
-    elif metric_name == "areaUnderROC":
-        evaluator = sklearn.metrics.roc_auc_score
-    else:
-        raise ValueError(f"Metric {metric_name} is not supported")
+    logger.info("Predicting on out of fold")
 
-    metric_value = evaluator(train_data[target_col].values, oof_predictions.data[:, 0])
-    logger.info(f"mse score for out-of-fold predictions: {metric_value}")
+    score = task.get_dataset_metric()
+    metric_value = score(oof_predictions)
+
+    logger.info(f"{metric_name} score for out-of-fold predictions: {metric_value}")
 
     with log_exec_timer() as predict_timer:
         te_pred = automl.predict(test_data)
 
-    test_metric_value = evaluator(test_data[target_col].values, te_pred.data[:, 0])
+        score = task.get_dataset_metric()
+        test_metric_value = score(te_pred)
+
     logger.info(f"mse score for test predictions: {test_metric_value}")
 
     logger.info("Predicting is finished")
 
-    return {"metric_value": metric_value, "test_metric_value": test_metric_value,
-            "train_duration_secs": train_timer.duration,
-            "predict_duration_secs": predict_timer.duration}
+    return {
+        "metric_value": metric_value,
+        "test_metric_value": test_metric_value,
+        "train_duration_secs": train_timer.duration,
+        "predict_duration_secs": predict_timer.duration
+    }
 
+
+# if __name__ == "__main__":
+#     logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="/tmp/lama.log"))
+#     logging.basicConfig(level=logging.INFO, format=VERBOSE_LOGGING_FORMAT)
+#     logger = logging.getLogger(__name__)
+#
+#     # Read values from config file
+#     with open("/scripts/config.yaml", "r") as stream:
+#         config_data = yaml.safe_load(stream)
+#
+#     ds_cfg = datasets()[config_data['dataset']]
+#     del config_data['dataset']
+#     ds_cfg.update(config_data)
+#
+#     result = calculate_automl(**ds_cfg)
+#     print(f"EXP-RESULT: {result}")
 
 if __name__ == "__main__":
-    logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="/tmp/lama.log"))
-    logging.basicConfig(level=logging.INFO, format=VERBOSE_LOGGING_FORMAT)
-    logger = logging.getLogger(__name__)
+    logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/lama.log"))
+    logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 
     # Read values from config file
-    with open("/scripts/config.yaml", "r") as stream:
+    with open(config_path, "r") as stream:
         config_data = yaml.safe_load(stream)
 
-    ds_cfg = datasets()[config_data['dataset']]
-    del config_data['dataset']
+    func_name = config_data['func']
+
+    if 'dataset' in config_data:
+        ds_cfg = datasets()[config_data['dataset']]
+    else:
+        ds_cfg = dict()
+
     ds_cfg.update(config_data)
 
-    result = calculate_automl(**ds_cfg)
+    if func_name == "calculate_automl":
+        func = calculate_automl
+    else:
+        raise ValueError(f"Incorrect func name: {func_name}.")
+
+    result = func(**ds_cfg)
     print(f"EXP-RESULT: {result}")

@@ -24,7 +24,7 @@ DATASETS = [
 
     # DatasetForTest("unit/resources/datasets/dataset_23_cmc.csv", default_role=NumericRole(np.int32)),
 
-    DatasetForTest("unit/resources/datasets/house_prices.csv",
+    DatasetForTest("tests/spark/unit/resources/datasets/house_prices.csv",
                    columns=["Id", "MSSubClass", "LotFrontage"],
                    roles={
                        "Id": NumericRole(np.int32),
@@ -78,14 +78,12 @@ def test_fillna_medians(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
 
-    _, spark_np_ds = compare_sparkml_by_metadata(
+    compare_sparkml_by_metadata(
         spark,
         ds,
         FillnaMedian(),
         SparkFillnaMedianEstimator(input_cols=ds.features, input_roles=ds.roles)
     )
-
-    assert ~np.isnan(spark_np_ds.data).all()
 
 
 def test_standard_scaler(spark: SparkSession):
@@ -97,14 +95,13 @@ def test_standard_scaler(spark: SparkSession):
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    _, spark_np_ds = compare_sparkml_by_metadata(
+
+    compare_sparkml_by_metadata(
         spark,
         ds,
         StandardScaler(),
         SparkStandardScalerEstimator(input_cols=ds.features, input_roles=ds.roles)
     )
-
-    assert ~np.isnan(spark_np_ds.data).all()
 
 
 # @pytest.mark.skip("Need to check implementation again")
@@ -131,14 +128,9 @@ def test_quantile_binning(spark: SparkSession):
     })
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
-    lama_np_ds, spark_np_ds = compare_sparkml_by_metadata(
+    compare_sparkml_by_metadata(
         spark,
         ds,
         QuantileBinning(n_bins),
         SparkQuantileBinningEstimator(input_cols=ds.features, input_roles=ds.roles, nbins=n_bins)
     )
-    # TODO: add more advanced check
-
-    assert ~np.isnan(spark_np_ds.data).all()
-    assert (spark_np_ds.data <= n_bins).all()
-    assert (spark_np_ds.data >= 0).all()

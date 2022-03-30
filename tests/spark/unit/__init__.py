@@ -99,7 +99,7 @@ def compare_feature_distrs_in_datasets(lama_df, spark_df, diff_proc=0.05):
             print('Spark: ', spark_col_uniques)
             print()
         for stats_col in stats_names:
-            if abs(lama_df_stats[col][stats_col] - spark_df_stats[col][stats_col]) > lama_df_stats[col][stats_col] * diff_proc:
+            if abs(lama_df_stats[col][stats_col] - spark_df_stats[col][stats_col]) > abs(lama_df_stats[col][stats_col] * diff_proc):
                 found_difference = True
                 print(f'Difference in col {col} and stats {stats_col} between {lama_df_stats[col][stats_col]} (lama) and {spark_df_stats[col][stats_col]} (spark)')
 
@@ -243,9 +243,9 @@ def compare_sparkml_by_metadata(spark: SparkSession,
         Returns:
             A tuple of (LAMA transformed dataset, Spark transformed dataset)
         """
-    return compare_sparkml_transformers_results(spark, ds, t_lama, t_spark,
-                                                compare_feature_distributions=compare_feature_distributions,
-                                                compare_content=False)
+    compare_sparkml_transformers_results(spark, ds, t_lama, t_spark,
+                                         compare_feature_distributions=compare_feature_distributions,
+                                         compare_content=False)
 
 
 def compare_transformers_results(spark: SparkSession,
