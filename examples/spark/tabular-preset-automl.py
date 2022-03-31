@@ -92,6 +92,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     with log_exec_timer("Loading model time") as loading_timer:
         pipeline_model = PipelineModel.load(automl_model_path)
 
+
     with log_exec_timer("spark-lama predicting on test (#3 way)"):
         te_pred = pipeline_model.transform(test_data_dropped)
 
@@ -104,6 +105,9 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         ))
 
         logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
+
+        actual_predictions_sum = te_pred.select(F.sum(pred_column).alias("sum")).collect()[0]["sum"]
+        logger.info(f"actual predictions sum: {actual_predictions_sum}")
 
     logger.info("Predicting is finished")
 
