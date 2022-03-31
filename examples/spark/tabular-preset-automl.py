@@ -38,7 +38,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             task=task,
             general_params={"use_algos": use_algos},
             lgb_params={'use_single_dataset_mode': True},
-            linear_l2_params={"default_params": {"regParam": [1]}},
+            linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False}
         )
 
@@ -92,7 +92,6 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     with log_exec_timer("Loading model time") as loading_timer:
         pipeline_model = PipelineModel.load(automl_model_path)
 
-
     with log_exec_timer("spark-lama predicting on test (#3 way)"):
         te_pred = pipeline_model.transform(test_data_dropped)
 
@@ -105,9 +104,6 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         ))
 
         logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
-
-        actual_predictions_sum = te_pred.select(F.sum(pred_column).alias("sum")).collect()[0]["sum"]
-        logger.info(f"actual predictions sum: {actual_predictions_sum}")
 
     logger.info("Predicting is finished")
 
@@ -147,7 +143,7 @@ if __name__ == "__main__":
     spark_sess = get_spark_session()
     # One can run:
     # 1. main(dataset_name="used_cars_dataset", seed=42)
-    # 2. multirun(dataset_name="used_cars_dataset")
+    # 2. multirun(spark_sess, dataset_name="used_cars_dataset")
     main(spark_sess, dataset_name="used_cars_dataset", seed=42)
 
     spark_sess.stop()

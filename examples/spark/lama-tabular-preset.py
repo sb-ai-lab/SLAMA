@@ -94,6 +94,7 @@ def main(dataset_name: str, seed: int):
             timeout=3600 * 3,
             general_params={"use_algos": use_algos},
             reader_params={"cv": cv, "advanced_roles": False},
+            linear_l2_params={"default_params": {"cs": [1e-5]}},
             tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
         )
 
@@ -116,7 +117,7 @@ def main(dataset_name: str, seed: int):
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred)
 
-    logger.info(f"mse score for test predictions: {test_metric_value}")
+    logger.info(f"Score for test predictions: {test_metric_value}")
 
     logger.info("Predicting is finished")
 
@@ -152,4 +153,3 @@ if __name__ == "__main__":
     # 1. main(dataset_name="used_cars_dataset", seed=42)
     # 2. multirun(dataset_name="used_cars_dataset")
     main(dataset_name="used_cars_dataset", seed=42)
-
