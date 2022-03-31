@@ -1,4 +1,5 @@
 import logging.config
+import os
 
 import pandas as pd
 import pyspark.sql.functions as F
@@ -60,9 +61,6 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     del oof_predictions
     automl.release_cache()
 
-    with log_exec_timer("saving model") as saving_timer:
-        transformer.write().overwrite().save("/tmp/automl_pipeline")
-
     with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
         te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
 
@@ -84,8 +82,15 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         logger.info(f"score for test predictions: {test_metric_value}")
 
+    base_path = "/tmp/spark_results"
+    automl_model_path = os.path.join(base_path, "automl_pipeline")
+    os.makedirs(base_path, exist_ok=True)
+
+    with log_exec_timer("saving model") as saving_timer:
+        transformer.write().overwrite().save(automl_model_path)
+
     with log_exec_timer("Loading model time") as loading_timer:
-        pipeline_model = PipelineModel.load("/tmp/automl_pipeline")
+        pipeline_model = PipelineModel.load(automl_model_path)
 
     with log_exec_timer("spark-lama predicting on test (#3 way)"):
         te_pred = pipeline_model.transform(test_data_dropped)
