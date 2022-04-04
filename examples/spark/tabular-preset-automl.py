@@ -1,5 +1,6 @@
 import logging.config
 import os
+import uuid
 
 import pandas as pd
 import pyspark.sql.functions as F
@@ -23,7 +24,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 1. use_algos = [["lgb"]]
     # 2. use_algos = [["linear_l2"]]
     # 3. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb"]]
+    use_algos = [["lgb", "linear_l2"], ["lgb"]]
     cv = 5
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
@@ -38,7 +39,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             task=task,
             general_params={"use_algos": use_algos},
             lgb_params={'use_single_dataset_mode': True},
-            linear_l2_params={"default_params": {"regParam": [1e-5]}},
+            # linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False}
         )
 
@@ -136,7 +137,7 @@ def multirun(spark: SparkSession, dataset_name: str):
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
         print(df)
 
-    df.to_csv(f"spark-lama_results_{dataset_name}.csv")
+    df.to_csv(f"spark-lama_results_{dataset_name}_{uuid.uuid4()}.csv")
 
 
 if __name__ == "__main__":
@@ -144,6 +145,6 @@ if __name__ == "__main__":
     # One can run:
     # 1. main(dataset_name="used_cars_dataset", seed=42)
     # 2. multirun(spark_sess, dataset_name="used_cars_dataset")
-    main(spark_sess, dataset_name="used_cars_dataset", seed=42)
+    main(spark_sess, dataset_name="ipums_97", seed=42)
 
     spark_sess.stop()
