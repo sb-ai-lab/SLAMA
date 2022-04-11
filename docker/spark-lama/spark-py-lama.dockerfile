@@ -1,5 +1,5 @@
-ARG repo=node2.bdcl:5000
-FROM ${repo}/spark-py:lama-v3.2.0
+ARG base_image
+FROM ${base_image}
 
 ARG spark_jars_cache=jars_cache
 

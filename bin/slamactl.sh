@@ -18,8 +18,10 @@ then
   echo "REPO var is not defined!"
   REPO=""
   IMAGE=spark-py-lama:${IMAGE_TAG}
+  BASE_SPARK_IMAGE=spark-py:${IMAGE_TAG}
 else
   IMAGE=${REPO}/spark-py-lama:${IMAGE_TAG}
+  BASE_SPARK_IMAGE=${REPO}/spark-py:${IMAGE_TAG}
 fi
 
 
@@ -51,6 +53,7 @@ function build_pyspark_images() {
   # create images with names:
   # - ${REPO}/spark:${IMAGE_TAG}
   # - ${REPO}/spark-py:${IMAGE_TAG}
+  # the last is equal to BASE_SPARK_IMAGE
 
   if [[ ! -z "${REPO}" ]]
   then
@@ -58,7 +61,7 @@ function build_pyspark_images() {
       -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
       build
 
-    ./spark/bin/docker-image-tool.sh ${repo_args} -t ${IMAGE_TAG} push
+    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${IMAGE_TAG} push
   else
       ./spark/bin/docker-image-tool.sh -t ${IMAGE_TAG} \
       -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
@@ -78,6 +81,7 @@ function build_lama_image() {
   poetry build
 
   docker build \
+    --build-arg base_image=${BASE_SPARK_IMAGE} \
     -t ${IMAGE} \
     -f docker/spark-lama/spark-py-lama.dockerfile \
     .
