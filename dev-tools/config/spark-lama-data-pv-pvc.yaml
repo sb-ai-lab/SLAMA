@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv-spark-lama-data
+  name: pv-spark-lama-data-againetdinov
 spec:
   capacity:
     storage: '1000Gi'
@@ -19,9 +19,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: spark-lama-data
-  namespace: spark-lama-exps
 spec:
-  volumeName: pv-spark-lama-data
+  volumeName: pv-spark-lama-data-againetdinov
   storageClassName: local-hdd
   accessModes:
     - ReadOnlyMany
@@ -33,9 +32,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mnt-nfs
-  namespace: spark-lama-exps
 spec:
-  volumeName: pv-mnt-nfs
+  volumeName: pv-mnt-nfs-againetdinov
   storageClassName: nfs
   accessModes:
     - ReadWriteMany
@@ -46,7 +44,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv-mnt-nfs
+  name: pv-mnt-nfs-againetdinov
 spec:
   capacity:
     storage: '100Gi'
@@ -62,7 +60,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv-tmp
+  name: pv-tmp-againetdinov
 spec:
   capacity:
     storage: '10Gi'
@@ -79,12 +77,69 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: pvc-tmp
-  namespace: spark-lama-exps
 spec:
-  volumeName: pv-tmp
+  volumeName: pv-tmp-againetdinov
   storageClassName: local-hdd
   accessModes:
     - ReadWriteMany
   resources:
     requests:
       storage: '10Gi'
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-spark-tmp-dir-againetdinov
+spec:
+  capacity:
+    storage: '1000Gi'
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hdd
+  hostPath:
+    path: /data/sdd/tmp/
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-tmp-dir
+spec:
+  volumeName: pv-spark-tmp-dir-againetdinov
+  storageClassName: local-hdd
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: '1000Gi'
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-spark-lama-exp-results-vol-againetdinov
+spec:
+  capacity:
+    storage: '1000Gi'
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-hdd
+  hostPath:
+    path: /mnt/ess_storage/DN_1/storage/sber_LAMA/exp-results/
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: exp-results-vol
+spec:
+  volumeName: pv-spark-lama-exp-results-vol-againetdinov
+  storageClassName: local-hdd
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: '1000Gi'

@@ -30,7 +30,8 @@ from ..dataset_utils import get_test_datasets, prepared_datasets, load_dump_if_e
 spark = spark_sess
 
 # DATASETS_ARG = {"dataset": "lama_test_dataset"}
-DATASETS_ARG = {"setting": "binary"}
+DATASETS_ARG = {"dataset": "used_cars_dataset"}
+# DATASETS_ARG = {"setting": "binary"}
 
 CV = 5
 seed = 42
@@ -290,9 +291,7 @@ def test_quality_lgbsimple_features(spark: SparkSession, config: Dict[str, Any],
 @pytest.mark.parametrize("config,cv", [(ds, CV) for ds in get_test_datasets(**DATASETS_ARG)])
 def test_quality_mlalgo_linearlgbfs(spark: SparkSession, config: Dict[str, Any], cv: int):
     compare_mlalgos_by_quality(spark, cv, config, LinearFeatures, LinearLBFGS, SparkLinearLBFGS, 'linear_features',
-                               ml_alg_kwargs,
-                               ml_kwargs_lama={"default_params": {"cs": [1e-5]}},
-                               ml_kwargs_spark={"default_params": {"regParam": [1e-5]}})
+                               ml_alg_kwargs)
 
 
 @pytest.mark.parametrize("config,cv", [(ds, CV) for ds in get_test_datasets(**DATASETS_ARG)])

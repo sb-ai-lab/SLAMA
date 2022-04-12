@@ -21,6 +21,10 @@ RUN pip install torchvision==0.9.1
 COPY dist/LightAutoML-0.3.0-py3-none-any.whl /tmp/LightAutoML-0.3.0-py3-none-any.whl
 RUN pip install /tmp/LightAutoML-0.3.0-py3-none-any.whl
 
+RUN pip install --upgrade lightgbm==3.2.1
+
+COPY examples/spark /examples
+
 COPY jars /root/jars
 COPY examples /examples
 

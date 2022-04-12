@@ -4,19 +4,26 @@
 Simple example for binary classification on tabular data.
 """
 import logging.config
+import math
 import os
 import pickle
 import random
 import shutil
 import time
+import uuid
 from contextlib import contextmanager
 from copy import copy
 from typing import Dict, Any, Optional, Tuple, cast
 
 import yaml
 from pyspark import SparkFiles
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
 from pyspark.sql import functions as F, SparkSession
 from pyspark.sql.pandas.functions import pandas_udf
+from synapse.ml.lightgbm import LightGBMRegressor
 
 from dataset_utils import datasets
 from lightautoml.dataset.roles import CategoryRole
@@ -37,6 +44,7 @@ from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGG
 from lightautoml.spark.validation.iterators import SparkFoldsIterator, SparkDummyIterator
 
 import pandas as pd
+import numpy as np
 
 logger = logging.getLogger()
 
@@ -47,7 +55,11 @@ DUMP_DATA_NAME = "data.parquet"
 @contextmanager
 def open_spark_session() -> Tuple[SparkSession, str]:
     if os.environ.get("SCRIPT_ENV", None) == "cluster":
-        spark_sess = SparkSession.builder.getOrCreate()
+        spark_sess = (
+            SparkSession
+            .builder
+            .getOrCreate()
+        )
         config_path = SparkFiles.get('config.yaml')
     else:
         spark_sess = (
@@ -68,7 +80,7 @@ def open_spark_session() -> Tuple[SparkSession, str]:
         config_path = '/tmp/config.yaml'
 
     spark_sess.sparkContext.setLogLevel("WARN")
-    spark_sess.sparkContext.setCheckpointDir("/tmp/chkp")
+    spark_sess.sparkContext.setCheckpointDir(f"/tmp/chkp_{uuid.uuid4()}")
 
     try:
         yield spark_sess, config_path
@@ -185,9 +197,11 @@ def calculate_automl(
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
-            lgb_params={'use_single_dataset_mode': True},
-            # linear_l2_params={"default_params": {"regParam": [1]}},
+            lgb_params={'use_single_dataset_mode': True,
+                        "default_params": { "numIterations": 100, "earlyStoppingRound": 5000}, "freeze_defaults": True },
+            linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False},
+            gbm_pipeline_params={'max_intersection_depth': 2, 'top_intersections': 2},
             tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
         )
 
@@ -285,18 +299,52 @@ def calculate_lgbadv_boostlgb(
             logger.info(f"Checkpoint exists on path {checkpoint_path}. Will use it ")
 
             train_chkp_ds, metadata = train_chkp
+
+            df = train_chkp_ds.data
+            df = df.withColumn("new_col", F.explode(F.array(*[F.lit(0) for i in range(1)])))
+            df = df.drop("new_col")
+            df = df.cache()
+            print(f"Duplicated dataset size: {df.count()}")
+            new_train_chkp_ds = train_chkp_ds.empty()
+            new_train_chkp_ds.set_data(df, train_chkp_ds.features, train_chkp_ds.roles)
+            train_chkp_ds = new_train_chkp_ds
+
             iterator = SparkFoldsIterator(train_chkp_ds, n_folds=cv)
             iterator.input_roles = metadata['iterator_input_roles']
 
             stest, _ = test_chkp
 
-        # iterator = iterator.convert_to_holdout_iterator()
+        iterator = iterator.convert_to_holdout_iterator()
         # iterator = SparkDummyIterator(iterator.train, iterator.input_roles)
 
         score = task.get_dataset_metric()
 
-        spark_ml_algo = SparkBoostLGBM(cacher_key='main_cache', use_single_dataset_mode=True, max_validation_size=10_000)
-        spark_ml_algo, oof_preds = tune_and_fit_predict(spark_ml_algo, DefaultTuner(), iterator)
+        with log_exec_timer("Boost_time") as boost_timer:
+            spark_ml_algo = SparkBoostLGBM(
+                cacher_key='main_cache',
+                use_single_dataset_mode=True,
+                default_params={
+                    "learningRate": 0.05,
+                    "numLeaves": 128,
+                    "featureFraction": 0.7,
+                    "baggingFraction": 0.7,
+                    "baggingFreq": 1,
+                    "maxDepth": -1,
+                    "minGainToSplit": 0.0,
+                    "maxBin": 255,
+                    "minDataInLeaf": 5,
+                    # e.g. num trees
+                    "numIterations": 100,
+                    "earlyStoppingRound": 5000,
+                    # for regression
+                    "alpha": 1.0,
+                    "lambdaL1": 0.0,
+                    "lambdaL2": 0.0
+                },
+                freeze_defaults=True,
+                max_validation_size=10_000
+            )
+            spark_ml_algo, oof_preds = tune_and_fit_predict(spark_ml_algo, DefaultTuner(), iterator)
 
         assert spark_ml_algo is not None
         assert oof_preds is not None
@@ -318,7 +366,12 @@ def calculate_lgbadv_boostlgb(
         )
         test_score = score(test_preds_sdf)
 
-    return {pipe_timer.name: pipe_timer.duration, 'oof_score': oof_score, 'test_score': test_score}
+    return {
+        pipe_timer.name: pipe_timer.duration,
+        boost_timer.name: boost_timer.duration,
+        'oof_score': oof_score,
+        'test_score': test_score
+    }
 
 
 def calculate_linear_l2(
@@ -331,8 +384,6 @@ def calculate_linear_l2(
         checkpoint_path: Optional[str] = None,
         **_) -> Dict[str, Any]:
     roles = roles if roles else {}
-
-    checkpoint_path = None
 
     with log_exec_timer("spark-lama ml_pipe") as pipe_timer:
         if checkpoint_path is not None:
@@ -380,7 +431,20 @@ def calculate_linear_l2(
         else:
             logger.info(f"Checkpoint exists on path {checkpoint_path}. Will use it ")
 
+            exec_cores = int(spark.conf.get("spark.executor.cores"))
+            exec_instances = int(spark.conf.get("spark.executor.instances"))
+
             train_chkp_ds, metadata = train_chkp
+
+            df = train_chkp_ds.data
+            df = df.withColumn("new_col", F.explode(F.array(*[F.lit(0) for i in range(10)])))
+            df = df.drop("new_col")
+            df = df.repartition(exec_cores * exec_instances).cache()
+            print(f"Duplicated dataset size: {df.count()}")
+            new_train_chkp_ds = train_chkp_ds.empty()
+            new_train_chkp_ds.set_data(df, train_chkp_ds.features, train_chkp_ds.roles)
+            train_chkp_ds = new_train_chkp_ds
+
             iterator = SparkFoldsIterator(train_chkp_ds, n_folds=cv)
             iterator.input_roles = metadata['iterator_input_roles']
 
@@ -391,8 +455,13 @@ def calculate_linear_l2(
 
         score = task.get_dataset_metric()
 
-        spark_ml_algo = SparkLinearLBFGS(cacher_key='main_cache')
-        spark_ml_algo, oof_preds = tune_and_fit_predict(spark_ml_algo, DefaultTuner(), iterator)
+        with log_exec_timer("Linear_time") as linear_timer:
+            spark_ml_algo = SparkLinearLBFGS(
+                cacher_key='main_cache',
+                default_params={"regParam": [1e-5]},
+                freeze_defaults=True
+            )
+            spark_ml_algo, oof_preds = tune_and_fit_predict(spark_ml_algo, DefaultTuner(), iterator)
 
         assert spark_ml_algo is not None
         assert oof_preds is not None
@@ -414,7 +483,12 @@ def calculate_linear_l2(
         )
         test_score = score(test_preds_sdf)
 
-    return {pipe_timer.name: pipe_timer.duration, 'oof_score': oof_score, 'test_score': test_score}
+    return {
+        pipe_timer.name: pipe_timer.duration,
+        linear_timer.name: linear_timer.duration,
+        'oof_score': oof_score,
+        'test_score': test_score
+    }
 
 
 def calculate_reader(
@@ -724,6 +798,271 @@ def calculate_broadcast(spark: SparkSession, **_):
     # time.sleep(600)
 
 
+def calculate_le_scaling(spark: SparkSession, path: str, **_):
+    # /mnt/ess_storage/DN_1/storage/sber_LAMA/data_for_LE_TE_tests/
+    execs = int(spark.conf.get('spark.executor.instances'))
+    cores = int(spark.conf.get('spark.executor.cores'))
+
+    df = spark.read.json(path).coalesce(execs * cores).cache()
+    df.write.mode('overwrite').format('noop').save()
+
+    cat_roles = {
+       c: CategoryRole(dtype=np.float32) for c in df.columns
+    }
+
+    with log_exec_timer("SparkLabelEncoder") as le_timer:
+        estimator = SparkLabelEncoderEstimator(
+            input_cols=list(cat_roles.keys()),
+            input_roles=cat_roles
+        )
+
+        transformer = estimator.fit(df)
+
+    # with log_exec_timer("SparkLabelEncoder transform") as le_transform_timer:
+    #     df = transformer.transform(df).cache()
+    #     df.write.mode('overwrite').format('noop').save()
+    import time
+    time.sleep(600)
+
+    return {
+        "le_fit": le_timer.duration,
+        # "le_transform": le_transform_timer.duration
+    }
+
+
+def calculate_le_te_scaling(
+        spark: SparkSession,
+        path: str,
+        checkpoint_path: Optional[str] = None,
+        **_):
+    execs = int(spark.conf.get('spark.executor.instances'))
+    cores = int(spark.conf.get('spark.executor.cores'))
+
+    if checkpoint_path is not None:
+        checkpoint_path = os.path.join(checkpoint_path, 'data.dump')
+        chkp = load_dump_if_exist(spark, checkpoint_path)
+    else:
+        checkpoint_path = None
+        chkp = None
+
+    if not chkp:
+        logger.info(f"No checkpoint found on path {checkpoint_path}. Will create it ")
+        df = spark.read.json(path).repartition(execs * cores).cache()
+        df.write.mode('overwrite').format('noop').save()
+
+        cat_roles = {
+           c: CategoryRole(dtype=np.float32) for c in df.columns
+        }
+
+        with log_exec_timer("SparkLabelEncoder") as le_timer:
+            estimator = SparkLabelEncoderEstimator(
+                input_cols=list(cat_roles.keys()),
+                input_roles=cat_roles
+            )
+
+            transformer = estimator.fit(df)
+
+        cv = 5
+        with log_exec_timer("SparkLabelEncoder transform") as le_transform_timer:
+            df = transformer.transform(df).select(
+                F.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN),
+                F.rand(42).alias('target'),
+                F.floor(F.rand(142) * cv).astype('int').alias('folds'),
+                *list(estimator.getOutputRoles().keys()),
+            ).cache()
+            df.write.mode('overwrite').format('noop').save()
+
+        le_ds = SparkDataset(
+            data=df,
+            roles=estimator.getOutputRoles(),
+            task=SparkTask('reg'),
+            target='target',
+            folds='folds'
+        )
+
+        if checkpoint_path is not None:
+            dump_data(checkpoint_path, le_ds)
+
+        result_le = {
+            "le_fit": le_timer.duration,
+            "le_transform": le_transform_timer.duration,
+        }
+    else:
+        logger.info(f"Checkpoint exists on path {checkpoint_path}. Will use it ")
+        result_le = dict()
+        le_ds, _ = chkp
+
+    with log_exec_timer("TargetEncoder") as te_timer:
+        te_estimator = SparkTargetEncoderEstimator(
+            input_cols=le_ds.features,
+            input_roles=le_ds.roles,
+            task_name='reg',
+            folds_column=le_ds.folds_column,
+            target_column=le_ds.target_column
+        )
+
+        te_transformer = te_estimator.fit(df)
+
+    with log_exec_timer("TargetEncoder transform") as te_transform_timer:
+        df = te_transformer.transform(df)
+        df.write.mode('overwrite').format('noop').save()
+
+    return {
+        **result_le,
+        "te_fit": te_timer.duration,
+        "te_transform": te_transform_timer.duration
+    }
+
+
+def calculate_le_model_scaling(
+        spark: SparkSession,
+        path: str,
+        model_type: str,
+        checkpoint_path: Optional[str] = None,
+        **_):
+    execs = int(spark.conf.get('spark.executor.instances'))
+    cores = int(spark.conf.get('spark.executor.cores'))
+
+    if checkpoint_path is not None:
+        checkpoint_path = os.path.join(checkpoint_path, 'data.dump')
+        chkp = load_dump_if_exist(spark, checkpoint_path)
+    else:
+        checkpoint_path = None
+        chkp = None
+
+    if not chkp:
+        logger.info(f"No checkpoint found on path {checkpoint_path}. Will create it ")
+        df = spark.read.json(path).repartition(execs * cores).cache()
+        df.write.mode('overwrite').format('noop').save()
+
+        cat_roles = {
+           c: CategoryRole(dtype=np.float32) for c in df.columns
+        }
+
+        with log_exec_timer("SparkLabelEncoder") as le_timer:
+            estimator = SparkLabelEncoderEstimator(
+                input_cols=list(cat_roles.keys()),
+                input_roles=cat_roles
+            )
+
+            transformer = estimator.fit(df)
+
+        cv = 5
+        with log_exec_timer("SparkLabelEncoder transform") as le_transform_timer:
+            df = transformer.transform(df).select(
+                F.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN),
+                F.rand(42).alias('target'),
+                F.floor(F.rand(142) * cv).astype('int').alias('folds'),
+                *list(estimator.getOutputRoles().keys()),
+            ).cache()
+            df.write.mode('overwrite').format('noop').save()
+
+        le_ds = SparkDataset(
+            data=df,
+            roles=estimator.getOutputRoles(),
+            task=SparkTask('reg'),
+            target='target',
+            folds='folds'
+        )
+
+        if checkpoint_path is not None:
+            dump_data(checkpoint_path, le_ds)
+
+        result_le = {
+            "le_fit": le_timer.duration,
+            "le_transform": le_transform_timer.duration,
+        }
+    else:
+        logger.info(f"Checkpoint exists on path {checkpoint_path}. Will use it ")
+        result_le = dict()
+        le_ds, _ = chkp
+
+    assembler = VectorAssembler(
+        inputCols=le_ds.features,
+        outputCol="assembler_features"
+    )
+
+    if model_type == 'linreg':
+        model = LinearRegression(featuresCol=assembler.getOutputCol(),
+                                   labelCol=le_ds.target_column,
+                                   predictionCol='prediction',
+                                   maxIter=1000,
+                                   aggregationDepth=2,
+                                   elasticNetParam=0.7)
+    else:
+        count = le_ds.data.count()
+        num_threads = max(int(spark.conf.get("spark.executor.cores", "1")) - 1, 1)
+        num_threads = 7
+        model = LightGBMRegressor(
+            numThreads=num_threads,
+            objective="regression",
+            metric="mse",
+            learningRate=0.05,
+            numLeaves=128,
+            # numLeaves=32,
+            featureFraction=1.0,
+            baggingFraction=1.0,
+            baggingFreq=1,
+            maxDepth=-1,
+            minGainToSplit=0.0,
+            maxBin=255,
+            minDataInLeaf=5,
+            numIterations=100,
+            earlyStoppingRound=1000,
+            alpha=1.0,
+            lambdaL1=0.5,
+            lambdaL2=0.0,
+            featuresCol=assembler.getOutputCol(),
+            labelCol=le_ds.target_column,
+            verbosity=1,
+            useSingleDatasetMode=True,
+            isProvideTrainingMetric=True,
+            chunkSize=math.ceil(count / num_threads)
+            # chunkSize=700_000
+        )
+
+    pipeline = Pipeline(stages=[assembler, model])
+
+    with log_exec_timer("LinReg fit") as fit_timer:
+        transformer = pipeline.fit(le_ds.data)
+
+    # with log_exec_timer("LinReg fit") as transform_timer:
+    #     df = transformer.transform(le_ds.data)
+    #     df.write.mode('overwrite').format('noop').save()
+
+    return {
+        **result_le,
+        "linreg_fit": fit_timer.duration,
+        # "linreg_transform": transform_timer.duration
+    }
+
+
+def calculate_chkp(spark: SparkSession, path: str, **_):
+    execs = int(spark.conf.get('spark.executor.instances'))
+    cores = int(spark.conf.get('spark.executor.cores'))
+
+    df = spark.read.csv(path)
+    df = df.withColumn("new_col", F.explode(F.array(*[F.lit(0) for i in range(10)])))
+    df = df.drop("new_col")
+    # df = df.repartition(execs * cores).cache()
+    df = df.cache()
+    df.write.mode('overwrite').format('noop').save()
+    print(f"Duplicated dataset size: {df.count()}")
+
+    with log_exec_timer('chkp-timer') as chkp_timer:
+        df.localCheckpoint(eager=True)
+
+    print(f"Chkp time: {chkp_timer.duration}")
+
+    import time
+    time.sleep(600)
+
+    return {
+        chkp_timer.name: chkp_timer.duration
+    }
+
+
+
 if __name__ == "__main__":
     logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/lama.log"))
     logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -760,10 +1099,16 @@ if __name__ == "__main__":
             func = calculate_cat_te
         elif func_name == 'calculate_broadcast':
             func = calculate_broadcast
+        elif func_name == 'calculate_le_scaling':
+            func = calculate_le_scaling
+        elif func_name == 'calculate_le_te_scaling':
+            func = calculate_le_te_scaling
+        elif func_name == 'calculate_le_model_scaling':
+            func = calculate_le_model_scaling
+        elif func_name == 'calculate_chkp':
+            func = calculate_chkp
         else:
-            raise ValueError(f"Incorrect func name: {func_name}. "
-                             f"Only the following are supported: "
-                             f"{['calculate_automl', 'calculate_lgbadv_boostlgb']}")
+            raise ValueError(f"Incorrect func name: {func_name}. ")
 
         result = func(spark=spark, **ds_cfg)
         print(f"EXP-RESULT: {result}")

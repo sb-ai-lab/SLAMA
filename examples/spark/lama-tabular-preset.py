@@ -4,6 +4,7 @@ import uuid
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+from examples_utils import get_dataset_attrs
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
 from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.tasks import Task
@@ -11,65 +12,6 @@ from lightautoml.tasks import Task
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
-
-DATASETS = {
-    "used_cars_dataset": {
-            "path": "/opt/spark_data/small_used_cars_data.csv",
-            "task_type": "reg",
-            "roles": {
-                "target": "price",
-                "drop": ["dealer_zip", "description", "listed_date",
-                         "year", 'Unnamed: 0', '_c0',
-                         'sp_id', 'sp_name', 'trimId',
-                         'trim_name', 'major_options', 'main_picture_url',
-                         'interior_color', 'exterior_color'],
-                "numeric": ['latitude', 'longitude', 'mileage']
-            },
-            "dtype": {
-                'fleet': 'str', 'frame_damaged': 'str',
-                'has_accidents': 'str', 'isCab': 'str',
-                'is_cpo': 'str', 'is_new': 'str',
-                'is_oemcpo': 'str', 'salvage': 'str', 'theft_title': 'str', 'franchise_dealer': 'str'
-            }
-    },
-
-    # https://www.openml.org/d/4549
-    "buzz_dataset": {
-        "path": "/opt/spark_data/Buzzinsocialmedia_Twitter_25k.csv",
-        "task_type": "reg",
-        "roles": {"target": "Annotation"},
-    },
-
-    "lama_test_dataset": {
-        "path": "/opt/spark_data/sampled_app_train.csv",
-        "task_type": "binary",
-        "roles": {"target": "TARGET", "drop": ["SK_ID_CURR"]},
-    },
-
-    # https://www.openml.org/d/734
-    "ailerons_dataset": {
-        "path": "/opt/spark_data/ailerons.csv",
-        "task_type": "binary",
-        "roles": {"target": "binaryClass"},
-    },
-
-    # https://www.openml.org/d/382
-    "ipums_97": {
-        "path": "/opt/spark_data/ipums_97.csv",
-        "task_type": "multiclass",
-        "roles": {"target": "movedin"},
-    }
-}
-
-
-def get_dataset_attrs(name: str):
-    return (
-        DATASETS[name]['path'],
-        DATASETS[name]['task_type'],
-        DATASETS[name]['roles'],
-        # to assure that LAMA correctly interprets certain columns as categorical
-        DATASETS[name].get('dtype', dict()),
-    )
 
 
 def main(dataset_name: str, seed: int):
@@ -80,7 +22,9 @@ def main(dataset_name: str, seed: int):
     # 1. use_algos = [["lgb"]]
     # 2. use_algos = [["linear_l2"]]
     # 3. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb", "linear_l2"], ["lgb"]]
+    # use_algos = [["lgb", "linear_l2"], ["lgb"]]
+    # use_algos = [["linear_l2"]]
+    use_algos = [["lgb"]]
 
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
@@ -90,11 +34,14 @@ def main(dataset_name: str, seed: int):
 
         task = Task(task_type)
 
+        num_threads = 8
         automl = TabularAutoML(
             task=task,
+            cpu_limit=num_threads,
             timeout=3600 * 3,
             general_params={"use_algos": use_algos},
             reader_params={"cv": cv, "advanced_roles": False},
+            lgb_params={"default_params": {"num_threads": num_threads}},
             # linear_l2_params={"default_params": {"cs": [1e-5]}},
             tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
         )
@@ -153,4 +100,5 @@ if __name__ == "__main__":
     # One can run:
     # 1. main(dataset_name="used_cars_dataset", seed=42)
     # 2. multirun(dataset_name="used_cars_dataset")
-    main(dataset_name="lama_test_dataset", seed=42)
+    main(dataset_name="used_cars_dataset", seed=42)
+    # multirun(dataset_name="used_cars_dataset_1x")
