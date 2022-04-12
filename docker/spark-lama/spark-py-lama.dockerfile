@@ -22,6 +22,7 @@ COPY dist/LightAutoML-0.3.0-py3-none-any.whl /tmp/LightAutoML-0.3.0-py3-none-any
 RUN pip install /tmp/LightAutoML-0.3.0-py3-none-any.whl
 
 COPY jars /root/jars
+COPY examples /examples
 
 ENV PYSPARK_PYTHON=python3
 
