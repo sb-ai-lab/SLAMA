@@ -62,7 +62,7 @@ Next, it will be shown how to run the `"examples/spark/tabular-preset-automl.py"
 
 Local deployment of Hadoop YARN is done using the docker-hadoop project from the https://github.com/big-data-europe/docker-hadoop repository. It consists of the following services: datanode, historyserver, namenode, nodemanager, resourcemanager. The files `"docker-hadoop/nodemanager/Dockerfile"`, `"docker-hadoop/docker-compose.yml"` have been modified and a description of the new service `"docker-hadoop/spark-submit"` has been added. Required tools to get started to work with docker-hadoop project: Docker, Docker Compose and GNU Make. 
 
-#### 1. First, let's go to the directory with the LightAutoML project
+#### 1. First, let's go to the LightAutoML project directory
 ![LightAutoML_repo_files](imgs/LightAutoML_repo_files.png)
 
 Make sure that in the `"dist"` directory there is a wheel assembly and in the `"jars"` directory there is a jar file.
@@ -82,34 +82,34 @@ We copy the lama wheel assembly to the nodemanager Docker file, because later it
 cp dist/LightAutoML-0.3.0-py3-none-any.whl docker-hadoop/nodemanager/LightAutoML-0.3.0-py3-none-any.whl
 ```
 
-#### 4. Go to `"docker-hadoop"` directory
+#### 3. Go to `"docker-hadoop"` directory
 ```
 cd docker-hadoop
 ```
 
-#### 3. Open `"docker-compose.yml"` file and configure services. Edit `"volumes"` setting to mount directory with datasets to `"nodemanager1"` service.
+#### 4. Open `"docker-compose.yml"` file and configure services. Edit `"volumes"` setting to mount directory with datasets to `"nodemanager"` service.
 ```
 nano docker-compose.yml
 ```
 ![docker_compose_setting](imgs/docker_compose_setting.png)
 
-#### 4. Open `"hadoop.env"` file and configure hadoop settings.
+#### 5. Open `"hadoop.env"` file and configure hadoop settings.
 Pay attention to the highlighted settings. They need to be set in accordance with the resources of your computers. 
 ![hadoop_settings](imgs/hadoop_settings.png)
 
-#### 5. Build image for `nodemanager` service.
+#### 6. Build image for `nodemanager` service.
 The following command will build the `nodemanager` image according to `"docker-hadoop/nodemanager/Dockerfile"`. Python3.9 and the installation of the lama wheel package has been added to this Dockerfile.
 ```
 make build-nodemanager-with-python
 ```
 
-#### 6. Build image for `spark-submit` service.
+#### 7. Build image for `spark-submit` service.
 The `spark-submit` container will be used to submit our applications for execution. 
 ```
 make build-image-to-spark-submit
 ```
 
-#### 7. Start Hadoop YARN services
+#### 8. Start Hadoop YARN services
 ```
 docker-compose up
 ```
@@ -132,11 +132,11 @@ If one of the services did not up, then you need to look at its logs. For exampl
 docker-compose logs -f resourcemanager
 ```
 
-#### 8. Send job to cluster via `spark-submit` container
+#### 9. Send job to cluster via `spark-submit` container
 ```
 docker exec -ti spark-submit bash -c "./bin/slamactl.sh submit-job-yarn examples/spark/tabular-preset-automl.py"
 ```
-#### 9. To track the execution of a applications, you can use the hadoop web interface (http://localhost:8088), which displays the status of the task, resources and application logs.
+#### 10. To monitor application execution, you can use the hadoop web interface (http://localhost:8088), which displays the status of the application, resources and application logs.
 ![hadoop_applications_web_ui](imgs/hadoop_applications_web_ui.png)
 Let's see the information about the application and its logs.
 ![hadoop_view_application1](imgs/hadoop_view_application1.png)
@@ -145,9 +145,9 @@ Let's see the information about the application and its logs.
 
 ![hadoop_application_logs](imgs/hadoop_application_logs.png)
 
-#### 12. When the application is running, you can go to the hadoop web interface and get a link to the Spark WebUI.
+#### 11. When the application is running, you can go to the hadoop web interface and get a link to the Spark WebUI.
 ![link_to_spark_web_ui](imgs/link_to_spark_web_ui.png)
 ![spark_web_ui](imgs/spark_web_ui.png)
 
-#### 11. Web interface of hdfs is available at http://localhost:9870. Here you can browse your files in hdfs http://localhost:9870/explorer.html. hdfs stores trained pipelines and Spark application files.
+#### 12. Web interface of hdfs is available at http://localhost:9870. Here you can browse your files in hdfs http://localhost:9870/explorer.html. hdfs stores trained pipelines and Spark application files.
 ![hdfs_web_ui](imgs/hdfs_web_ui.png)
