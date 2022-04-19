@@ -1,8 +1,8 @@
 import logging
-from typing import Tuple, cast, List, Optional, Union
+from typing import Tuple, cast, List, Optional
 
 import numpy as np
-from pyspark.ml import PredictionModel, PipelineModel, Transformer
+from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.functions import vector_to_array, array_to_vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
@@ -21,7 +21,9 @@ from lightautoml.utils.timer import TaskTimer
 
 logger = logging.getLogger(__name__)
 
-SparkMLModel = Union[PredictionModel, PipelineModel]
+# TODO: SPARK-LAMA replace it back
+# SparkMLModel = Union[PredictionModel, PipelineModel]
+SparkMLModel = PipelineModel
 
 
 class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
