@@ -670,7 +670,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             max_row_num = len(other_categories_collection)
 
             def get_category_by_row_num(row_num):
-                if (remainder := row_num % max_row_num) == 0:
+                remainder = row_num % max_row_num
+                if remainder == 0:
                     key = max_row_num
                 else:
                     key = remainder
