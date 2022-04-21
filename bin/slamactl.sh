@@ -2,6 +2,7 @@
 
 set -ex
 
+BASE_IMAGE_TAG="lama-v3.2.0"
 
 if [[ -z "${KUBE_NAMESPACE}" ]]
 then
@@ -10,18 +11,19 @@ fi
 
 if [[ -z "${IMAGE_TAG}" ]]
 then
-  IMAGE_TAG="lama-v3.2.0"
+  IMAGE_TAG=${BASE_IMAGE_TAG}
 fi
+
 
 if [[ -z "${REPO}" ]]
 then
   echo "REPO var is not defined!"
   REPO=""
   IMAGE=spark-py-lama:${IMAGE_TAG}
-  BASE_SPARK_IMAGE=spark-py:${IMAGE_TAG}
+  BASE_SPARK_IMAGE=spark-py:${BASE_IMAGE_TAG}
 else
   IMAGE=${REPO}/spark-py-lama:${IMAGE_TAG}
-  BASE_SPARK_IMAGE=${REPO}/spark-py:${IMAGE_TAG}
+  BASE_SPARK_IMAGE=${REPO}/spark-py:${BASE_IMAGE_TAG}
 fi
 
 
@@ -51,19 +53,19 @@ function build_pyspark_images() {
     && rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz
 
   # create images with names:
-  # - ${REPO}/spark:${IMAGE_TAG}
-  # - ${REPO}/spark-py:${IMAGE_TAG}
+  # - ${REPO}/spark:${BASE_IMAGE_TAG}
+  # - ${REPO}/spark-py:${BASE_IMAGE_TAG}
   # the last is equal to BASE_SPARK_IMAGE
 
   if [[ ! -z "${REPO}" ]]
   then
-    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${IMAGE_TAG} \
+    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${BASE_IMAGE_TAG} \
       -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
       build
 
-    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${IMAGE_TAG} push
+    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${BASE_IMAGE_TAG} push
   else
-      ./spark/bin/docker-image-tool.sh -t ${IMAGE_TAG} \
+      ./spark/bin/docker-image-tool.sh -t ${BASE_IMAGE_TAG} \
       -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
       build
   fi

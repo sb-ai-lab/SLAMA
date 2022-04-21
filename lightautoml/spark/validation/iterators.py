@@ -209,6 +209,10 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
         assert len(val_preds) > 0
         num_partitions = val_preds[0].rdd.getNumPartitions()
         full_val_preds = functools.reduce(lambda x, y: x.unionByName(y), val_preds)
+        # TODO: SPARK-LAMA temporary method of preventing of uneven data distribution
+        # hack to prevent uneven distribution of partitions
+        # and data among partitions after coalesce
+        full_val_preds = full_val_preds.localCheckpoint(True)
         full_val_preds = full_val_preds.coalesce(num_partitions)
 
         return full_val_preds

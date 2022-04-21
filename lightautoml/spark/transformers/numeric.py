@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Dict, List
 
 import numpy as np
@@ -14,6 +15,9 @@ from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
 from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTransformer, ObsoleteSparkTransformer
 from lightautoml.transformers.numeric import numeric_check
+
+
+logger = logging.getLogger(__name__)
 
 
 class SparkNaNFlagsEstimator(SparkBaseEstimator):
@@ -143,12 +147,16 @@ class SparkFillnaMedianEstimator(SparkBaseEstimator):
     def __init__(self,
                  input_cols: List[str],
                  input_roles: Dict[str, ColumnRole],
-                 do_replace_columns: bool = False):
+                 do_replace_columns: bool = False,
+                 subsample: int = 1_000_000,
+                 seed: int = 42):
         super().__init__(input_cols,
                          input_roles,
                          do_replace_columns=do_replace_columns,
                          output_role=NumericRole(np.float32))
         self._meds: Optional[Dict[str, float]] = None
+        self._subsample = subsample
+        self._seed = seed
 
     def _fit(self, sdf: SparkDataFrame) -> Transformer:
         """Approximately estimates medians.
@@ -161,12 +169,24 @@ class SparkFillnaMedianEstimator(SparkBaseEstimator):
 
         """
 
+        logger.debug(f"Starting to fit estimator {self}")
+
+        total_number = sdf.count()
+        if self._subsample > total_number:
+            fraction = 1.0
+        else:
+            fraction = self._subsample/total_number
+        sdf = sdf.sample(fraction=fraction, seed=self._seed)
+        logger.debug(f"Sample size: {sdf.count()}")
+
         row = sdf\
             .select([F.percentile_approx(c, 0.5).alias(c) for c in self.getInputCols()])\
             .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in self.getInputCols()])\
             .first()
 
         self._meds = row.asDict()
+
+        logger.debug(f"Finished to fit estimator {self}")
 
         return SparkFillnaMedianTransformer(input_cols=self.getInputCols(),
                                             output_cols=self.getOutputCols(),

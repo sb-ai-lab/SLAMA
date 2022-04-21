@@ -218,17 +218,21 @@ class SparkFeaturesPipeline(InputFeaturesAndRoles, OutputFeaturesAndRoles, Featu
         graph = build_graph(pipeline)
         tr_layers = list(toposort.toposort(graph))
 
+        logger.info(f"Number of layers in the current feature pipeline {self}: {len(tr_layers)}")
+
         fp_input_features = set(self.input_features)
 
         current_train: SparkDataFrame = train
         stages = []
         fp_output_cols: List[str] = []
         fp_output_roles: RolesDict = dict()
-        for layer in tr_layers:
+        for i, layer in enumerate(tr_layers):
+            logger.debug(f"Calculating layer ({i + 1}/{len(tr_layers)}). The size of layer: {len(layer)}")
             cols_to_remove = []
             output_cols = []
             layer_model = Pipeline(stages=layer).fit(current_train)
-            for tr in layer:
+            for j, tr in enumerate(layer):
+                logger.debug(f"Processing output columns for transformer ({j + 1}/{len(layer)}): {tr}")
                 tr = cast(SparkColumnsAndRoles, tr)
                 if tr.getDoReplaceColumns():
                     # ChangeRoles, for instance, may return columns with the same name

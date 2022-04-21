@@ -24,7 +24,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 1. use_algos = [["lgb"]]
     # 2. use_algos = [["linear_l2"]]
     # 3. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["linear_l2", "lgb"]]
+    use_algos = [["lgb", "linear_l2"], ["lgb"]]
     cv = 5
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 

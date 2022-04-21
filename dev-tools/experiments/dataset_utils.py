@@ -12,7 +12,7 @@ def datasets() -> Dict[str, Any]:
                      "year", 'Unnamed: 0', '_c0',
                      'sp_id', 'sp_name', 'trimId',
                      'trim_name', 'major_options', 'main_picture_url',
-                     'interior_color', 'exterior_color'],
+                     'interior_color', 'exterior_color', 'vin'],
             "numeric": ['longitude', 'mileage']
         },
         "dtype": {

@@ -80,7 +80,8 @@ def get_dataset_attrs(name: str):
 
 
 def prepare_test_and_train(spark: SparkSession, path:str, seed: int) -> Tuple[SparkDataFrame, SparkDataFrame]:
-    data = spark.read.csv(path, header=True, escape="\"").cache()
+    data = spark.read.csv(path, header=True, escape="\"")
+    data = data.cache()
     data.write.mode('overwrite').format('noop').save()
 
     train_data, test_data = data.randomSplit([0.8, 0.2], seed)

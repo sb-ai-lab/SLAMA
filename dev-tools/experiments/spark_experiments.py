@@ -13,11 +13,11 @@ import time
 import uuid
 from contextlib import contextmanager
 from copy import copy
-from typing import Dict, Any, Optional, Tuple, cast
+from typing import Dict, Any, List, Optional, Tuple, cast
 
 import yaml
 from pyspark import SparkFiles
-from pyspark.ml import Pipeline
+from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import LinearRegression
@@ -176,6 +176,68 @@ def prepare_test_and_train(spark: SparkSession, path:str, seed: int, test_propor
     return train_data, test_data
 
 
+def load_and_predict_automl(
+        spark: SparkSession,
+        path: str,
+        task_type: str,
+        seed: int = 42,
+        roles: Optional[Dict] = None,
+        dataset_increase_factor: int = 1,
+        automl_model_path=None,
+        test_data_dump_path = None,
+        **_) -> Dict[str, Any]:
+
+    execs = int(spark.conf.get('spark.executor.instances'))
+    cores = int(spark.conf.get('spark.executor.cores'))
+    memory = spark.conf.get('spark.executor.memory')
+
+    roles = roles if roles else {}
+
+    # train_data, test_data = prepare_test_and_train(spark, path, seed)
+    test_data = spark.read.parquet(test_data_dump_path)
+    # test_data = test_data.sample(fraction=0.0002, seed=100)
+
+    if dataset_increase_factor > 1:
+        test_data = test_data.withColumn("new_col", F.explode(F.array(*[F.lit(0) for i in range(dataset_increase_factor)])))
+        test_data = test_data.drop("new_col")
+        test_data = test_data.select(
+            *[c for c in test_data.columns if c != SparkDataset.ID_COLUMN],
+            F.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN),
+        ).cache()
+        test_data = test_data.repartition(execs * cores, SparkDataset.ID_COLUMN).cache()
+        test_data = test_data.cache()
+        test_data.write.mode('overwrite').format('noop').save()
+        logger.info(f"Duplicated dataset size: {test_data.count()}")
+
+    with log_exec_timer("Loading model time") as loading_timer:
+        pipeline_model = PipelineModel.load(automl_model_path)
+
+    with log_exec_timer("spark-lama predicting on test") as predict_timer:
+        te_pred = pipeline_model.transform(test_data)
+        te_pred = te_pred.cache()
+        te_pred.write.mode('overwrite').format('noop').save()
+
+    task = SparkTask(task_type)
+    pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
+    score = task.get_dataset_metric()
+    test_metric_value = score(te_pred.select(
+        SparkDataset.ID_COLUMN,
+        F.col(roles['target']).alias('target'),
+        F.col(pred_column).alias('prediction')
+    ))
+
+    logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
+
+    return {
+        "predict_data.count": test_data.count(),
+        "spark.executor.instances": execs,
+        "spark.executor.cores": cores,
+        "spark.executor.memory": memory,
+        "test_metric_value": test_metric_value,
+        "predict_duration_secs": predict_timer.duration
+    }
+
+
 def calculate_automl(
         spark: SparkSession,
         path: str,
@@ -185,24 +247,42 @@ def calculate_automl(
         cv: int = 5,
         use_algos = ("lgb", "linear_l2"),
         roles: Optional[Dict] = None,
+        lgb_num_iterations: int = 100,
+        linear_l2_reg_param: List[float] = [1e-5],
+        dataset_increase_factor: int = 1,
+        automl_save_path = None,
+        test_data_dump_path = None,
         **_) -> Dict[str, Any]:
+    execs = int(spark.conf.get('spark.executor.instances'))
+    cores = int(spark.conf.get('spark.executor.cores'))
+
     roles = roles if roles else {}
+
+    train_data, test_data = prepare_test_and_train(spark, path, seed)
+
+    if dataset_increase_factor > 1:
+        train_data = train_data.withColumn("new_col", F.explode(F.array(*[F.lit(0) for i in range(dataset_increase_factor)])))
+        train_data = train_data.drop("new_col")
+        train_data = train_data.repartition(execs * cores).cache()
+        train_data = train_data.cache()
+        train_data.write.mode('overwrite').format('noop').save()
+        logger.info(f"Duplicated dataset size: {train_data.count()}")
 
     with log_exec_timer("spark-lama training") as train_timer:
         task = SparkTask(task_type)
-        train_data, test_data = prepare_test_and_train(spark, path, seed)
-        test_data_dropped = test_data
 
         automl = SparkTabularAutoML(
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
             lgb_params={'use_single_dataset_mode': True,
-                        "default_params": { "numIterations": 100, "earlyStoppingRound": 5000}, "freeze_defaults": True },
-            linear_l2_params={"default_params": {"regParam": [1e-5]}},
+                        "default_params": { "numIterations": lgb_num_iterations, "earlyStoppingRound": 5000}, "freeze_defaults": True },
+            linear_l2_params={"default_params": {"regParam": linear_l2_reg_param}},
             reader_params={"cv": cv, "advanced_roles": False},
             gbm_pipeline_params={'max_intersection_depth': 2, 'top_intersections': 2},
-            tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
+            linear_pipeline_params={'max_intersection_depth': 2, 'top_intersections': 2},
+            tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600},
+            timeout=3600 * 12
         )
 
         oof_predictions = automl.fit_predict(
@@ -220,7 +300,7 @@ def calculate_automl(
     automl.release_cache()
 
     with log_exec_timer("spark-lama predicting on test") as predict_timer:
-        te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
+        te_pred = automl.predict(test_data, add_reader_attrs=True)
 
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred)
@@ -229,7 +309,17 @@ def calculate_automl(
 
     logger.info("Predicting is finished")
 
+    if automl_save_path:
+        transformer = automl.make_transformer()
+        transformer.write().overwrite().save(automl_save_path)
+
+    if test_data_dump_path:
+        test_data.write.mode('overwrite').parquet(test_data_dump_path)
+
     return {
+        "use_algos": use_algos,
+        "train_data.count": train_data.count(),
+        "spark.executor.instances": execs,
         "metric_value": metric_value,
         "test_metric_value": test_metric_value,
         "train_duration_secs": train_timer.duration,
@@ -248,8 +338,6 @@ def calculate_lgbadv_boostlgb(
         **_) -> Dict[str, Any]:
     roles = roles if roles else {}
 
-    # checkpoint_path = None
-
     with log_exec_timer("spark-lama ml_pipe") as pipe_timer:
         if checkpoint_path is not None:
             train_checkpoint_path = os.path.join(checkpoint_path, 'train.dump')
@@ -263,8 +351,6 @@ def calculate_lgbadv_boostlgb(
             test_chkp = None
 
         task = SparkTask(task_type)
-
-        # train_chkp = None
 
         if not train_chkp or not test_chkp:
             logger.info(f"Checkpoint doesn't exist on path {checkpoint_path}. Will create it.")
@@ -315,7 +401,6 @@ def calculate_lgbadv_boostlgb(
             stest, _ = test_chkp
 
         iterator = iterator.convert_to_holdout_iterator()
-        # iterator = SparkDummyIterator(iterator.train, iterator.input_roles)
 
         score = task.get_dataset_metric()
 
@@ -558,9 +643,8 @@ def calculate_te(
         cv: int = 5,
         roles: Optional[Dict] = None,
         checkpoint_path: Optional[str] = None,
+        dataset_increase_factor: int = 1,
         **_):
-
-    checkpoint_path = None
 
     if checkpoint_path is not None:
         checkpoint_path = os.path.join(checkpoint_path, 'data.dump')
@@ -573,6 +657,17 @@ def calculate_te(
 
     if not chkp:
         data, _ = prepare_test_and_train(spark, path, seed, test_proportion=0.0)
+
+        execs = int(spark.conf.get('spark.executor.instances'))
+        cores = int(spark.conf.get('spark.executor.cores'))
+
+        data = data.withColumn("new_col",
+                               F.explode(F.array(*[F.lit(0) for i in range(dataset_increase_factor)])))
+        data = data.drop("new_col")
+        data = data.repartition(execs * cores).cache()
+        data = data.cache()
+        data.write.mode('overwrite').format('noop').save()
+        print(f"Duplicated dataset size: {data.count()}")
 
         task = SparkTask(task_type)
 
@@ -591,8 +686,7 @@ def calculate_te(
             transformer = estimator.fit(sdataset.data)
 
         with log_exec_timer("SparkLabelEncoder transform") as le_transform_timer:
-            df = transformer.transform(sdataset.data).cache()
-            df.write.mode('overwrite').format('noop').save()
+            df = transformer.transform(sdataset.data).localCheckpoint(eager=True)
 
         df = df.select(
             SparkDataset.ID_COLUMN,
@@ -649,6 +743,7 @@ def calculate_cat_te(
         cv: int = 5,
         roles: Optional[Dict] = None,
         checkpoint_path: Optional[str] = None,
+        dataset_increase_factor: int = 1,
         **_):
 
     if checkpoint_path is not None:
@@ -663,6 +758,17 @@ def calculate_cat_te(
     if not chkp:
         data, _ = prepare_test_and_train(spark, path, seed, test_proportion=0.0)
 
+        execs = int(spark.conf.get('spark.executor.instances'))
+        cores = int(spark.conf.get('spark.executor.cores'))
+
+        data = data.withColumn("new_col",
+                               F.explode(F.array(*[F.lit(0) for i in range(dataset_increase_factor)])))
+        data = data.drop("new_col")
+        data = data.repartition(execs * cores).cache()
+        data = data.cache()
+        data.write.mode('overwrite').format('noop').save()
+        print(f"Duplicated dataset size: {data.count()}")
+
         task = SparkTask(task_type)
 
         with log_exec_timer("Reader") as reader_timer:
@@ -675,13 +781,13 @@ def calculate_cat_te(
             estimator = SparkCatIntersectionsEstimator(
                 input_cols=list(cat_roles.keys()),
                 input_roles=cat_roles,
-                max_depth=3
+                max_depth=2
             )
 
             transformer = estimator.fit(sdataset.data)
 
         with log_exec_timer("SparkLabelEncoder transform") as ci_transform_timer:
-            df = transformer.transform(sdataset.data).cache()
+            df = transformer.transform(sdataset.data)
             # df.write.mode('overwrite').format('noop').save()
             df = cast(SparkDataFrame, df)
             df = df.localCheckpoint(eager=True)
@@ -700,6 +806,12 @@ def calculate_cat_te(
     else:
         logger.info(f"Checkpoint exists on path {checkpoint_path}. Will use it ")
         le_ds, _ = chkp
+
+    with log_exec_timer("Intermediate test") as f:
+        for _ in range(3):
+            le_ds.data.select([F.col(c) * 2 for c in le_ds.data.columns]).write.mode('overwrite').format('noop').save()
+
+    print(f"INTERMEDIATE TEST DURATION: {f.duration}")
 
     with log_exec_timer("TargetEncoder") as te_timer:
         te_estimator = SparkTargetEncoderEstimator(
@@ -847,8 +959,8 @@ def calculate_le_te_scaling(
 
     if not chkp:
         logger.info(f"No checkpoint found on path {checkpoint_path}. Will create it ")
-        df = spark.read.json(path).repartition(execs * cores).cache()
-        df.write.mode('overwrite').format('noop').save()
+        data, _ = prepare_test_and_train(spark, path, 42, test_proportion=0.0)
+        df = data
 
         cat_roles = {
            c: CategoryRole(dtype=np.float32) for c in df.columns
@@ -869,7 +981,7 @@ def calculate_le_te_scaling(
                 F.rand(42).alias('target'),
                 F.floor(F.rand(142) * cv).astype('int').alias('folds'),
                 *list(estimator.getOutputRoles().keys()),
-            ).cache()
+            ).localCheckpoint(eager=True)
             df.write.mode('overwrite').format('noop').save()
 
         le_ds = SparkDataset(
@@ -1107,8 +1219,12 @@ if __name__ == "__main__":
             func = calculate_le_model_scaling
         elif func_name == 'calculate_chkp':
             func = calculate_chkp
+        elif func_name == 'load_and_predict_automl':
+            func = load_and_predict_automl
         else:
             raise ValueError(f"Incorrect func name: {func_name}. ")
 
         result = func(spark=spark, **ds_cfg)
         print(f"EXP-RESULT: {result}")
+        ex_instances = int(spark.conf.get('spark.executor.instances'))
+        print(f"spark.executor.instances: {ex_instances}")
