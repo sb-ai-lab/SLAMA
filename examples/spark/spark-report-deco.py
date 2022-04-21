@@ -22,7 +22,7 @@ if __name__ == "__main__":
     dataset_name = "lama_test_dataset"
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
-    train_data, test_data = prepare_test_and_train(spark, "/tmp/sampled_app_train.csv", seed)
+    train_data, test_data = prepare_test_and_train(spark, path, seed)
 
     with log_exec_timer("spark-lama training") as train_timer:
         task = SparkTask(task_type)

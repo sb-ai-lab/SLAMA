@@ -290,8 +290,8 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                 if r.name == "Datetime":
                     # try if it's ok to infer date with given params
                     result = subsample.select(
-                        F.to_timestamp(feat, format=r.format).isNotNull().astype(IntegerType()).alias(f"{feat}_dt"),
-                        F.count('*')
+                        F.sum(F.to_timestamp(feat, format=r.format).isNotNull().astype(IntegerType())).alias(f"{feat}_dt"),
+                        F.count('*').alias("count")
                     ).first()
 
                     if result[f"{feat}_dt"] != result['count']:

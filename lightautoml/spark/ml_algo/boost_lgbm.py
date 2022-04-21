@@ -377,7 +377,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         val_pred = ml_model.transform(self._assembler.transform(valid_data))
         val_pred = DropColumnsTransformer(
             remove_cols=[],
-            optional_remove_cols=[self._prediction_col_name, self._probability_col_name]
+            optional_remove_cols=[self._prediction_col_name, self._probability_col_name, self._raw_prediction_col_name]
         ).transform(val_pred)
 
         return ml_model, val_pred, fold_prediction_column

@@ -97,8 +97,8 @@ class SparkBaseTrainValidIterator(TrainValidIterator, InputFeaturesAndRoles, ABC
         )
 
         sdf = train.data.select('*', is_val_col)
-        train_part_sdf = sdf.where(F.col(self.TRAIN_VAL_COLUMN) == 0)
-        valid_part_sdf = sdf.where(F.col(self.TRAIN_VAL_COLUMN) == 1)
+        train_part_sdf = sdf.where(F.col(self.TRAIN_VAL_COLUMN) == 0).drop(self.TRAIN_VAL_COLUMN)
+        valid_part_sdf = sdf.where(F.col(self.TRAIN_VAL_COLUMN) == 1).drop(self.TRAIN_VAL_COLUMN)
 
         train_ds = cast(SparkDataset, self.train.empty())
         train_ds.set_data(sdf, self.train.features, self.train.roles)
