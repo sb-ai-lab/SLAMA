@@ -137,8 +137,8 @@ def get_numeric_roles_stat(
         if subsample > total_number:
             fraction = 1.0
         else:
-            total_number = subsample
             fraction = subsample/total_number
+            total_number = subsample
         sdf = sdf.sample(fraction=fraction, seed=random_state)
 
     train = train.empty()
