@@ -35,11 +35,12 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         test_data_dropped = test_data
 
+        # optionally: set 'convert_to_onnx': True to use onnx-based version of lgb's model transformer
         automl = SparkTabularAutoML(
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
-            lgb_params={'use_single_dataset_mode': True},
+            lgb_params={'use_single_dataset_mode': True, 'convert_to_onnx': False, 'mini_batch_size': 1000},
             # linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False}
         )
@@ -105,7 +106,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             F.col(pred_column).alias('prediction')
         ))
 
-        logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
+    logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
 
     logger.info("Predicting is finished")
 

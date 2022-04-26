@@ -26,7 +26,6 @@ if __name__ == "__main__":
     dataset_name = "ipums_97"
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
-
     train_data, test_data = prepare_test_and_train(spark, path, seed)
 
     with log_exec_timer("spark-lama training") as train_timer:
@@ -43,8 +42,20 @@ if __name__ == "__main__":
 
         preds = automl.fit_predict(train_data, roles)
 
+    logger.info("Predicting on out of fold")
+
+    score = task.get_dataset_metric()
+    metric_value = score(preds)
+
+    logger.info(f"score for out-of-fold predictions: {metric_value}")
+
     transformer = automl.make_transformer()
-    transformer.write().overwrite().save("hdfs://namenode:9000/automl_multiclass")
+
+    del preds
+    automl.release_cache()
+
+    with log_exec_timer("saving model") as saving_timer:
+        transformer.write().overwrite().save("file:///tmp/automl_multiclass")
 
     with log_exec_timer("spark-lama predicting on test") as predict_timer_2:
         te_pred = transformer.transform(test_data)
@@ -59,10 +70,15 @@ if __name__ == "__main__":
 
         logger.info(f"score for test predictions: {expected_metric_value}")
 
-    with log_exec_timer("spark-lama predicting on test via loaded pipeline") as predict_timer_3:
-        pipeline_model = PipelineModel.load("hdfs://namenode:9000/automl_multiclass")
-        te_pred = pipeline_model.transform(test_data)
+    with log_exec_timer("Loading model time") as loading_timer:
+        pipeline_model = PipelineModel.load("file:///tmp/automl_multiclass")
 
+    with log_exec_timer("spark-lama predicting on test via loaded pipeline") as predict_timer_3:
+        te_pred = pipeline_model.transform(test_data)
+        te_pred = te_pred.cache()
+        te_pred.write.mode('overwrite').format('noop').save()
+
+    with log_exec_timer("spark-lama calc score on test via loaded pipeline") as scor_timer:
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
         score = task.get_dataset_metric()
         actual_metric_value = score(te_pred.select(
@@ -72,4 +88,19 @@ if __name__ == "__main__":
         ))
         logger.info(f"score for test predictions via loaded pipeline: {actual_metric_value}")
 
+    logger.info("Predicting is finished")
+
     assert expected_metric_value == pytest.approx(actual_metric_value, 0.1)
+
+    result = {
+        "metric_value": metric_value,
+        "test_metric_value": expected_metric_value,
+        "train_duration_secs": train_timer.duration,
+        "predict_duration_secs": predict_timer_3.duration,
+        "saving_duration_secs": saving_timer.duration,
+        "loading_duration_secs": loading_timer.duration
+    }
+
+    print(f"EXP-RESULT: {result}")
+
+    spark.stop()

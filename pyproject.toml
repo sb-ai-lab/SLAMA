@@ -42,7 +42,7 @@ numpy = [
 scipy = "*"
 pandas = ">=1"
 scikit-learn = ">=0.22"
-lightgbm = "^2.3"
+lightgbm = "3.2.1"
 catboost = "*"
 optuna = "*"
 torch = [
@@ -89,6 +89,7 @@ pyspark = "3.2.0"
 pyarrow = ">=1.0.0"
 synapseml = "0.9.5"
 toposort = "1.7"
+onnxmltools = "1.7.0"
 
 
 [tool.poetry.dev-dependencies]

@@ -18,6 +18,7 @@ from pyspark.ml.util import MLWritable
 from pyspark.ml.util import MLWriter
 from synapse.ml.lightgbm import LightGBMClassificationModel
 from synapse.ml.lightgbm import LightGBMRegressionModel
+from synapse.ml.onnx import ONNXModel
 
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,31 @@ class SparkLabelEncoderTransformerMLReader(MLReader):
 
         return instance
 
+
+class ONNXModelWrapperMLWriter(MLWriter):
+    def __init__(self, instance):
+        super().__init__()
+        self.instance = instance
+
+    def saveImpl(self, path: str) -> None:
+        logger.info(f"Save {self.instance.__class__.__name__} to '{path}'")
+
+        СommonPickleMLWriter.saveMetadata(self.instance, path, self.sc)
+
+        model: ONNXModel = self.instance.model
+        model.save(os.path.join(path, "model"))
+
+
+class ONNXModelWrapperMLReader(MLWriter):
+
+    def load(self, path):
+        """Load the ML instance from the input path and wrap by ONNXModelWrapper()"""
+
+        from lightautoml.spark.ml_algo.boost_lgbm import ONNXModelWrapper
+        model_wrapper = ONNXModelWrapper()
+        model_wrapper.model = ONNXModel.load(os.path.join(path, "model"))          
+
+        return model_wrapper
 
 class LightGBMModelWrapperMLWriter(MLWriter):
     def __init__(self, instance):
