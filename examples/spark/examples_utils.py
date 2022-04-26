@@ -26,45 +26,51 @@ used_cars_params = {
 
 DATASETS = {
     "used_cars_dataset": {
-            "path": "/opt/spark_data/small_used_cars_data.csv",
+            "path": "file:///opt/spark_data/small_used_cars_data.csv",
             **used_cars_params
     },
 
     "used_cars_dataset_1x": {
-        "path": "/opt/spark_data/derivative_datasets/1x_dataset.csv",
+        "path": "file:///opt/spark_data/derivative_datasets/1x_dataset.csv",
         **used_cars_params
     },
 
     "used_cars_dataset_4x": {
-        "path": "/opt/spark_data/derivative_datasets/4x_dataset.csv",
+        "path": "file:///opt/spark_data/derivative_datasets/4x_dataset.csv",
         **used_cars_params
     },
 
     # https://www.openml.org/d/4549
     "buzz_dataset": {
-        "path": "/opt/spark_data/Buzzinsocialmedia_Twitter_25k.csv",
+        "path": "file:///opt/spark_data/Buzzinsocialmedia_Twitter_25k.csv",
         "task_type": "reg",
         "roles": {"target": "Annotation"},
     },
 
     "lama_test_dataset": {
-        "path": "/opt/spark_data/sampled_app_train.csv",
+        "path": "file:///opt/spark_data/sampled_app_train.csv",
         "task_type": "binary",
         "roles": {"target": "TARGET", "drop": ["SK_ID_CURR"]},
     },
 
     # https://www.openml.org/d/734
     "ailerons_dataset": {
-        "path": "/opt/spark_data/ailerons.csv",
+        "path": "file:///opt/spark_data/ailerons.csv",
         "task_type": "binary",
         "roles": {"target": "binaryClass"},
     },
 
     # https://www.openml.org/d/382
     "ipums_97": {
-        "path": "/opt/spark_data/ipums_97.csv",
+        "path": "file:///opt/spark_data/ipums_97.csv",
         "task_type": "multiclass",
         "roles": {"target": "movedin"},
+    },
+
+    "company_bankruptcy_dataset": {
+        "path": "file:///opt/spark_data/company_bankruptcy_prediction_data.csv",
+        "task_type": "binary",
+        "roles": {"target": "Bankrupt?"},
     }
 }
 

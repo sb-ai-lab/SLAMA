@@ -222,6 +222,44 @@ function submit_job_yarn() {
     --py-files dist/LightAutoML-0.3.0.tar.gz ${script_path}
 }
 
+function submit_job_spark() {
+  if [[ -z "${SPARK_MASTER_URL}" ]]
+  then
+    SPARK_MASTER_URL="spark://node21.bdcl:7077"
+  fi
+
+  if [[ -z "${HADOOP_DEFAULT_FS}" ]]
+  then
+    HADOOP_DEFAULT_FS="hdfs://node21.bdcl:9000"
+  fi
+
+  script_path=$1
+
+  filename=$(echo ${script_path} | python -c 'import os; path = input(); print(os.path.splitext(os.path.basename(path))[0]);')
+
+spark-submit \
+  --master ${SPARK_MASTER_URL} \
+  --conf 'spark.hadoop.fs.defaultFS='${HADOOP_DEFAULT_FS} \
+  --conf 'spark.jars.packages=com.microsoft.azure:synapseml_2.12:0.9.5' \
+  --conf 'spark.jars.repositories=https://mmlspark.azureedge.net/maven' \
+  --conf 'spark.yarn.appMasterEnv.SCRIPT_ENV=cluster' \
+  --conf 'spark.kryoserializer.buffer.max=512m' \
+  --conf 'spark.driver.cores=4' \
+  --conf 'spark.driver.memory=5g' \
+  --conf 'spark.executor.instances=8' \
+  --conf 'spark.executor.cores=8' \
+  --conf 'spark.executor.memory=5g' \
+  --conf 'spark.cores.max=8' \
+  --conf 'spark.memory.fraction=0.6' \
+  --conf 'spark.memory.storageFraction=0.5' \
+  --conf 'spark.sql.autoBroadcastJoinThreshold=100MB' \
+  --conf 'spark.sql.execution.arrow.pyspark.enabled=true' \
+  --conf 'spark.scheduler.minRegisteredResourcesRatio=1.0' \
+  --conf 'spark.scheduler.maxRegisteredResourcesWaitingTime=180s' \
+  --jars jars/spark-lightautoml_2.12-0.1.jar \
+  --py-files dist/LightAutoML-0.3.0.tar.gz ${script_path}
+}
+
 function help() {
   echo "
   Required env variables:
@@ -288,6 +326,10 @@ function main () {
 
     "submit-job-yarn")
         submit_job_yarn "${@}"
+        ;;
+
+    "submit-job-spark")
+        submit_job_spark "${@}"
         ;;
 
     "port-forward")
