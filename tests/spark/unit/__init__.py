@@ -160,7 +160,7 @@ def compare_datasets(ds: PandasDataset,
 
         trans_data: np.ndarray = lama_np_ds.data
         trans_data_result: np.ndarray = spark_np_ds.data
-        # TODO: fix type checking here
+
         # compare content equality of numpy arrays
         assert np.allclose(trans_data[:, features], trans_data_result[:, features], equal_nan=True), \
             f"Results of the LAMA's transformer and the Spark based transformer are not equal: " \
@@ -315,7 +315,7 @@ def compare_transformers_results(spark: SparkSession,
 
         trans_data: np.ndarray = lama_np_ds.data
         trans_data_result: np.ndarray = spark_np_ds.data
-        # TODO: fix type checking here
+
         # compare content equality of numpy arrays
         assert np.allclose(trans_data[:, features], trans_data_result[:, features], equal_nan=True), \
             f"Results of the LAMA's transformer and the Spark based transformer are not equal: " \
@@ -432,7 +432,6 @@ def from_pandas_to_spark(p: PandasDataset,
 
     if to_vector:
         cols = [c for c in pdf.columns if c != SparkDataset.ID_COLUMN]
-        # TODO: cols[0] should be fixed
         general_feat = cols[0]
         sdf = sdf.select(SparkDataset.ID_COLUMN, F.array(*cols).alias(general_feat))
         roles = {general_feat: NumericVectorOrArrayRole(len(cols), f"{general_feat}_{{}}", dtype=roles[cols[0]].dtype)}

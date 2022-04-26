@@ -1,16 +1,16 @@
 import logging
 import socket
 import time
+import warnings
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional, Tuple, Dict
 
+import pyspark
 from pyspark import RDD
 from pyspark.ml import Transformer, Estimator
 from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
 from pyspark.sql import SparkSession
-
-from lightautoml.spark.dataset.base import SparkDataFrame
 
 VERBOSE_LOGGING_FORMAT = '%(asctime)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s'
 
@@ -125,6 +125,9 @@ class log_exec_timer:
         return self._duration
 
 
+SparkDataFrame = pyspark.sql.DataFrame
+
+
 def get_cached_df_through_rdd(df: SparkDataFrame, name: Optional[str] = None) -> Tuple[SparkDataFrame, RDD]:
     rdd = df.rdd
     cached_rdd = rdd.setName(name).cache() if name else rdd.cache()
@@ -181,6 +184,13 @@ def cache(df: SparkDataFrame) -> SparkDataFrame:
     if not df.is_cached:
         df = df.cache()
     return df
+
+
+def warn_if_not_cached(df: SparkDataFrame):
+    if not df.is_cached:
+        warnings.warn("Attempting to calculate shape on not cached dataframe. "
+                      "It may take too much time.", RuntimeWarning)
+
 
 
 class NoOpTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):

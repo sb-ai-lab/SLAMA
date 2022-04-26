@@ -23,7 +23,8 @@ from pyspark.sql import SparkSession, Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.functions import pandas_udf
 
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.report.handy_spark_utils import call2
 from lightautoml.spark.transformers.scala_wrappers.laml_string_indexer import LAMLStringIndexer, LAMLStringIndexerModel
 

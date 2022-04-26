@@ -223,20 +223,7 @@ class AutoCVWrap(ObsoleteSparkTransformer):
 
         """
 
-        # TODO: SPARK-LAMA cache should be implemented with an external storage system: Cassandra, Redis, S3, HDFS
-        # if self.cache_dir is not None:
-        #     if not os.path.exists(self.cache_dir):
-        #         os.makedirs(self.cache_dir)
-        # set transformer features
-
         sdf = dataset.data
-
-        # TODO: SPARK-LAMA move subsampling into the base class method
-        # fit
-        # if self.subs is not None and df.shape[0] >= self.subs:
-        #     subs = df.sample(n=self.subs, random_state=self.random_state)
-        # else:
-        #     subs = df
 
         self._img_transformers = dict()
         for c in dataset.features:

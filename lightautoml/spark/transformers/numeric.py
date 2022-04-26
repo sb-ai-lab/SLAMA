@@ -11,7 +11,8 @@ from pyspark.sql.types import FloatType, IntegerType
 from lightautoml.dataset.base import RolesDict
 
 from lightautoml.dataset.roles import ColumnRole, NumericRole, CategoryRole
-from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTransformer, ObsoleteSparkTransformer
 from lightautoml.transformers.numeric import numeric_check

@@ -30,7 +30,7 @@ from lightautoml.dataset.roles import CategoryRole
 from lightautoml.ml_algo.tuning.base import DefaultTuner
 from lightautoml.ml_algo.utils import tune_and_fit_predict
 from lightautoml.spark.automl.presets.tabular_presets import SparkTabularAutoML
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.ml_algo.base import SparkTabularMLAlgo
 from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
 from lightautoml.spark.ml_algo.linear_pyspark import SparkLinearLBFGS
@@ -40,7 +40,7 @@ from lightautoml.spark.reader.base import SparkToSparkReader
 from lightautoml.spark.tasks.base import SparkTask as SparkTask
 from lightautoml.spark.transformers.categorical import SparkLabelEncoderEstimator, SparkTargetEncoderEstimator, \
     SparkCatIntersectionsEstimator
-from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
+from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT, SparkDataFrame
 from lightautoml.spark.validation.iterators import SparkFoldsIterator, SparkDummyIterator
 
 import pandas as pd

@@ -9,7 +9,7 @@ import pandas as pd
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import StructField
 
-from lightautoml.spark.dataset.base import SparkDataFrame
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.tasks.base import SparkMetric
 
 logger = logging.getLogger(__name__)

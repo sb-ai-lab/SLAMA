@@ -9,7 +9,8 @@ from lightautoml.pipelines.features.base import FeaturesPipeline
 from lightautoml.pipelines.selection.base import SelectionPipeline
 from lightautoml.reader.base import RolesDict
 from lightautoml.spark import VALIDATION_COLUMN
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.pipelines.base import InputFeaturesAndRoles
 from lightautoml.spark.pipelines.features.base import SparkFeaturesPipeline
 from lightautoml.validation.base import TrainValidIterator

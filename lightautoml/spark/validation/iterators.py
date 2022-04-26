@@ -3,7 +3,8 @@ import logging
 from typing import Optional, cast, Tuple, Iterable, Sequence
 
 from lightautoml.dataset.base import LAMLDataset, RolesDict
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.transformers.scala_wrappers.balanced_union_partitions_coalescer import \
     BalancedUnionPartitionsCoalescerTransformer
 from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
@@ -121,7 +122,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
     Folds should be defined in Reader, based on cross validation method.
     """
 
-    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None, input_roles: Optional[RolesDict] = None, seed: Optional[float] = None):
+    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None, input_roles: Optional[RolesDict] = None):
         """Creates iterator.
 
         Args:
@@ -129,17 +130,6 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             n_folds: Number of folds.
 
         """
-        # TODO: SPARK-LAMA for debug only, remove later
-        if seed is not None:
-            t_df = (
-                train.data
-                .drop(train.folds_column)
-                .select('*', F.floor(F.rand(seed) * n_folds).astype('int').alias(train.folds_column))
-            )
-            new_train = train.empty()
-            new_train.set_data(t_df, train.features, train.roles)
-            train = new_train
-
         super().__init__(train, input_roles)
 
         num_folds = train.data.select(F.max(train.folds_column).alias('max')).first()['max']

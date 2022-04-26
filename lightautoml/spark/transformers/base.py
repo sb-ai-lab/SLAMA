@@ -10,9 +10,9 @@ from pyspark.ml.functions import array_to_vector
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import ColumnRole
 from lightautoml.dataset.utils import concatenate
-from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
-from lightautoml.spark.utils import log_exec_time
+from lightautoml.spark.utils import log_exec_time, SparkDataFrame
 from lightautoml.transformers.base import LAMLTransformer, ColumnsSelector as LAMAColumnsSelector, \
     ChangeRoles as LAMAChangeRoles
 from lightautoml.transformers.base import Roles
@@ -80,9 +80,9 @@ class SparkColumnsAndRoles(HasInputCols, HasOutputCols, HasInputRoles, HasOutput
         return self.getOrDefault(self.columnsToReplace)
 
     @staticmethod
-    def make_dataset(transformer: 'SparkColumnsAndRoles', base_dataset: SparkDataset, data: SparkDataFrame) -> SparkDataset:
-        # TODO: SPARK-LAMA deepcopy?
-        new_roles = copy(base_dataset.roles)
+    def make_dataset(transformer: 'SparkColumnsAndRoles', base_dataset: SparkDataset, data: SparkDataFrame) \
+            -> SparkDataset:
+        new_roles = deepcopy(base_dataset.roles)
         new_roles.update(transformer.getOutputRoles())
         new_ds = base_dataset.empty()
         new_ds.set_data(data, base_dataset.features + transformer.getOutputCols(),  new_roles)
@@ -240,16 +240,6 @@ class ObsoleteSparkTransformer(LAMLTransformer):
             assert len(not_found_feats) == 0, \
                 f"Not found features {not_found_feats} among existing {existing_feats}"
             self._features = use_features
-
-            # # TODO: SPARK-LAMA reimplement it later
-            # # here we intentionally is going to reduce features to the desired
-            # # to pass the check with rewriting checks themselves
-            # use_roles = {feat: dataset.roles[feat] for feat in use_features}
-            # ds = dataset.empty()
-            # ds.set_data(dataset.data, use_features, use_roles, dataset.dependencies)
-
-            # for check_func in self._fit_checks:
-            #     check_func(ds)
         else:
             self._features = dataset.features
 
@@ -273,16 +263,9 @@ class ObsoleteSparkTransformer(LAMLTransformer):
         return dataset
 
     def fit_transform(self, dataset: SparkDataset) -> SparkDataset:
-        # TODO: SPARK-LAMA probably we should assume
-        #  that fit_transform executes with cache by default
-        #  e.g fit_transform returns a cached and materialized dataset
         logger.info(f"fit_transform in {self._fname_prefix}: {type(self)}")
 
         self.fit(dataset)
-
-        # when True, it means that during fit operation we conducted some action that
-        # materialized our current dataset and thus we can unpersist all its dependencies
-        # because we have data to propagate in the cache already
 
         result = self.transform(dataset)
 

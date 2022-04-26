@@ -15,7 +15,8 @@ from lightautoml.automl.blend import WeightedBlender
 from lightautoml.dataset.np_pd_dataset import NumpyDataset
 from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.reader.base import RolesDict
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.ml_algo.base import AveragingTransformer
 from lightautoml.spark.pipelines.ml.base import SparkMLPipeline

@@ -20,7 +20,7 @@ from lightautoml.dataset.base import RolesDict, LAMLDataset
 from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.pipelines.features.base import FeaturesPipeline
 from lightautoml.pipelines.utils import get_columns_by_role
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.pipelines.base import InputFeaturesAndRoles, OutputFeaturesAndRoles
 from lightautoml.spark.transformers.base import SparkChangeRolesTransformer, ColumnsSelectorTransformer, \
     DropColumnsTransformer
@@ -28,12 +28,11 @@ from lightautoml.spark.transformers.base import SparkBaseEstimator, SparkBaseTra
     SparkSequentialTransformer, SparkEstOrTrans, SparkColumnsAndRoles
 from lightautoml.spark.transformers.categorical import SparkCatIntersectionsEstimator, \
     SparkFreqEncoderEstimator, \
-    SparkLabelEncoderEstimator, SparkOrdinalEncoderEstimator
+    SparkLabelEncoderEstimator, SparkOrdinalEncoderEstimator, SparkMulticlassTargetEncoderEstimator
 from lightautoml.spark.transformers.categorical import SparkTargetEncoderEstimator
 from lightautoml.spark.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer
 from lightautoml.spark.transformers.numeric import SparkQuantileBinningEstimator
-from lightautoml.spark.utils import NoOpTransformer, Cacher, EmptyCacher
-
+from lightautoml.spark.utils import NoOpTransformer, Cacher, EmptyCacher, warn_if_not_cached, SparkDataFrame
 
 logger = logging.getLogger(__name__)
 
@@ -503,11 +502,8 @@ class SparkTabularDataFeatures:
                 result = train.data.select(F.max(train.target_column).alias("max")).first()
                 n_classes = result['max'] + 1
 
-                # TODO: SPARK-LAMA add warning here
-                target_encoder = None
-                # raise NotImplementedError()
-                # if n_classes <= self.multiclass_te_co:
-                #     target_encoder = MultiClassTargetEncoder
+                if n_classes <= self.multiclass_te_co:
+                    target_encoder = SparkMulticlassTargetEncoderEstimator
 
         return target_encoder
 
@@ -569,10 +565,6 @@ class SparkTabularDataFeatures:
 
         roles = {f: train.roles[f] for f in feats_to_select}
 
-        # TODO: removed from CatIntersection
-        # subs = self.subsample,
-        # random_state = self.random_state,
-
         cat_processing = SparkCatIntersectionsEstimator(input_cols=feats_to_select,
                                                         input_roles=roles,
                                                         max_depth=self.max_intersection_depth)
@@ -592,10 +584,7 @@ class SparkTabularDataFeatures:
             Series.
 
         """
-
-        # TODO: LAMA-SPARK: should be conditioned on a global setting
-        #       producing either an error or warning
-        # assert not train.data.is_cached, "The train dataset should be cached before executing this operation"
+        warn_if_not_cached(train.data)
 
         sdf = train.data.select(feats)
 
@@ -603,7 +592,6 @@ class SparkTabularDataFeatures:
         # if self.subsample:
         #     sdf = sdf.sample(withReplacement=False, fraction=self.subsample, seed=self.random_state)
 
-        # TODO SPARK-LAMA: To improve performance we have used approx_count_distinct() instead of count_distinct()
         sdf = sdf.select([F.approx_count_distinct(col).alias(col) for col in feats])
         result = sdf.collect()[0]
 

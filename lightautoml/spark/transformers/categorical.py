@@ -791,11 +791,6 @@ class SparkTargetEncoderTransformer(SparkBaseTransformer, CommonPickleMLWritable
 
         sc = dataset.sql_ctx.sparkSession.sparkContext
 
-        # TODO SPARK-LAMA: Нужно что-то придумать, чтобы ориентироваться по именам колонок, а не их индексу
-        # Просто взять и забираться из dataset.features е вариант, т.к. в transform может прийти другой датасет
-        # В оригинальной ламе об этом не парились, т.к. сразу переходили в numpy. Если прислали датасет не с тем
-        # порядком строк - ну штоош, это проблемы того, кто датасет этот сюда вкинул. Стоит ли нам тоже придерживаться
-        # этой логики?
         for col_name, out_name in zip(self.getInputCols(), self.getOutputCols()):
             _cur_col = F.col(col_name)
 

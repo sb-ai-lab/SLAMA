@@ -16,10 +16,10 @@ from lightautoml.dataset.utils import roles_parser
 from lightautoml.reader.base import Reader, UserDefinedRolesDict, RoleType, RolesDict
 from lightautoml.reader.guess_roles import calc_encoding_rules, rule_based_roles_guess, calc_category_rules, \
     rule_based_cat_handler_guess
-from lightautoml.spark.dataset.base import SparkDataFrame, SparkDataset
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from lightautoml.spark.reader.guess_roles import get_numeric_roles_stat, get_category_roles_stat, get_null_scores
-from lightautoml.spark.utils import Cacher
+from lightautoml.spark.utils import Cacher, SparkDataFrame
 from lightautoml.tasks import Task
 
 logger = logging.getLogger(__name__)
@@ -340,7 +340,6 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
         kwargs["folds"] = folds_col
         kwargs["target"] = self.target_col
 
-        # TODO: SPARK-LAMA is it correct nan ?
         ff = [
             F.when(F.isnull(f), float('nan')).otherwise(F.col(f).astype(FloatType())).alias(f)
             if isinstance(self.roles[f], NumericRole) else f

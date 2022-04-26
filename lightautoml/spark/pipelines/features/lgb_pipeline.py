@@ -38,7 +38,6 @@ class SparkLGBSimpleFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
             Composite datetime, categorical, numeric transformer.
 
         """
-        # TODO: Transformer params to config
         transformers_list = []
 
         # process categories

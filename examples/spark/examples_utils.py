@@ -3,7 +3,7 @@ from typing import Tuple
 
 from pyspark.sql import SparkSession
 
-from lightautoml.spark.dataset.base import SparkDataFrame
+from lightautoml.spark.utils import SparkDataFrame
 
 used_cars_params = {
     "task_type": "reg",

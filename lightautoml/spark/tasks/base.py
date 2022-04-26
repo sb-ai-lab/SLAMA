@@ -5,7 +5,8 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvalu
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql.pandas.functions import pandas_udf
 
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
+from lightautoml.spark.utils import SparkDataFrame
 from lightautoml.spark.tasks.losses.base import SparkLoss
 from lightautoml.tasks import Task as LAMATask
 from lightautoml.tasks.base import LAMLMetric, _default_losses

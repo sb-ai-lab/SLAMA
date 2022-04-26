@@ -14,9 +14,9 @@ from pyspark.sql import functions as F
 
 from lightautoml.spark.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer
 from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
-from ..dataset.base import SparkDataset, SparkDataFrame
+from ..dataset.base import SparkDataset
 from ..transformers.base import DropColumnsTransformer
-from ..utils import DebugTransformer
+from ..utils import DebugTransformer, SparkDataFrame
 from ...utils.timer import TaskTimer
 
 logger = logging.getLogger(__name__)

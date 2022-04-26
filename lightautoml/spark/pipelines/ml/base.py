@@ -1,5 +1,6 @@
 """Base classes for MLPipeline."""
 import uuid
+import warnings
 from copy import copy
 from typing import List, cast, Sequence, Union, Tuple, Optional
 
@@ -73,7 +74,6 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
         fp = cast(SparkFeaturesPipeline, self.features_pipeline)
 
         # train and apply post selection
-        # with cast(SparkDataset, train_valid.train).applying_temporary_caching():
         train_valid = train_valid.apply_selector(self.post_selection)
 
         preds: Optional[SparkDataset] = None
@@ -85,8 +85,8 @@ class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
                 preds = curr_preds
                 train_valid.train = preds
             else:
-                # TODO: warning
-                pass
+                warnings.warn("Current ml_algo has not been trained by some reason. "
+                              "Check logs for more details.", RuntimeWarning)
 
         assert (
             len(self.ml_algos) > 0

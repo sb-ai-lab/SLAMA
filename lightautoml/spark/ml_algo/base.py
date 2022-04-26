@@ -12,17 +12,15 @@ from pyspark.sql.types import IntegerType
 
 from lightautoml.dataset.roles import NumericRole, ColumnRole
 from lightautoml.ml_algo.base import MLAlgo
-from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
 from lightautoml.spark.pipelines.base import InputFeaturesAndRoles
-from lightautoml.spark.utils import Cacher
+from lightautoml.spark.utils import Cacher, SparkDataFrame
 from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
 from lightautoml.utils.timer import TaskTimer
 
 logger = logging.getLogger(__name__)
 
-# TODO: SPARK-LAMA replace it back
-# SparkMLModel = Union[PredictionModel, PipelineModel]
 SparkMLModel = PipelineModel
 
 
@@ -236,7 +234,6 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
 
     @staticmethod
     def _get_predict_column(model: SparkMLModel) -> str:
-        # TODO SPARK-LAMA: Rewrite using class recognition.
         try:
             return model.getPredictionCol()
         except AttributeError:
