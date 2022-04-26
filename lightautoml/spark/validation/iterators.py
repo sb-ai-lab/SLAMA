@@ -4,6 +4,8 @@ from typing import Optional, cast, Tuple, Iterable, Sequence
 
 from lightautoml.dataset.base import LAMLDataset, RolesDict
 from lightautoml.spark.dataset.base import SparkDataset, SparkDataFrame
+from lightautoml.spark.transformers.scala_wrappers.balanced_union_partitions_coalescer import \
+    BalancedUnionPartitionsCoalescerTransformer
 from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
 from lightautoml.validation.base import TrainValidIterator, HoldoutIterator
 
@@ -207,12 +209,15 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
     def combine_val_preds(self, val_preds: Sequence[SparkDataFrame], include_train: bool = False) -> SparkDataFrame:
         assert len(val_preds) > 0
-        num_partitions = val_preds[0].rdd.getNumPartitions()
+
+        if len(val_preds) == 1:
+            return val_preds[0]
+
         full_val_preds = functools.reduce(lambda x, y: x.unionByName(y), val_preds)
-        # TODO: SPARK-LAMA temporary method of preventing of uneven data distribution
-        # hack to prevent uneven distribution of partitions
-        # and data among partitions after coalesce
-        full_val_preds = full_val_preds.localCheckpoint(True)
-        full_val_preds = full_val_preds.coalesce(num_partitions)
+
+        # This transformer is necessary to prevent uneven distribution of partitions after coalescing
+        # It assumes that the dataset sent in had been splitted before union corresponding to folds
+        # The transformer is very specific and shouldn't be used anywhere else
+        full_val_preds = BalancedUnionPartitionsCoalescerTransformer().transform(full_val_preds)
 
         return full_val_preds

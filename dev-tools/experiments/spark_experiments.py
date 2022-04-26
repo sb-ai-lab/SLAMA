@@ -260,11 +260,11 @@ def calculate_automl(
 
     train_data, test_data = prepare_test_and_train(spark, path, seed)
 
-    if dataset_increase_factor > 1:
+    if dataset_increase_factor > 0:
         train_data = train_data.withColumn("new_col", F.explode(F.array(*[F.lit(0) for i in range(dataset_increase_factor)])))
         train_data = train_data.drop("new_col")
         train_data = train_data.repartition(execs * cores).cache()
-        train_data = train_data.cache()
+        # train_data = train_data.cache()
         train_data.write.mode('overwrite').format('noop').save()
         logger.info(f"Duplicated dataset size: {train_data.count()}")
 

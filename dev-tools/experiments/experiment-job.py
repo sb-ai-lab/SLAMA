@@ -25,7 +25,8 @@ MARKER = "EXP-RESULT:"
 statefile_path = "/tmp/exp-job"
 results_path = "/tmp/exp-job"
 
-cfg_path = "./dev-tools/config/experiments/experiment-config-spark-cluster-automl-lgb-load-pipeline.yaml"
+# cfg_path = "./dev-tools/config/experiments/experiment-config-spark-cluster-automl-lgb-load-pipeline.yaml"
+cfg_path = "./dev-tools/config/experiments/experiment-config-spark-cluster-automl-lgb.yaml"
 all_results_path = "/tmp/exp-job/results.txt"
 
 
