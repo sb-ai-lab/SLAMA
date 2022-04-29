@@ -195,7 +195,9 @@ function logs_ex_by_expname() {
 }
 
 function submit_job_yarn() {
-  script_path=$1
+  py_files=$1
+
+  script_path=$2
 
   filename=$(echo ${script_path} | python -c 'import os; path = input(); print(os.path.splitext(os.path.basename(path))[0]);')
 
@@ -219,7 +221,7 @@ function submit_job_yarn() {
     --conf 'spark.scheduler.minRegisteredResourcesRatio=1.0' \
     --conf 'spark.scheduler.maxRegisteredResourcesWaitingTime=180s' \
     --jars jars/spark-lightautoml_2.12-0.1.jar \
-    --py-files dist/LightAutoML-0.3.0.tar.gz ${script_path}
+    --py-files ${py_files} ${script_path}
 }
 
 function submit_job_spark() {
@@ -273,6 +275,7 @@ function help() {
     build-lama-image - Builds and pushes a docker image to be used for running lama remotely on the cluster.
     build-dist - build_jars, build_pyspark_images, build_lama_image in a sequence
     submit-job - Submit a pyspark application with script that represent SLAMA automl app.
+    submit-job-yarn - Submit a pyspark application to YARN cluster to execution.
     port-forward - Forwards port 4040 of the driver to 9040 port
     help - prints this message
 

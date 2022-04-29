@@ -162,7 +162,7 @@ docker-compose ps
 
 Here `datanode`, `historyserver`, `namenode`, `nodemanager`, `resourcemanager` is services of Hadoop. `namenode` and `datanode` is parts of HDFS. `resourcemanager`, `nodemanager` and `historyserver` is parts of YARN. For more information see the documentation at https://hadoop.apache.org/docs/r1.2.1/hdfs_design.html and https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/YARN.html.
 
-`spark-submit` is service to submitting our applications to Hadoop YARN for execution (see step 8).
+`spark-submit` is service to submitting our applications to Hadoop YARN for execution (see step 9).
 
 If one of the services did not up, then you need to look at its logs. For example `resourcemanager` logs.
 ```
@@ -171,11 +171,13 @@ docker-compose logs -f resourcemanager
 
 #### 9. Send job to cluster via `spark-submit` container
 ```
-docker exec -ti spark-submit bash -c "./bin/slamactl.sh submit-job-yarn examples/spark/tabular-preset-automl.py"
+docker exec -ti spark-submit bash -c "./bin/slamactl.sh submit-job-yarn dist/LightAutoML-0.3.0.tar.gz,examples/spark/examples_utils.py examples/spark/tabular-preset-automl.py"
 ```
 #### 10. To monitor application execution, you can use the hadoop web interface (http://localhost:8088), which displays the status of the application, resources and application logs.
 ![hadoop_applications_web_ui](../imgs/hadoop_applications_web_ui.png)
+
 Let's see the information about the application and its logs.
+
 ![hadoop_view_application1](../imgs/hadoop_view_application1.png)
 
 ![hadoop_view_application2](../imgs/hadoop_view_application2.png)
