@@ -1,13 +1,14 @@
 from copy import deepcopy
-from typing import Dict, Optional, Sequence, List
+from typing import Dict, Iterator, Optional, Sequence, List
 from collections import defaultdict, OrderedDict
 from itertools import chain, combinations
 from datetime import datetime
 import holidays
 import numpy as np
 import pandas as pd
-from pandas import Series
 from pyspark.sql import functions as F, types as SparkTypes, DataFrame as SparkDataFrame
+from pyspark.sql.pandas.functions import pandas_udf
+from pyspark.sql.types import IntegerType
 
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
@@ -22,44 +23,44 @@ from pyspark.ml.param.shared import HasInputCols, HasOutputCols
 from pyspark.ml.param.shared import TypeConverters, Param, Params
 
 
-def is_holiday(timestamp: int,
-               country: str,
-               state: Optional[str] = None,
-               prov: Optional[str] = None) -> int:
 
-    date = datetime.fromtimestamp(timestamp)
-    return 1 if date in holidays.CountryHoliday(
-        years=date.year,
-        country=country,
-        prov=prov,
-        state=state
-    ) else 0
+def get_unit_of_timestamp_column(seas: str, col: str):
+    """Generates pyspark column to extract unit of time from timestamp
 
-
-def get_timestamp_attr(timestamp: int, attr: str) -> int:
-    if not timestamp:
-        return None
-
-    try:
-        date = pd.to_datetime(datetime.fromtimestamp(timestamp))
-    except:
-        date = datetime.now()
-
-    try:
-        at = getattr(date, attr)
-        return at()
-    except TypeError:
-        return at
-
-
-# TODO SPARK-LAMA: Replace with pandas_udf.
-# They should be more efficient and arrow optimization is possible for them.
-# https://github.com/fonhorst/LightAutoML/pull/57/files/57c15690d66fbd96f3ee838500de96c4637d59fe#r749551873
-is_holiday_udf = F.udf(lambda *args, **kwargs: is_holiday(*args, **kwargs), SparkTypes.IntegerType())
-
-# TODO SPARK-LAMA: It should to fail.
-# https://github.com/fonhorst/LightAutoML/pull/57/files/57c15690d66fbd96f3ee838500de96c4637d59fe#r749610253
-get_timestamp_attr_udf = F.udf(lambda *args, **kwargs: get_timestamp_attr(*args, **kwargs), SparkTypes.IntegerType())
+    Args:
+        seas (str): unit of time: `y`(year), `m`(month), `d`(day),
+        `wd`(weekday), `hour`(hour), `min`(minute), `sec`(second), `ms`(microsecond), `ns`(nanosecond)
+        col (str): column name with datetime values
+    """
+    if seas == 'y':
+        return F.year(F.to_timestamp(F.col(col)))
+    elif seas == 'm':
+        return F.month(F.to_timestamp(F.col(col)))
+    elif seas == 'd':
+        return F.dayofmonth(F.to_timestamp(F.col(col)))
+    # TODO SPARK-LAMA: F.dayofweek() starts numbering from another day.
+    # Differs from pandas.Timestamp.weekday.
+    # elif seas == 'wd':
+    #     return F.dayofweek(F.to_timestamp(F.col(col)))
+    elif seas == 'hour':
+        return F.hour(F.to_timestamp(F.col(col)))
+    elif seas == 'min':
+        return F.minute(F.to_timestamp(F.col(col)))
+    elif seas == 'sec':
+        return F.second(F.to_timestamp(F.col(col)))
+    else:
+        @pandas_udf(returnType=IntegerType())
+        def get_timestamp_attr(arrs: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for x in arrs:
+                def convert_to_datetime(timestamp: int):
+                    try:
+                        date = pd.to_datetime(datetime.fromtimestamp(timestamp))
+                    except:
+                        date = datetime.now()
+                    return date
+                x = x.apply(lambda d: convert_to_datetime(d))
+                yield getattr(x.dt, date_attrs[seas])
+        return get_timestamp_attr(F.to_timestamp(F.col(col)).cast("long"))
 
 
 class SparkDatetimeHelper:
@@ -195,20 +196,27 @@ class SparkDateSeasonsTransformer(SparkBaseTransformer, SparkDatetimeHelper, Com
             fcol = F.to_timestamp(F.col(col)).cast("long")
             seas_cols = [(
                 F.when(F.isnan(fcol) | F.isnull(fcol), None)
-                .otherwise(get_timestamp_attr_udf(fcol, F.lit(date_attrs[seas])))
+                .otherwise(get_unit_of_timestamp_column(seas, col))
                 .alias(f"{self._fname_prefix}_{seas}__{col}")
             ) for seas in self.transformations[col]]
 
             new_cols.extend(seas_cols)
 
             if roles[col].country is not None:
+                @pandas_udf(returnType=IntegerType())
+                def is_holiday(arrs: Iterator[pd.Series]) -> Iterator[pd.Series]:
+                    for x in arrs:
+                        x = x.apply(lambda d: datetime.fromtimestamp(d)).dt.normalize()
+                        _holidays = holidays.CountryHoliday(
+                            years=np.unique(x.dt.year.values),
+                            country=roles[col].country,
+                            prov=roles[col].prov,
+                            state=roles[col].state
+                        )
+                        yield x.isin(_holidays).astype(int)
+
                 hol_col = (
-                    is_holiday_udf(
-                        fcol,
-                        F.lit(roles[col].country),
-                        F.lit(roles[col].state),
-                        F.lit(roles[col].prov)
-                    ).alias(f"{self._fname_prefix}_hol__{col}")
+                    is_holiday(fcol).alias(f"{self._fname_prefix}_hol__{col}")
                 )
                 new_cols.append(hol_col)
 
