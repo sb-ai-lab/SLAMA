@@ -335,7 +335,7 @@ def main():
 
     cfg = read_config(cfg_path)
     exp_cfgs = generate_experiments(cfg)
-    exp_procs = limit_procs(run_experiments(exp_cfgs), max_parallel_ops=5)
+    exp_procs = limit_procs(run_experiments(exp_cfgs), max_parallel_ops=1)
     register_results(exp_procs, total=len(exp_cfgs))
     print_all_results_file()
 

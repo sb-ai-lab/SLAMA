@@ -1,7 +1,7 @@
 package org.apache.spark.ml.feature.lightautoml
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.ml.feature.{StringIndexer, StringIndexerAggregator, StringIndexerBase, StringIndexerModel}
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
@@ -11,9 +11,9 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions.{GenericRowWithSchema, If, Literal}
-import org.apache.spark.sql.functions.{collect_set, udf}
+import org.apache.spark.sql.functions.{collect_set, udf, lit}
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders, SparkSession}
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
@@ -370,8 +370,12 @@ class LAMLStringIndexerModel(override val uid: String,
       // expression, however, lookup for a key in a map is not efficient in SparkSQL now.
       // See `ElementAt` and `GetMapValue` expressions. If SQL's map lookup is improved,
       // we can consider to change this.
+      val ctx = SparkContext.getActive.get
+      val labelToIndexBcst = ctx.broadcast(labelToIndex)
+
       val filter = udf { label: String =>
-        labelToIndex.contains(label)
+        val l2idx = labelToIndexBcst.value
+        l2idx.contains(label)
       }
       filter(dataset(inputColName))
     }
@@ -383,23 +387,31 @@ class LAMLStringIndexerModel(override val uid: String,
   private def getIndexer(labelToIndex: OpenHashMap[String, Double]) = {
     val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
 
+    val ctx = SparkContext.getActive.get
+    val labelToIndexBcst = ctx.broadcast(labelToIndex)
+
+    val isNanLast = $(nanLast)
+    val defaultVal = $(defaultValue)
+
     udf { label: String =>
+      val l2idx = labelToIndexBcst.value
+
       if (label == null) {
         if (keepInvalid) {
-          if ($(nanLast)){
-            labelToIndex("NaN")
+          if (isNanLast){
+            l2idx("NaN")
           } else {
-            $(defaultValue)
+            defaultVal
           }
         } else {
           throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
                   "NULLS, try setting StringIndexer.handleInvalid.")
         }
       } else {
-        if (labelToIndex.contains(label)) {
-          labelToIndex(label)
+        if (l2idx.contains(label)) {
+          l2idx(label)
         } else if (keepInvalid) {
-          $(defaultValue)
+          defaultVal
         } else {
           throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
                   s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
@@ -422,7 +434,7 @@ class LAMLStringIndexerModel(override val uid: String,
       dataset
     }
 
-    for (i <- 0 until outputColNames.length) {
+    for (i <- outputColNames.indices) {
       val inputColName = inputColNames(i)
       val outputColName = outputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
@@ -433,13 +445,14 @@ class LAMLStringIndexerModel(override val uid: String,
                 "Skip StringIndexerModel for this column.")
         outputColNames(i) = null
       } else {
-        val labelsForMetadata = getHandleInvalid match {
-          case StringIndexer.KEEP_INVALID => labels.map(_._1) :+ "__unknown"
-          case _ => labels.map(_._1)
-        }
+
+        // we don't put labels themselves into metadata
+        // cause they can weigh far too much (for instance, 100 - 500 MB)
+        // and would be broadcasted with the task each time
+        // which creates additional overheads on deserialization of tasks in workers
         val metadata = NominalAttribute.defaultAttr
                 .withName(outputColName)
-                .withValues(labelsForMetadata)
+                .withNumValues(labels.length)
                 .toMetadata()
 
         val indexer = getIndexer(labelToIndex)
