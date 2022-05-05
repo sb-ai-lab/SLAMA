@@ -97,6 +97,9 @@ class SparkMetric(LAMLMetric):
 
 
 class SparkTask(LAMATask):
+    """
+    Specify task (binary classification, multiclass classification, regression), metrics, losses.
+    """
 
     _default_metrics = {"binary": "auc", "reg": "mse", "multiclass": "crossentropy"}
 
@@ -147,5 +150,6 @@ class SparkTask(LAMATask):
         self.metric_name = metric
 
     def get_dataset_metric(self) -> LAMLMetric:
+        """ Obtains a function to calculate the metric on a dataset. """
         spark_metric_name = self._supported_metrics[self.name][self.metric_name]
         return SparkMetric(self.name, metric_name=spark_metric_name, greater_is_better=self.greater_is_better)

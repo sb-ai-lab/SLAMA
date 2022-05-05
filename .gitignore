@@ -165,3 +165,6 @@ dumps
 *.orig
 
 jars/*.jar
+
+docs/generated
+docs/slama-docs/generated

@@ -38,8 +38,12 @@ LightAutoML provides easy-to-use pipeline creation, that enables:
     validation
 
 
+SLAMA (Spark version of LAMA)
+==================
+.. toctree::
+    :maxdepth: 1
 
-
+    slama-docs/slama_index
 
 Indices and Tables
 ==================
