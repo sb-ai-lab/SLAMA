@@ -89,7 +89,7 @@ pyspark = "3.2.0"
 pyarrow = ">=1.0.0"
 synapseml = "0.9.5"
 toposort = "1.7"
-onnxmltools = "1.7.0"
+onnxmltools = "^1.11.0"
 
 
 [tool.poetry.dev-dependencies]
