@@ -14,7 +14,7 @@ For further information check docs in the root of the project containing dedicat
 
 <a name="apache"></a>
 # License
-This project is licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/fonhorst/LightAutoML_Spark/blob/master/LICENSE) file for more details.
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/fonhorst/LightAutoML_Spark/blob/distributed/master/LICENSE) file for more details.
 
 
 # Installation
