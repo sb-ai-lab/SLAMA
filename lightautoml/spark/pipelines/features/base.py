@@ -83,10 +83,18 @@ class FittedPipe:
 
 
 class SelectTransformer(Transformer):
+    """
+    Transformer that returns ``pyspark.sql.DataFrame`` with selected columns.
+    """
+
     colsToSelect = Param(Params._dummy(), "colsToSelect",
                         "columns to select from the dataframe")
 
     def __init__(self, cols_to_select: List[str]):
+        """
+        Args:
+            cols_to_select (List[str]): List of columns to select from input dataframe
+        """
         super().__init__()
         self.set(self.colsToSelect, cols_to_select)
 
@@ -642,11 +650,22 @@ class SparkTabularDataFeatures:
 
 
 class SparkEmptyFeaturePipeline(SparkFeaturesPipeline):
+    """
+    This class creates pipeline with ``SparkNoOpTransformer``
+    """
+
     def create_pipeline(self, train: SparkDataset) -> SparkEstOrTrans:
+        """
+        Returns ``SparkNoOpTransformer`` instance
+        """
         return SparkNoOpTransformer()
 
 
 class SparkNoOpTransformer(SparkBaseTransformer):
+    """
+    This transformer does nothing, it just returns the input dataframe unchanged.
+    """
+
     def __init__(self):
         super().__init__(input_cols=[], output_cols=[], input_roles=dict(), output_roles=dict())
 

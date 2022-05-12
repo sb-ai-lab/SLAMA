@@ -5,6 +5,10 @@ import numpy as np
 
 
 class NumericVectorOrArrayRole(NumericRole):
+    """
+    Role that describe numeric vector or numeric array.
+    """
+
     _name = "NumericOrArrayVector"
 
     def __init__(
@@ -43,6 +47,7 @@ class NumericVectorOrArrayRole(NumericRole):
     def feature_name_at(self, position: int) -> str:
         """
         produces a name for feature on ``position`` in the vector
+
         Args:
             position: position in the vector in range [0 .. size]
 

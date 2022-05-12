@@ -290,6 +290,9 @@ class SparkTabularMLAlgo(MLAlgo, InputFeaturesAndRoles):
 
 
 class AveragingTransformer(Transformer, HasInputCols, HasOutputCol, DefaultParamsWritable, DefaultParamsReadable):
+    """
+    Transformer that gets one or more columns and produce column with average values.
+    """
     taskName = Param(Params._dummy(), "taskName", "task name")
     removeCols = Param(Params._dummy(), "removeCols", "cols to remove")
     convertToArrayFirst = Param(Params._dummy(), "convertToArrayFirst", "convert to array first")
@@ -304,6 +307,16 @@ class AveragingTransformer(Transformer, HasInputCols, HasOutputCol, DefaultParam
                  convert_to_array_first: bool = False,
                  weights: Optional[List[int]] = None,
                  dim_num: int = 1):
+        """
+        Args:
+            task_name (str, optional): Task name: "binary", "multiclass" or "reg".
+            input_cols (List[str], optional): List of input columns.
+            output_col (str, optional): Output column name. Defaults to "averaged_values".
+            remove_cols (Optional[List[str]], optional): Columns need to remove. Defaults to None.
+            convert_to_array_first (bool, optional): If `True` then will be convert input vectors to arrays. Defaults to False.
+            weights (Optional[List[int]], optional): List of weights to scaling output values. Defaults to None.
+            dim_num (int, optional): Dimension of input columns. Defaults to 1.
+        """
         super().__init__()
         self.set(self.taskName, task_name)
         self.set(self.inputCols, input_cols)

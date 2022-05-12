@@ -17,6 +17,9 @@ from lightautoml.tasks import Task
 
 
 class SparkDataset(LAMLDataset):
+    """
+    Implements a dataset that uses a ``pyspark.sql.DataFrame`` internally, stores some internal state (features, roles, ...) and provide methods to work with dataset.
+    """
     _init_checks = ()
     _data_checks = ()
     _concat_checks = ()
@@ -33,7 +36,7 @@ class SparkDataset(LAMLDataset):
     @classmethod
     def concatenate(cls, datasets: Sequence["SparkDataset"]) -> "SparkDataset":
         """
-        Concat multiple datasets by joining their internal pyspark.sql.DataFrame
+        Concat multiple datasets by joining their internal ``pyspark.sql.DataFrame``
         using inner join on special hidden '_id' column
         Args:
             datasets: spark datasets to be joined

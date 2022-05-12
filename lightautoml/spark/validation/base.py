@@ -17,6 +17,10 @@ from lightautoml.validation.base import TrainValidIterator
 
 
 class SparkBaseTrainValidIterator(TrainValidIterator, InputFeaturesAndRoles, ABC):
+    """
+    Implements applying selection pipeline and feature pipeline to SparkDataset.
+    """
+
     TRAIN_VAL_COLUMN = VALIDATION_COLUMN
 
     def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):

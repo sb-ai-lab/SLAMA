@@ -40,6 +40,25 @@ base_dir = os.path.dirname(__file__)
 
 
 class SparkTabularAutoML(SparkAutoMLPreset):
+    """
+    Spark version of :class:`TabularAutoML <lightautoml.automl.presets.tabular_presets.TabularAutoML>`.
+    Represent high level entity of spark lightautoml. Use this class to create automl instance.
+
+    Example:
+
+        >>> automl = SparkTabularAutoML(
+        >>>     spark=spark,
+        >>>     task=SparkTask('binary'),
+        >>>     general_params={"use_algos": [["lgb"]]},
+        >>>     lgb_params={'use_single_dataset_mode': True},
+        >>>     reader_params={"cv": cv, "advanced_roles": False}
+        >>> )
+        >>> oof_predictions = automl.fit_predict(
+        >>>     train_data,
+        >>>     roles=roles
+        >>> )
+    """
+
     _default_config_path = "tabular_config.yml"
 
     # set initial runtime rate guess for first level models
@@ -578,6 +597,23 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                                     n_bins: int,
                                     ice_fraction: float = 1.0,
                                     ice_fraction_seed: int = 42) -> Tuple[List, List, List]:
+        """Returns `grid`, `ys` and `counts` calculated on input numeric column to plot PDP.
+
+        Args:
+            df (SparkDataFrame): Spark DataFrame with `feature_name` column
+            feature_name (str): feature column name
+            model (PipelineModel): Spark Pipeline Model
+            prediction_col (str): prediction column to be created by the `model`
+            n_bins (int): The number of bins to produce. Raises exception if n_bins < 2.
+            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions. Useful for very large dataframe. Defaults to 1.0.
+            ice_fraction_seed (int, optional): Seed for `ice_fraction`. Defaults to 42.
+
+        Returns:
+            Tuple[List, List, List]:
+            `grid` is list of categories,
+            `ys` is list of predictions by category,
+            `counts` is numbers of values by category
+        """
         counts, bin_edges = SparkTabularAutoML.get_histogram(df, feature_name, n_bins)
         grid = (bin_edges[:-1] + bin_edges[1:]) / 2
         ys = []
@@ -611,7 +647,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                                          n_top_cats: int,
                                          ice_fraction: float = 1.0,
                                          ice_fraction_seed: int = 42) -> Tuple[List, List, List]:
-        """Returns grid, ys, counts to plot PDP
+        """Returns `grid`, `ys` and `counts` calculated on input categorical column to plot PDP.
 
         Args:
             df (SparkDataFrame): Spark DataFrame with `feature_name` column
@@ -619,6 +655,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             model (PipelineModel): Spark Pipeline Model
             prediction_col (str): prediction column to be created by the `model`
             n_top_cats (int): param to selection top n categories
+            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions. Useful for very large dataframe. Defaults to 1.0.
+            ice_fraction_seed (int, optional): Seed for `ice_fraction`. Defaults to 42.
         
         Returns:
             Tuple[List, List, List]:
@@ -706,6 +744,24 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                                       reader,
                                       ice_fraction: float = 1.0,
                                       ice_fraction_seed: int = 42) -> Tuple[List, List, List]:
+        """Returns `grid`, `ys` and `counts` calculated on input datetime column to plot PDP.
+
+        Args:
+            df (SparkDataFrame): Spark DataFrame with `feature_name` column
+            feature_name (str): feature column name
+            model (PipelineModel): Spark Pipeline Model
+            prediction_col (str): prediction column to be created by the `model`
+            datetime_level (str): Unit of time that will be modified to calculate dependence: "year", "month" or "dayofweek"
+            reader (_type_): Automl reader to transform input dataframe before `model` inferring.
+            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions. Useful for very large dataframe. Defaults to 1.0.
+            ice_fraction_seed (int, optional): Seed for `ice_fraction`. Defaults to 42.
+
+        Returns:
+            Tuple[List, List, List]:
+            `grid` is list of categories,
+            `ys` is list of predictions by category,
+            `counts` is numbers of values by category
+        """
         df = reader.read(df).data
         if datetime_level == "year":
             feature_cnt = df.groupBy(F.year(feature_name).alias("year")).count().orderBy(F.asc("year")).collect()

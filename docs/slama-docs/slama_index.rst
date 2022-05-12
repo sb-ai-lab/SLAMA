@@ -3,6 +3,7 @@ SLAMA (Spark version of LAMA)
 
 This is a distributed version of LAMA library written on Spark framework.
 SLAMA brings LAMA functionality on Spark including:
+
 - Automatic hyperparameter tuning, data processing.
 - Automatic typing, feature selection.
 - Automatic time utilization.
@@ -30,3 +31,31 @@ Known limitations:
     tasks
     transformers
     validation
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Deploy on Minikube
+
+    slama_minikube_readme
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on Kubernetes Cluster
+
+    kubernetes_cluster
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on Spark Standalone Cluster
+
+    standalone_cluster
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on YARN Cluster
+
+    yarn_cluster

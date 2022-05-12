@@ -24,6 +24,10 @@ def argmax_in_vector(vec: pd.Series) -> pd.Series:
 
 
 class SparkMetric(LAMLMetric):
+    """
+    Spark version of metric function that implements function assessing prediction error.
+    """
+
     def __init__(
         self,
         name: str,
