@@ -1,7 +1,7 @@
 LightAutoML documentation
 =========================
 
-`LightAutoML <https://github.com/sberbank-ai-lab/LightAutoML>`_ is open-source Python library aimed at automated machine learning.
+`LightAutoML <https://github.com/fonhorst/LightAutoML_Spark>`_ is open-source Python library aimed at automated machine learning.
 It is designed to be lightweight and efficient for various tasks with tabular, text data.
 LightAutoML provides easy-to-use pipeline creation, that enables:
 

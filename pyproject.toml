@@ -3,18 +3,17 @@ name = "LightAutoML"
 version = "0.3.0"
 description = "Fast and customizable framework for automatic ML model creation (AutoML)"
 authors = [
-    "Alexander Ryzhkov <AMRyzhkov@sberbank.ru>",
-    "Anton Vakhrushev <AGVakhrushev@sberbank.ru>",
-    "Dmitrii Simakov <Simakov.D.E@sberbank.ru>",
-    "Rinchin Damdinov <RGDamdinov@sberbank.ru>",
-    "Alexander Kirilin <ADKirilin@sberbank.ru>",
-    "Vasilii Bunakov <VABunakov@sberbank.ru>",
-    "Pavel Shvets <PIShvets@sberbank.ru>",
+    "Alexander Ryzhkov <alexmryzhkov@gmail.com>",
+    "Anton Vakhrushev <btbpanda@gmail.com>",
+    "Dmitrii Simakov <dmitryevsimakov@gmail.com>",
+    "Rinchin Damdinov <damdinovr@gmail.com>",
+    "Alexander Kirilin <adkirilin@gmail.com>",
+    "Vasilii Bunakov <va.bunakov@gmail.com>",
 ]
 readme = "README.md"
 license = "Apache-2.0"
 homepage = "https://lightautoml.readthedocs.io/en/latest/"
-repository = "https://github.com/sberbank-ai-lab/LightAutoML"
+repository = "https://github.com/AILab-MLTools/LightAutoML"
 classifiers = [
     "Programming Language :: Python :: 3.6",
     "Programming Language :: Python :: 3.7",

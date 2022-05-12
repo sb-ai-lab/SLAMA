@@ -13,9 +13,12 @@ from lightautoml.spark.dataset.base import SparkDataset
 from lightautoml.spark.tasks.base import SparkTask
 from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
+
+# NOTE! This demo requires datasets to be downloaded into a local folder.
+# Run ./bin/download-datasets.sh to get required datasets into the folder.
 
 
 def main(spark: SparkSession, dataset_name: str, seed: int):
@@ -25,8 +28,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 2. use_algos = [["lgb_tuned"]]
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    # use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb"]]
+    use_algos = [["lgb", "linear_l2"], ["lgb"]]
     cv = 5
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
@@ -42,7 +44,6 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             task=task,
             general_params={"use_algos": use_algos},
             lgb_params={'use_single_dataset_mode': True, 'convert_to_onnx': False, 'mini_batch_size': 1000},
-            # linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False}
         )
 
@@ -60,9 +61,6 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
     transformer = automl.make_transformer()
 
-    # we delete this variable to make garbage collection of a local checkpoint
-    # used to produce Spark DataFrame with predictions possible
-    del oof_predictions
     automl.release_cache()
 
     with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
@@ -118,7 +116,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         "metric_value": metric_value,
         "test_metric_value": test_metric_value,
         "train_duration_secs": train_timer.duration,
-        # "predict_duration_secs": predict_timer.duration,
+        "predict_duration_secs": predict_timer.duration,
         "saving_duration_secs": saving_timer.duration,
         "loading_duration_secs": loading_timer.duration
     }
@@ -146,8 +144,8 @@ def multirun(spark: SparkSession, dataset_name: str):
 if __name__ == "__main__":
     spark_sess = get_spark_session()
     # One can run:
-    # 1. main(dataset_name="used_cars_dataset", seed=42)
-    # 2. multirun(spark_sess, dataset_name="used_cars_dataset")
-    main(spark_sess, dataset_name="used_cars_dataset", seed=42)
+    # 1. main(dataset_name="lama_test_dataste", seed=42)
+    # 2. multirun(spark_sess, dataset_name="lama_test_dataset")
+    main(spark_sess, dataset_name="lama_test_dataset", seed=42)
 
     spark_sess.stop()

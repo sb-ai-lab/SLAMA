@@ -21,8 +21,8 @@ LIB_PATH = os.path.join(CURR_PATH, os.path.pardir)
 sys.path.insert(0, LIB_PATH)
 
 project = "LightAutoML"
-copyright = "%s, Sber AI Lab" % str(datetime.datetime.now().year)
-author = "Sber AI Lab"
+copyright = "%s, AI Lab ML Tools" % str(datetime.datetime.now().year)
+author = "AI Lab ML Tools"
 
 os.environ["DOCUMENTATION_ENV"] = "True"
 

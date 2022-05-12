@@ -164,7 +164,6 @@ jars_cache
 dumps
 *.orig
 
-jars/*.jar
-
 docs/generated
 docs/slama-docs/generated
+rsync-repo.sh

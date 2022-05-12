@@ -195,10 +195,11 @@ class AutoMLPreset(AutoML):
         )
         logger.info(f"Task: {self.task.name}\n")
 
-        logger.info("Start automl preset with listed constraints:")
-        logger.info(f"- time: {self.timer.timeout:.2f} seconds")
-        logger.info(f"- CPU: {self.cpu_limit} cores")
-        logger.info(f"- memory: {self.memory_limit} GB\n")
+        # TODO: SLAMA unapplicable for slama
+        # logger.info("Start automl preset with listed constraints:")
+        # logger.info(f"- time: {self.timer.timeout:.2f} seconds")
+        # logger.info(f"- CPU: {self.cpu_limit} cores")
+        # logger.info(f"- memory: {self.memory_limit} GB\n")
 
         self.timer.start()
         result = super().fit_predict(

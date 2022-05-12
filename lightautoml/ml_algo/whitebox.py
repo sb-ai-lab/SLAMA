@@ -25,7 +25,7 @@ WbModel = Union[autowoe.AutoWoE, autowoe.ReportDeco]
 class WbMLAlgo(TabularMLAlgo):
     """WhiteBox - scorecard model.
 
-    https://github.com/sberbank-ai-lab/AutoMLWhitebox
+     https://github.com/AILab-MLTools/AutoMLWhitebox
 
     default_params:
 

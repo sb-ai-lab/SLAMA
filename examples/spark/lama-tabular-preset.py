@@ -9,9 +9,12 @@ from lightautoml.automl.presets.tabular_presets import TabularAutoML
 from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.tasks import Task
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
+
+# NOTE! This demo requires datasets to be downloaded into a local folder.
+# Run ./bin/download-datasets.sh to get required datasets into the folder.
 
 
 def main(dataset_name: str, seed: int):
@@ -22,9 +25,7 @@ def main(dataset_name: str, seed: int):
     # 1. use_algos = [["lgb"]]
     # 2. use_algos = [["linear_l2"]]
     # 3. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    # use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    # use_algos = [["linear_l2"]]
-    use_algos = [["lgb"]]
+    use_algos = [["lgb", "linear_l2"], ["lgb"]]
 
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 

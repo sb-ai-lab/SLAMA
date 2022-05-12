@@ -907,11 +907,9 @@ def calculate_broadcast(spark: SparkSession, **_):
     df_2.write.mode('overwrite').format('noop').save()
 
     print("Finished")
-    # time.sleep(600)
 
 
 def calculate_le_scaling(spark: SparkSession, path: str, **_):
-    # /mnt/ess_storage/DN_1/storage/sber_LAMA/data_for_LE_TE_tests/
     execs = int(spark.conf.get('spark.executor.instances'))
     cores = int(spark.conf.get('spark.executor.cores'))
 

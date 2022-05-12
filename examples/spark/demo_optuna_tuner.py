@@ -37,9 +37,12 @@ from pyspark.ml import PipelineModel
 
 from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/lama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
+
+# NOTE! This demo requires datasets to be downloaded into a local folder.
+# Run ./bin/download-datasets.sh to get required datasets into the folder.
 
 
 if __name__ == "__main__":

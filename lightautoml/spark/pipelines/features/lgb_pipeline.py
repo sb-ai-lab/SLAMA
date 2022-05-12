@@ -91,7 +91,6 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
             auto_unique_co: Switch to target encoding if high cardinality.
 
         """
-        print("lama advanced pipeline ctr")
         super().__init__(
             cacher_key=cacher_key,
             multiclass_te_co=multiclass_te_co,

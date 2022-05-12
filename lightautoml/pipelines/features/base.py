@@ -58,7 +58,6 @@ class FeaturesPipeline:
     """
 
     def __init__(self, **kwargs):
-        print("features pipeline ctr")
         super().__init__(**kwargs)
         self.pipes: List[Callable[[LAMLDataset], LAMLTransformer]] = [self.create_pipeline]
         self.sequential = False

@@ -822,13 +822,6 @@ class SparkReportDeco:
 
         return df
 
-    def _get_mock_data(self):
-        csv_df = pd.read_csv("/mnt/hgfs/Projects/Sber/LAMA/Sber-LAMA-Stuff/dumps/labels_preds.csv")
-        csv_df = csv_df[["y_true", "y_pred", "label"]]
-        csv_df.columns = ["y_true", "raw", "label"]
-        csv_df["_id"] = range(1, len(csv_df)+1)
-        return SparkSession.builder.getOrCreate().createDataFrame(csv_df)
-
     def fit_predict(self, *args, **kwargs):
         """Wrapped ``automl.fit_predict`` method.
 
