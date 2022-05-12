@@ -23,7 +23,7 @@ First of all you need to install [git](https://git-scm.com/downloads) and [poetr
 ```bash
 
 # Load LAMA source code
-git clone https://github.com/AILab-MLTools/LightAutoML.git
+git clone https://github.com/fonhorst/LightAutoML_Spark.git
 
 cd LightAutoML/
 
