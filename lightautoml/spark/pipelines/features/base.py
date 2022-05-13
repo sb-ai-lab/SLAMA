@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 
 
 def build_graph(begin: SparkEstOrTrans):
+    """Fill dict that represents graph of estimators and transformers
+
+    Args:
+        begin (SparkEstOrTrans): pipeline to extract graph of estimators and transformers
+    """
     graph = dict()
 
     def find_start_end(tr: SparkEstOrTrans) -> Tuple[List[SparkEstOrTrans], List[SparkEstOrTrans]]:

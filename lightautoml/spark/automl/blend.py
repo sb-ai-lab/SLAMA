@@ -148,18 +148,28 @@ class SparkBlender(ABC):
 
 
 class SparkBestModelSelector(SparkBlender, WeightedBlender):
+    """Select best single model from level.
+
+    Drops pipes that are not used in calc best model.
+    Works in general case (even on some custom things)
+    and most efficient on inference.
+    Perform worse than other on tables,
+    specially if some of models was terminated by timer.
+
+    """
+
     def _fit_predict(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]) \
             -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
         """Simple fit - just take one best.
 
-                Args:
-                    predictions: Sequence of datasets with predictions.
-                    pipes: Sequence of pipelines.
+        Args:
+            predictions: Sequence of datasets with predictions.
+            pipes: Sequence of pipelines.
 
-                Returns:
-                    Single prediction dataset and Sequence of pruned pipelines.
+        Returns:
+            Single prediction dataset and Sequence of pruned pipelines.
 
-                """
+        """
         splitted_models_and_pipes = self.split_models(predictions, pipes)
 
         best_pred = None
@@ -190,6 +200,15 @@ class SparkBestModelSelector(SparkBlender, WeightedBlender):
 
 
 class SparkWeightedBlender(SparkBlender, WeightedBlender):
+    """Weighted Blender based on coord descent, optimize task metric directly.
+
+    Weight sum eq. 1.
+    Good blender for tabular data,
+    even if some predictions are NaN (ex. timeout).
+    Model with low weights will be pruned.
+
+    """
+
     def __init__(self, max_iters: int = 5, max_inner_iters: int = 7, max_nonzero_coef: float = 0.05,):
         SparkBlender.__init__(self)
         WeightedBlender.__init__(self, max_iters, max_inner_iters, max_nonzero_coef)
@@ -251,6 +270,14 @@ class SparkWeightedBlender(SparkBlender, WeightedBlender):
 
 
 class SparkMeanBlender(SparkBlender):
+    """Simple average level predictions.
+
+    Works only with TabularDatasets.
+    Doesn't require target to fit.
+    No pruning.
+
+    """
+    
     def _fit_predict(self,
                      predictions: SparkDataset,
                      pipes: Sequence[SparkMLPipeline]

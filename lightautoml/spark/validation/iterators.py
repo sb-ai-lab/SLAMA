@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class SparkDummyIterator(SparkBaseTrainValidIterator):
+    """
+    Simple one step iterator over train part of SparkDataset
+    """
+
     def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):
         super().__init__(train, input_roles)
         self._curr_idx = 0
@@ -63,6 +67,8 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
 
 
 class SparkHoldoutIterator(SparkBaseTrainValidIterator):
+    """Simple one step iterator over one fold of SparkDataset
+    """
     def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):
         super().__init__(train, input_roles)
         self._curr_idx = 0

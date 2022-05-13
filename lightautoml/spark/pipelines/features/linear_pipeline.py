@@ -15,6 +15,21 @@ from lightautoml.spark.transformers.numeric import SparkFillInfTransformer, Spar
 
 
 class SparkLinearFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
+    """
+    Creates pipeline for linear models and nnets.
+
+    Includes:
+
+        - Create categorical intersections.
+        - OHE or embed idx encoding for categories.
+        - Other cats to numbers ways if defined in role params.
+        - Standartization and nan handling for numbers.
+        - Numbers discretization if needed.
+        - Dates handling.
+        - Handling probs (output of lower level models).
+
+    """
+
     def __init__(
         self,
         feats_imp: Optional[ImportanceEstimator] = None,

@@ -64,6 +64,12 @@ def get_unit_of_timestamp_column(seas: str, col: str):
 
 
 class SparkDatetimeHelper:
+    """
+    Helper class for :class:`~lightautoml.spark.transformers.datetime.SparkTimeToNumTransformer`,    
+    :class:`~lightautoml.spark.transformers.datetime.SparkBaseDiffTransformer` and
+    :class:`~lightautoml.spark.transformers.datetime.SparkDateSeasonsTransformer`
+    """
+    
     basic_interval = "D"
 
     _interval_mapping = {
@@ -84,6 +90,10 @@ class SparkDatetimeHelper:
 
 
 class SparkTimeToNumTransformer(SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable):
+    """
+    Transforms datetime columns values to numeric values.
+    """
+
     basic_time = "2020-01-01"
     _fname_prefix = "dtdiff"
 
@@ -109,6 +119,11 @@ class SparkTimeToNumTransformer(SparkBaseTransformer, SparkDatetimeHelper, Commo
 
 
 class SparkBaseDiffTransformer(SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable):
+    """
+    Basic conversion strategy, used in selection one-to-one transformers.
+    Datetime converted to difference with basic_date.
+    """
+
     _fname_prefix = "basediff"
 
     baseNames = Param(Params._dummy(), "baseNames",
@@ -162,6 +177,10 @@ class SparkBaseDiffTransformer(SparkBaseTransformer, SparkDatetimeHelper, Common
 
 
 class SparkDateSeasonsTransformer(SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable):
+    """
+    Extracts unit of time from Datetime values and marks holiday dates.
+    """
+
     _fname_prefix = "season"
 
     def __init__(self,

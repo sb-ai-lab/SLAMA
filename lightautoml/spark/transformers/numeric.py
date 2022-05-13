@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 class SparkNaNFlagsEstimator(SparkBaseEstimator):
+    """Estimator that calculate nan rate for input columns and build :class:`~lightautoml.spark.transformers.numeric.SparkNaNFlagsTransformer`.
+    """
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     # TODO: the value is copied from the corresponding LAMA transformer.
@@ -76,6 +78,8 @@ class SparkNaNFlagsEstimator(SparkBaseEstimator):
 
 
 class SparkNaNFlagsTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
+    """Adds columns with nan flags (0 or 1) for input columns.
+    """
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     # TODO: the value is copied from the corresponding LAMA transformer.
@@ -108,6 +112,8 @@ class SparkNaNFlagsTransformer(SparkBaseTransformer, CommonPickleMLWritable, Com
 
 
 class SparkFillInfTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
+    """Transformer that replace inf values to np.nan values in input columns.
+    """
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "fillinf"
@@ -406,6 +412,10 @@ class SparkQuantileBinningEstimator(SparkBaseEstimator):
 
 
 class SparkQuantileBinningTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
+    """Adds column with quantile bin number of input columns.
+    
+    Quantile bin number of column value calculated by `QuantileDiscretizer` in SparkQuantileBinningEstimator.
+    """
     _fit_checks = (numeric_check,)
     _transform_checks = ()
     _fname_prefix = "qntl"

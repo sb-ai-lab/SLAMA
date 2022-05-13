@@ -70,6 +70,11 @@ class HasOutputRoles(Params):
 
 
 class SparkColumnsAndRoles(HasInputCols, HasOutputCols, HasInputRoles, HasOutputRoles):
+    """
+    Helper and base class for :class:`~lightautoml.spark.transformers.base.SparkBaseTransformer` and 
+    :class:`~lightautoml.spark.transformers.base.SparkBaseEstimator`.
+    """
+
     doReplaceColumns = Param(Params._dummy(), "doReplaceColumns", "whatever it replaces columns or not")
     columnsToReplace = Param(Params._dummy(), "columnsToReplace", "which columns to replace")
 
@@ -90,6 +95,10 @@ class SparkColumnsAndRoles(HasInputCols, HasOutputCols, HasInputRoles, HasOutput
 
 
 class SparkBaseEstimator(Estimator, SparkColumnsAndRoles, ABC):
+    """
+    Base class for estimators from `lightautoml.spark.transformers`.
+    """
+
     _fit_checks = ()
     _fname_prefix = ""
 
@@ -123,6 +132,9 @@ class SparkBaseEstimator(Estimator, SparkColumnsAndRoles, ABC):
 
 
 class SparkBaseTransformer(Transformer, SparkColumnsAndRoles, ABC):
+    """
+    Base class for transformers from `lightautoml.spark.transformers`.
+    """
     _fname_prefix = ""
 
     def __init__(self,
@@ -171,6 +183,10 @@ class SparkBaseTransformer(Transformer, SparkColumnsAndRoles, ABC):
 
 
 class SparkUnionTransformer:
+    """
+    Entity that represents parallel layers (transformers) in preprocess pipeline.
+    """
+
     def __init__(self, transformer_list: List[SparkEstOrTrans]):
         self._transformer_list = copy(transformer_list)
 
@@ -211,6 +227,10 @@ class SparkUnionTransformer:
 
 
 class SparkSequentialTransformer:
+    """
+    Entity that represents sequential of transformers in preprocess pipeline.
+    """
+
     def __init__(self, transformer_list: List[SparkEstOrTrans]):
         self._transformer_list = copy(transformer_list)
 
@@ -279,6 +299,9 @@ class ObsoleteSparkTransformer(LAMLTransformer):
 
 
 class ColumnsSelectorTransformer(Transformer, HasInputCols, HasOutputCols, DefaultParamsWritable, DefaultParamsReadable):
+    """
+    Makes selection input columns from input dataframe.
+    """
     optionalCols = Param(Params._dummy(), "optionalCols", "optional column names.", typeConverter=TypeConverters.toListString)
 
     def __init__(self,
@@ -345,6 +368,8 @@ class PredictionColsTransformer(Transformer, DefaultParamsWritable, DefaultParam
 
 
 class DropColumnsTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):
+    """Transformer that drops columns from input dataframe.
+    """
     colsToRemove = Param(Params._dummy(), "colsToRemove", "columns to be removed",
                          typeConverter=TypeConverters.toListString)
 
@@ -372,7 +397,11 @@ class DropColumnsTransformer(Transformer, DefaultParamsWritable, DefaultParamsRe
 
 
 class SparkChangeRolesTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
+    """Transformer that change roles for input columns. Does not transform the input dataframe.
+
     # Note: this trasnformer cannot be applied directly to input columns of a feature pipeline
+    """
+
     def __init__(self, 
                  input_cols: List[str],
                  input_roles: RolesDict,

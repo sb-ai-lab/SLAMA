@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 
 class LightGBMModelWrapper(Transformer, MLWritable, MLReadable):
+    """Simple wrapper for `synapse.ml.lightgbm.[LightGBMRegressionModel|LightGBMClassificationModel]` to fix issue with loading model from saved composite pipeline.
+    
+    For more details see: https://github.com/microsoft/SynapseML/issues/614.
+    """
 
     def __init__(self, model: Union[LightGBMRegressionModel, LightGBMClassificationModel] = None) -> None:
         super().__init__()
@@ -49,6 +53,10 @@ class LightGBMModelWrapper(Transformer, MLWritable, MLReadable):
 
 
 class ONNXModelWrapper(Transformer, MLWritable, MLReadable):
+    """Simple wrapper for `ONNXModel` to fix issue with loading model from saved composite pipeline.
+    
+    For more details see: https://github.com/microsoft/SynapseML/issues/614.
+    """
 
     def __init__(self, model: ONNXModel = None) -> None:
         super().__init__()
@@ -67,6 +75,21 @@ class ONNXModelWrapper(Transformer, MLWritable, MLReadable):
  
 
 class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
+    """Gradient boosting on decision trees from LightGBM library.
+
+    default_params: All available parameters listed in synapse.ml documentation:
+
+        - https://mmlspark.blob.core.windows.net/docs/0.9.5/pyspark/synapse.ml.lightgbm.html#module-synapse.ml.lightgbm.LightGBMClassifier
+        - https://mmlspark.blob.core.windows.net/docs/0.9.5/pyspark/synapse.ml.lightgbm.html#module-synapse.ml.lightgbm.LightGBMRegressor
+
+    freeze_defaults:
+
+        - ``True`` :  params may be rewritten depending on dataset.
+        - ``False``:  params may be changed only manually or with tuning.
+
+    timer: :class:`~lightautoml.utils.timer.Timer` instance or ``None``.
+
+    """
 
     _name: str = "LightGBM"
 

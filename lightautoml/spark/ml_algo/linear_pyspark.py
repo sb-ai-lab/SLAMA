@@ -26,6 +26,26 @@ LinearEstimatorModel = Union[LogisticRegressionModel, LinearRegressionModel]
 
 
 class SparkLinearLBFGS(SparkTabularMLAlgo):
+    """LBFGS L2 regression based on Spark MLlib.
+
+
+    default_params:
+
+        - tol: The tolerance for the stopping criteria.
+        - maxIter: Maximum iterations of L-BFGS.
+        - aggregationDepth: Param for suggested depth for treeAggregate.
+        - elasticNetParam: Elastic net parameter.
+        - regParam: Regularization parameter.
+        - early_stopping: Maximum rounds without improving.
+
+    freeze_defaults:
+
+        - ``True`` :  params may be rewrited depending on dataset.
+        - ``False``:  params may be changed only manually or with tuning.
+
+    timer: :class:`~lightautoml.utils.timer.Timer` instance or ``None``.
+
+    """
 
     _name: str = "LinearL2"
 

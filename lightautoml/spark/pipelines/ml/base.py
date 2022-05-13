@@ -20,6 +20,29 @@ from ....pipelines.selection.base import SelectionPipeline
 
 
 class SparkMLPipeline(LAMAMLPipeline, OutputFeaturesAndRoles):
+    """Spark version of :class:`~lightautoml.pipelines.ml.base.MLPipeline`. Single ML pipeline.
+
+    Merge together stage of building ML model
+    (every step, excluding model training, is optional):
+
+        - Pre selection: select features from input data.
+          Performed by
+          :class:`~lightautoml.pipelines.selection.base.SelectionPipeline`.
+        - Features generation: build new features from selected.
+          Performed by
+          :class:`~lightautoml.spark.pipelines.features.base.SparkFeaturesPipeline`.
+        - Post selection: One more selection step - from created features.
+          Performed by
+          :class:`~lightautoml.pipelines.selection.base.SelectionPipeline`.
+        - Hyperparams optimization for one or multiple ML models.
+          Performed by
+          :class:`~lightautoml.ml_algo.tuning.base.ParamsTuner`.
+        - Train one or multiple ML models:
+          Performed by :class:`~lightautoml.spark.ml_algo.base.SparkTabularMLAlgo`.
+          This step is the only required for at least 1 model.
+
+    """
+
     def __init__(
         self,
         cacher_key: str,

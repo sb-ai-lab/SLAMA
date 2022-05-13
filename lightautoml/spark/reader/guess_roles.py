@@ -17,6 +17,12 @@ from lightautoml.transformers.categorical import MultiClassTargetEncoder
 
 
 def get_gini_func(target_col: str):
+    """Returns generator that take iterator by pandas dataframes and yield dataframes with calculated ginis.
+
+    Args:
+        target_col (str): target column to calc ginis
+    """
+
     def gini_func(iterator):
         for pdf in iterator:
             target = pdf[target_col].to_numpy()

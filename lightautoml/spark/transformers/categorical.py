@@ -112,6 +112,9 @@ def pandas_folds_cat_mapping_udf(broadcasted_arr):
 
 
 class SparkLabelEncoderEstimator(SparkBaseEstimator, TypesHelper):
+    """
+    Spark label encoder estimator. Returns :class:`~lightautoml.spark.transformers.categorical.SparkLabelEncoderTransformer`.
+    """
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
@@ -163,6 +166,12 @@ class SparkLabelEncoderEstimator(SparkBaseEstimator, TypesHelper):
 
 
 class SparkLabelEncoderTransformer(SparkBaseTransformer, TypesHelper, SparkLabelEncoderTransformerMLWritable, SparkLabelEncoderTransformerMLReadable):
+    """
+    Simple Spark version of `LabelEncoder`.
+
+    Labels are integers from 1 to n. 
+    """
+
     _transform_checks = ()
     _fname_prefix = "le"
 
@@ -204,6 +213,10 @@ class SparkLabelEncoderTransformer(SparkBaseTransformer, TypesHelper, SparkLabel
 
 
 class SparkOrdinalEncoderEstimator(SparkLabelEncoderEstimator):
+    """
+    Spark ordinal encoder estimator. Returns :class:`~lightautoml.spark.transformers.categorical.SparkOrdinalEncoderTransformer`.
+    """
+
     _fit_checks = (categorical_check,)
     _fname_prefix = "ord"
     _fillna_val = float("nan")
@@ -251,6 +264,14 @@ class SparkOrdinalEncoderEstimator(SparkLabelEncoderEstimator):
 
 
 class SparkOrdinalEncoderTransformer(SparkLabelEncoderTransformer):
+    """
+    Spark version of :class:`~lightautoml.transformers.categorical.OrdinalEncoder`.
+
+    Encoding ordinal categories into numbers.
+    Number type categories passed as is,
+    object type sorted in ascending lexicographical order.
+    """
+
     _transform_checks = ()
     _fname_prefix = "ord"
     _fillna_val = float("nan")
@@ -305,6 +326,9 @@ class SparkOrdinalEncoderTransformer(SparkLabelEncoderTransformer):
 
 
 class SparkFreqEncoderEstimator(SparkLabelEncoderEstimator):
+    """
+    Calculates frequency in train data and produces :class:`~lightautoml.spark.transformers.categorical.SparkFreqEncoderTransformer` instance.
+    """
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
@@ -344,6 +368,11 @@ class SparkFreqEncoderEstimator(SparkLabelEncoderEstimator):
 
 
 class SparkFreqEncoderTransformer(SparkLabelEncoderTransformer):
+    """
+    Labels are encoded with frequency in train data.
+
+    Labels are integers from 1 to n.
+    """
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
@@ -361,6 +390,10 @@ class SparkFreqEncoderTransformer(SparkLabelEncoderTransformer):
 
 
 class SparkCatIntersectionsHelper:
+    """Helper class for :class:`~lightautoml.spark.transformers.categorical.SparkCatIntersectionsEstimator` and
+    :class:`~lightautoml.spark.transformers.categorical.SparkCatIntersectionsTransformer`.
+    """
+
     _fname_prefix = "inter"
 
     def _make_col_name(self, cols: Sequence[str]) -> str:
@@ -388,6 +421,10 @@ class SparkCatIntersectionsHelper:
 
 
 class SparkCatIntersectionsEstimator(SparkCatIntersectionsHelper, SparkLabelEncoderEstimator):
+    """
+    Combines categorical features and fits :class:`~lightautoml.spark.transformers.categorical.SparkLabelEncoderEstimator`.
+    Returns :class:`~lightautoml.spark.transformers.categorical.SparkCatIntersectionsTransformer`.
+    """
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
@@ -449,6 +486,9 @@ class SparkCatIntersectionsEstimator(SparkCatIntersectionsHelper, SparkLabelEnco
 
 
 class SparkCatIntersectionsTransformer(SparkCatIntersectionsHelper, SparkLabelEncoderTransformer):
+    """
+    Combines category columns and encode with label encoder.
+    """
 
     _fit_checks = (categorical_check,)
     _transform_checks = ()
@@ -603,6 +643,10 @@ def te_mapping_udf(broadcasted_dict):
 
 
 class SparkTargetEncoderEstimator(SparkBaseEstimator):
+    """
+    Spark target encoder estimator. Returns :class:`~lightautoml.spark.transformers.categorical.SparkTargetEncoderTransformer`.
+    """
+
     _fit_checks = (categorical_check, oof_task_check, encoding_check)
     _transform_checks = ()
     _fname_prefix = "oof"
@@ -767,6 +811,9 @@ class SparkTargetEncoderEstimator(SparkBaseEstimator):
 
 
 class SparkTargetEncoderTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
+    """
+    Spark version of :class:`~lightautoml.transformers.categorical.TargetEncoder`.
+    """
 
     _fit_checks = (categorical_check, oof_task_check, encoding_check)
     _transform_checks = ()
@@ -847,6 +894,10 @@ def mcte_transform_udf(broadcasted_dict):
 
 
 class SparkMulticlassTargetEncoderEstimator(SparkBaseEstimator):
+    """
+    Spark multiclass target encoder estimator. Returns :class:`~lightautoml.spark.transformers.categorical.SparkMultiTargetEncoderTransformer`.
+    """
+
     _fit_checks = (categorical_check, multiclass_task_check, encoding_check)
     _transform_checks = ()
     _fname_prefix = "multioof"
@@ -980,6 +1031,9 @@ class SparkMulticlassTargetEncoderEstimator(SparkBaseEstimator):
 
 
 class SparkMultiTargetEncoderTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonPickleMLReadable):
+    """
+    Spark multiclass target encoder transformer.
+    """
 
     _fit_checks = (categorical_check, multiclass_task_check, encoding_check)
     _transform_checks = ()

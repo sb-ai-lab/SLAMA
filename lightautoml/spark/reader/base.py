@@ -63,6 +63,10 @@ stype2dtype = {
 
 
 class SparkReaderHelper:
+    """Helper class that provide some methods for :class:`~lightautoml.spark.reader.base.SparkToSparkReader` and
+    :class:`~lightautoml.spark.reader.base.SparkToSparkReaderTransformer`.
+    """
+
     @staticmethod
     def _create_unique_ids(train_data: SparkDataFrame, cacher_key: Optional[str] = None) -> SparkDataFrame:
         logger.debug("SparkReaderHelper._create_unique_ids() is started")
@@ -116,8 +120,6 @@ class SparkReaderHelper:
 
 
 class SparkToSparkReader(Reader, SparkReaderHelper):
-    DEFAULT_READER_FOLD_COL = "reader_fold_num"
-
     """
     Reader to convert :class:`~pandas.DataFrame` to AutoML's :class:`~lightautoml.dataset.np_pd_dataset.PandasDataset`.
     Stages:
@@ -130,6 +132,8 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
         - Optional: advanced guessing of role and handling types.
 
     """
+
+    DEFAULT_READER_FOLD_COL = "reader_fold_num"
 
     def __init__(
         self,
@@ -715,6 +719,10 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
 
 
 class SparkToSparkReaderTransformer(Transformer, SparkReaderHelper, CommonPickleMLWritable, CommonPickleMLReadable):
+    """
+    Transformer of SparkToSparkReader. Allows to reuse SparkToSparkReader pipeline as a spark transformer.
+    """
+
     usedArrayAttrs = Param(Params._dummy(), "usedArrayAttrs", "usedArrayAttrs")
     addArrayAttrs = Param(Params._dummy(), "addArrayAttrs", "addArrayAttrs")
     roles = Param(Params._dummy(), "roles", "roles")
