@@ -60,7 +60,7 @@ class LAMLMetric:
 
     greater_is_better = True
 
-    def __call__(self, dataset: "LAMLDataset", dropna: bool = False):
+    def __call__(self, dataset: "LAMLDataset", dropna: bool = False) -> float:
         """Call metric on dataset.
 
         Args:
