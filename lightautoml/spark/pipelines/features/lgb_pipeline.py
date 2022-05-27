@@ -60,7 +60,7 @@ class SparkLGBSimpleFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
 
         transformers_list.append(self.get_numeric_data(train))
 
-        union_all = SparkUnionTransformer(transformers_list)
+        union_all = SparkUnionTransformer([x for x in transformers_list if x is not None])
 
         return union_all
 
