@@ -100,7 +100,8 @@ def extract_result(lines: Iterable[str]) -> Dict:
         result_line = None
 
     if result_line is not None:
-        result = json.loads(result_line[len(result_marker):].strip().replace("'", '"'))
+        # result = json.loads(result_line[len(result_marker):].strip().replace("'", '"'))
+        result = result_line[len(result_marker):].strip().replace("'", '"')
     else:
         result = None
 

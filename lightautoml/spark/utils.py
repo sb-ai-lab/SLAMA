@@ -239,11 +239,18 @@ class Cacher(Estimator):
 
     def _fit(self, dataset):
         logger.info(f"Cacher {self._key} (RDD Id: {dataset.rdd.id()}). Starting to materialize data.")
+
+        # using local checkpoints
         ds = dataset.localCheckpoint(eager=True)
+
+        # using plain caching
+        # ds = SparkSession.getActiveSession().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
+        # ds.write.mode('overwrite').format('noop').save()
+
         logger.info(f"Cacher {self._key} (RDD Id: {ds.rdd.id()}). Finished data materialization.")
 
         previous_ds = self._cacher_dict.get(self._key, None)
-        if previous_ds is not None:
+        if previous_ds is not None and ds != previous_ds:
             logger.info(f"Removing cache for key: {self._key} (RDD Id: {previous_ds.rdd.id()}).")
             previous_ds.unpersist()
             del previous_ds

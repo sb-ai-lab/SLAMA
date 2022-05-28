@@ -217,7 +217,7 @@ class SparkAutoML:
                 # train_valid = self._create_validation_iterator(level_predictions, None, None, cv_iter=cv_iter)
                 train_valid.input_roles = initial_level_roles
                 level_predictions = ml_pipe.fit_predict(train_valid)
-                level_predictions = self._break_plan(level_predictions)
+                # level_predictions = self._break_plan(level_predictions)
 
                 train_valid = self._create_validation_iterator(level_predictions, None, None, cv_iter=cv_iter)
                 current_level_roles = level_predictions.roles

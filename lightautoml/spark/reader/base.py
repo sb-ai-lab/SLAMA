@@ -268,14 +268,14 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
         train_data = self._create_target(train_data, target_col=self.target_col)
 
         total_number = train_data.count()
-        if self.samples is not None:
-            if self.samples > total_number:
-                fraction = 1.0
-            else:
-                fraction = self.samples/total_number
-            subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
-        else:
-            subsample = train_data
+        # if self.samples is not None:
+        #     if self.samples > total_number:
+        #         fraction = 1.0
+        #     else:
+        #         fraction = self.samples/total_number
+        #     subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
+        # else:
+        subsample = train_data
 
         logger.debug("SparkToSparkReader infer roles is started")
         # infer roles

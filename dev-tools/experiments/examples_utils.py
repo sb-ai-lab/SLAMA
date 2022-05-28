@@ -93,7 +93,7 @@ def prepare_test_and_train(spark: SparkSession, path:str, seed: int) -> Tuple[Sp
     data = data.repartition(execs * cores).cache()
     data.write.mode('overwrite').format('noop').save()
 
-    train_data, test_data = data.randomSplit([0.8, 0.2], seed)
+    train_data, test_data = data, data#data.randomSplit([0.8, 0.2], seed)
     train_data = train_data.cache()
     test_data = test_data.cache()
     train_data.write.mode('overwrite').format('noop').save()
