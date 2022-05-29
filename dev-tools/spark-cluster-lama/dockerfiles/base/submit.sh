@@ -16,9 +16,11 @@ spark-submit \
   --conf 'spark.driver.host=node3.bdcl' \
   --conf 'spark.jars.packages=com.microsoft.azure:synapseml_2.12:0.9.5' \
   --conf 'spark.jars.repositories=https://mmlspark.azureedge.net/maven' \
+  --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
   --conf 'spark.kryoserializer.buffer.max=512m' \
   --conf 'spark.driver.cores=10' \
   --conf 'spark.driver.memory=20g' \
+  --conf 'spark.driver.maxResultSize=4096m' \
   --conf "spark.executor.instances=${EXEC_INST}" \
   --conf "spark.executor.cores=${EXEC_CORES}" \
   --conf "spark.executor.memory=${EXEC_MEM}" \

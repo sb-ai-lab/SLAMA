@@ -22,8 +22,13 @@ def main(spark: SparkSession, path: str):
     execs = int(spark.conf.get('spark.executor.instances'))
     cores = int(spark.conf.get('spark.executor.cores'))
 
-    df = spark.read.json(path).repartition(execs * cores).cache()
+    # df = spark.read.json(path).repartition(execs * cores).cache()
+    df = spark.read.parquet(path).cache()
     df.write.mode('overwrite').format('noop').save()
+
+    # df = spark.read.json(path).repartition(2000)
+    # df.write.parquet("/opt/spark_data/data_for_LE_TE_tests/100M_rows_100_columns_cardinality_10000_id.parquet")
+    # return
 
     cat_roles = {
        c: CategoryRole(dtype=np.float32) for c in df.columns
@@ -54,7 +59,11 @@ if __name__ == "__main__":
     # One can run:
     # 1. main(dataset_name="used_cars_dataset", seed=42)
     # 2. multirun(spark_sess, dataset_name="used_cars_dataset")
-    main(spark_sess, path="/opt/spark_data/data_for_LE_TE_tests/1000000_rows_1000_columns_cardinality_10000_id.json")
+    # path = "/opt/spark_data/data_for_LE_TE_tests/1000000_rows_1000_columns_cardinality_10000_id.json"
+    # path = "/opt/spark_data/data_for_LE_TE_tests/1000000_rows_100_columns_cardinality_10000_id.json"
+    path = "/opt/spark_data/data_for_LE_TE_tests/100M_rows_1000_columns_cardinality_10000_id.parquet"
+    # path = "/opt/spark_data/data_for_LE_TE_tests/100M_rows_100_columns_cardinality_10000_id.json"
+    main(spark_sess, path=path)
 
     import time
     time.sleep(600)
