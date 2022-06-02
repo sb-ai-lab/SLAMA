@@ -9,12 +9,12 @@ It requires:
    (It will be downloaded by Spark automatically)
 
 Currently, only tabular Preset is supported. See demo with spark-based tabular automl
-preset in [examples/spark/tabular-preset-automl.py](https://github.com/sb-ai-lab/LightAutoML_Spark/tree/main/examples/spark/tabular-preset-automl.py).
+preset in [examples/spark/tabular-preset-automl.py](https://github.com/sb-ai-lab/SLAMA/tree/main/examples/spark/tabular-preset-automl.py).
 For further information check docs in the root of the project containing dedicated SLAMA section.
 
 <a name="apache"></a>
 # License
-This project is licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/sb-ai-lab/LightAutoML_Spark/tree/main/LICENSE) file for more details.
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/sb-ai-lab/SLAMA/tree/main/LICENSE) file for more details.
 
 
 # Installation
@@ -23,7 +23,7 @@ First of all you need to install [git](https://git-scm.com/downloads) and [poetr
 ```bash
 
 # Load SLAMA source code
-git clone https://github.com/sb-ai-lab/LightAutoML_Spark.git
+git clone https://github.com/sb-ai-lab/SLAMA.git
 
 cd SLAMA/
 
@@ -41,3 +41,7 @@ poetry config virtualenvs.create false --local
 poetry lock
 poetry install
 ```
+
+# Cluster preparation
+
+You can found cluster preparation for using SLAMA [here](https://github.com/sb-ai-lab/SLAMA/blob/main/docker-hadoop/README.md)
