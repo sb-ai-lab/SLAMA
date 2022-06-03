@@ -1,6 +1,18 @@
 [flake8]
 max-line-length = 120
-ignore =  E402, E203, W503, W605, E722, E501
+ignore =  D104, D105, D107, E402, E203, W503, W605, E722, E501
+docstring-convention = google
+per-file-ignores =
+    slama/automl/presets/tabular_presets.py:D102
+    slama/automl/presets/text_presets.py:D102
+    slama/automl/presets/utils.py:D100,D102,D103
+    slama/report/report_deco.py:D101,D102,D103,D205,D212,D412,D415
+    slama/text/sentence_pooling.py:D102
+    slama/utils/*:D101,D102,D103
+    docs/*:D100,D103
+    examples/*:D100,D103
+    tests/*:D100,D103
+    check_docs.py:D100
 exclude =
     .git
     __pycache__

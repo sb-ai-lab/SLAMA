@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "LightAutoML"
+name = "SLAMA"
 version = "0.1.0"
 description = "Fast and customizable framework for automatic ML model creation (AutoML) on Spark"
 authors = [
@@ -17,9 +17,6 @@ readme = "README.md"
 license = "Apache-2.0"
 repository = "https://github.com/sb-ai-lab/SLAMA"
 classifiers = [
-    "Programming Language :: Python :: 3.6",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
@@ -34,55 +31,8 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "~3.9"
 
-poetry-core = "^1.0.0"
-numpy = [
-  {version = ">=1.20.0", python = ">=3.7"},
-  {version = "*", python = "<3.7"}
-]
-scipy = "*"
-pandas = ">=1"
-scikit-learn = ">=0.22"
-lightgbm = "3.2.1"
-catboost = "*"
-optuna = "*"
-torch = [
-    {platform = "win32", python = "3.6.1", version = "1.7.0"},
-    {platform = "*", version = "<1.9"}
-]
-dataclasses = "0.6"
-holidays = "*"
-networkx = "*"
-cmaes = "*"
-pyyaml = "*"
-tqdm = "*"
-joblib = "*"
-importlib-metadata = {version = "^1.0", python = "<3.8"}
+lightautoml = "0.3.0"
 
-autowoe = ">=1.2"
-
-jinja2 = "*"
-json2html = "*"
-seaborn = "*"
-
-# NLP
-gensim = {version = ">=4", optional = true}
-nltk = {version = "*", optional = true}
-transformers = {version = ">=4", optional = true}
-
-# CV
-albumentations = {version = ">=0.4.6", optional = true}
-efficientnet-pytorch = {version = "*", optional = true}
-#opencv-python = {version = "*", optional = true}
-PyWavelets = {version = "*", optional = true}
-scikit-image = {version = "*", optional = true}
-torchvision = [
-    {platform = "win32", python = "3.6.1", version = "0.8.0", optional = true},
-    {platform = "*", version = "*", optional = true}
-]
-
-# Report (pdf)
-weasyprint = {version = "^52.5", optional = true}
-cffi = {version = "^1.14.5", optional = true}
 
 # PySpark
 pyspark = "3.2.0"
@@ -94,50 +44,22 @@ onnxmltools = "^1.11.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
+IPython = "*"
+notebook = "*"
 sphinx = "*"
 sphinx-rtd-theme = "*"
-IPython = "*"
 nbsphinx = "*"
 nbsphinx-link = "*"
 sphinx-autodoc-typehints = "*"
 pandoc = "*"
 pre-commit = "*"
-notebook = "*"
 mypy = "^0.910"
 tox = "*"
+black = "20.8b1"
+flake8-docstrings = "1.6.0"
+isort = "5.7.0"
+flake8 = "4.0.1"
 
-
-[tool.poetry.extras]
-cv = [
-    "albumentations",
-    "efficientnet-pytorch",
-    "opencv-python",
-    "PyWavelets",
-    "scikit-image",
-    "torchvision"
-]
-nlp = [
-    "gensim",
-    "nltk",
-    "transformers"
-]
-report = [
-    "cffi",
-    "weasyprint"
-]
-all = [
-    "albumentations",
-    "efficientnet-pytorch",
-    "opencv-python",
-    "PyWavelets",
-    "scikit-image",
-    "torchvision",
-    "gensim",
-    "nltk",
-    "transformers",
-    "cffi",
-    "weasyprint"
-]
 
 [tool.pytest.ini_options]
 log_cli = true
@@ -152,8 +74,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.isort]
 profile = "black"
-force_single_line = true
+# force_single_line = true
 atomic = true
+combine_straight_imports = true
 include_trailing_comma = true
 lines_after_imports = 2
 lines_between_types = 1
@@ -184,13 +107,10 @@ exclude = '''
 legacy_tox_ini = """
 [tox]
 isolated_build = True
-envlist = py{36, 37, 38, 39}
+envlist = py{39}
 
 [gh-actions]
 python =
-    3.6: py36
-    3.7: py37
-    3.8: py38
     3.9: py39
 
 [gh-actions:env]

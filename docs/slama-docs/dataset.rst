@@ -1,7 +1,7 @@
 .. role:: hidden
     :class: hidden-section
 
-lightautoml.spark.dataset
+slama.dataset
 ===================
 
 Provides an internal interface for working with data.
@@ -9,7 +9,7 @@ Provides an internal interface for working with data.
 Dataset Interfaces
 -------------------
 
-.. currentmodule:: lightautoml.spark.dataset
+.. currentmodule:: slama.dataset
 
 .. autosummary::
     :toctree: ./generated
@@ -23,7 +23,7 @@ Roles
 
 Role contains information about the column, which determines how it is processed.
 
-.. currentmodule:: lightautoml.spark.dataset.roles
+.. currentmodule:: slama.dataset.roles
 
 .. autosummary::
     :toctree: ./generated

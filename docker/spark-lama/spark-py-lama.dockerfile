@@ -5,7 +5,7 @@ ARG spark_jars_cache=jars_cache
 
 USER root
 
-RUN pip install pyspark==3.2.0
+# RUN pip install pyspark==3.2.0
 
 #USER ${spark_id}
 
@@ -18,12 +18,12 @@ COPY requirements.txt /src
 RUN pip install -r /src/requirements.txt
 RUN pip install torchvision==0.9.1
 
-COPY dist/LightAutoML-0.3.0-py3-none-any.whl /tmp/LightAutoML-0.3.0-py3-none-any.whl
-RUN pip install /tmp/LightAutoML-0.3.0-py3-none-any.whl
+COPY dist/SLAMA-0.3.0-py3-none-any.whl /tmp/SLAMA-*-py3-none-any.whl
+RUN pip install /tmp/LightAutoML-*-py3-none-any.whl
 
 RUN pip install --upgrade lightgbm==3.2.1
 
-COPY examples/spark /examples
+COPY examples/ /examples
 
 COPY jars /root/jars
 COPY examples /examples

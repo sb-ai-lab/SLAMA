@@ -25,7 +25,7 @@ services:
       SERVICE_PRECONDITION: "namenode:9870"
     env_file:
       - ./hadoop.env
-  
+
   resourcemanager:
     image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
     container_name: resourcemanager
@@ -52,7 +52,7 @@ services:
       - /opt/spark_data:/opt/spark_data
     env_file:
       - ./hadoop.env
-  
+
   historyserver:
     image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
     container_name: historyserver
@@ -74,7 +74,7 @@ services:
       - ./..:/LightAutoML
       - ./spark-submit/yarn-site.xml:/etc/hadoop/yarn-site.xml
       - ./spark-submit/core-site.xml:/etc/hadoop/core-site.xml
-  
+
 volumes:
   hadoop_namenode:
   hadoop_datanode:

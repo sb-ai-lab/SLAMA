@@ -5,11 +5,11 @@ services:
     network_mode: "host"
     image: node2.bdcl:5000/spark-lama:42014ed
     hostname: ${HOSTNAME}
-    command: ["/spark/sbin/start-master.sh"]
-#    ports:
-#      - "7077:7077"
-#      - "8181:8181"
-#      - "6066:6066"
+    command: [ "/spark/sbin/start-master.sh" ]
+    #    ports:
+    #      - "7077:7077"
+    #      - "8181:8181"
+    #      - "6066:6066"
     environment:
       - SPARK_NO_DAEMONIZE=true
       - SPARK_PUBLIC_DNS=${HOSTNAME}
@@ -19,10 +19,15 @@ services:
   lama-spark-worker:
     container_name: lama-spark-worker
     image: node2.bdcl:5000/spark-lama:42014ed
-    command: ["sh", "-c", "/spark/sbin/start-worker.sh spark://10.32.15.5:7077"]
+    command:
+      [
+        "sh",
+        "-c",
+        "/spark/sbin/start-worker.sh spark://10.32.15.5:7077"
+      ]
     network_mode: "host"
-#    ports:
-#      - "8081:8081"
+    #    ports:
+    #      - "8081:8081"
     environment:
       - SPARK_NO_DAEMONIZE=true
       - SPARK_WORKER_MEMORY=128g
@@ -39,7 +44,7 @@ services:
   lama-spark-shell:
     container_name: lama-spark-shell
     image: node2.bdcl:5000/spark-lama:42014ed
-    command: ["bash"]
+    command: [ "bash" ]
     network_mode: "host"
     environment:
       - PYTHONPATH=/lama

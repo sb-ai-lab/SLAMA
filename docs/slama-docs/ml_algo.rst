@@ -1,7 +1,7 @@
 .. role:: hidden
     :class: hidden-section
 
-lightautoml.spark.ml_algo
+slama.ml_algo
 ===================
 
 Models used for machine learning pipelines.
@@ -9,7 +9,7 @@ Models used for machine learning pipelines.
 Base Classes
 ------------------------
 
-.. currentmodule:: lightautoml.spark.ml_algo.base
+.. currentmodule:: slama.ml_algo.base
 
 .. autosummary::
     :toctree: ./generated
@@ -23,7 +23,7 @@ Base Classes
 Available Models
 -------------------------
 
-.. currentmodule:: lightautoml.spark.ml_algo
+.. currentmodule:: slama.ml_algo
 
 .. autosummary::
     :toctree: ./generated
@@ -36,7 +36,7 @@ Available Models
 Utilities
 -------------------------
 
-.. currentmodule:: lightautoml.spark.ml_algo
+.. currentmodule:: slama.ml_algo
 
 .. autosummary::
     :toctree: ./generated

@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.reader
+slama.reader
 =====================
 
 Utils for reading, training and analysing data.
@@ -10,7 +10,7 @@ Utils for reading, training and analysing data.
 Readers
 -------------
 
-.. currentmodule:: lightautoml.spark.reader.base
+.. currentmodule:: slama.reader.base
 
 .. autosummary::
     :toctree: ./generated
@@ -24,7 +24,7 @@ Readers
 Utility functions for advanced roles guessing
 -------------
 
-.. currentmodule:: lightautoml.spark.reader.guess_roles
+.. currentmodule:: slama.reader.guess_roles
 
 .. autosummary::
     :toctree: ./generated

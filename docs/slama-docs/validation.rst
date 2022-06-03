@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.validation
+slama.validation
 ==============================
 
 The module provide classes and functions for model validation.
@@ -10,7 +10,7 @@ The module provide classes and functions for model validation.
 Iterators
 ------------------------------
 
-.. currentmodule:: lightautoml.spark.validation
+.. currentmodule:: slama.validation
 
 .. autosummary::
     :toctree: ./generated

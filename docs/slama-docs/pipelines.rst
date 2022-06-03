@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.pipelines
+slama.pipelines
 =====================
 
 Pipelines for solving different tasks.
@@ -10,7 +10,7 @@ Pipelines for solving different tasks.
 Utility traits
 -------
 
-.. currentmodule:: lightautoml.spark.pipelines.base
+.. currentmodule:: slama.pipelines.base
 
 .. autosummary::
     :toctree: ./generated

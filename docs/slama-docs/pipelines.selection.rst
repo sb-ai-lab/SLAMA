@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.pipelines.selection
+slama.pipelines.selection
 ===============================
 
 Feature selection module for ML pipelines.
@@ -10,7 +10,7 @@ Feature selection module for ML pipelines.
 Base Classes
 -----------------
 
-.. currentmodule:: lightautoml.spark.pipelines.selection.base
+.. currentmodule:: slama.pipelines.selection.base
 
 .. autosummary::
     :toctree: ./generated
@@ -22,7 +22,7 @@ Base Classes
 Importance Based Selectors
 --------------------------
 
-.. currentmodule:: lightautoml.spark.pipelines.selection
+.. currentmodule:: slama.pipelines.selection
 
 .. autosummary::
     :toctree: ./generated

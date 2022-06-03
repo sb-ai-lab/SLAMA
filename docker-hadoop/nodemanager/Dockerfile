@@ -25,8 +25,8 @@ RUN cd Python-3.9.12 && make altinstall
 
 RUN ln -s /usr/local/bin/python3.9 /usr/bin/python3
 
-ADD LightAutoML-0.3.0-py3-none-any.whl /LightAutoML-0.3.0-py3-none-any.whl
+ADD SLAMA-0.1.0-py3-none-any.whl /SLAMA-0.1.0-py3-none-any.whl
 
-RUN python3 -m pip install /LightAutoML-0.3.0-py3-none-any.whl
+RUN python3 -m pip install /SLAMA-0.1.0-py3-none-any.whl
 
 CMD ["/run.sh"]

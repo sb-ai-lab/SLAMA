@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.transformers
+slama.transformers
 ==============================
 
 Basic feature generation steps and helper utils.
@@ -10,7 +10,7 @@ Basic feature generation steps and helper utils.
 Base Classes
 ------------------------------
 
-.. currentmodule:: lightautoml.spark.transformers.base
+.. currentmodule:: slama.transformers.base
 
 .. autosummary::
     :toctree: ./generated
@@ -35,7 +35,7 @@ Base Classes
 Numeric
 ------------------------------
 
-.. currentmodule:: lightautoml.spark.transformers.numeric
+.. currentmodule:: slama.transformers.numeric
 
 .. autosummary::
     :toctree: ./generated
@@ -58,7 +58,7 @@ Numeric
 Categorical
 ------------------------------
 
-.. currentmodule:: lightautoml.spark.transformers.categorical
+.. currentmodule:: slama.transformers.categorical
 
 .. autosummary::
     :toctree: ./generated
@@ -83,7 +83,7 @@ Categorical
 Categorical (Scala)
 ------------------------------
 
-.. currentmodule:: lightautoml.spark.transformers.scala_wrappers
+.. currentmodule:: slama.transformers.scala_wrappers
 
 .. autosummary::
     :toctree: ./generated
@@ -97,7 +97,7 @@ Categorical (Scala)
 Datetime
 ------------------------------
 
-.. currentmodule:: lightautoml.spark.transformers.datetime
+.. currentmodule:: slama.transformers.datetime
 
 .. autosummary::
     :toctree: ./generated

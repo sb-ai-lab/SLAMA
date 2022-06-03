@@ -1,12 +1,12 @@
 .. role:: hidden
     :class: hidden-section
 
-lightautoml.spark.automl
+slama.automl
 ======================
 
 The main module, which includes the SparkAutoML class, blenders and ready-made presets.
 
-.. currentmodule:: lightautoml.spark.automl.base
+.. currentmodule:: slama.automl.base
 
 .. autosummary::
     :toctree: ./generated
@@ -21,7 +21,7 @@ Presets
 
 Presets for end-to-end model training for special tasks.
 
-.. currentmodule:: lightautoml.spark.automl.presets
+.. currentmodule:: slama.automl.presets
 
 .. autosummary::
     :toctree: ./generated
@@ -35,7 +35,7 @@ Presets for end-to-end model training for special tasks.
 Blenders
 --------
 
-.. currentmodule:: lightautoml.spark.automl.blend
+.. currentmodule:: slama.automl.blend
 
 .. autosummary::
     :toctree: ./generated

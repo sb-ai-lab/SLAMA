@@ -3,35 +3,38 @@
 """
 Simple example for binary classification on tabular data.
 """
-import logging
-import logging.config
-import os
-from typing import Dict, Any, Optional
+import logging, logging.config, os
+
+from typing import Any, Dict, Optional
 
 import pandas as pd
 import sklearn
 import yaml
-from sklearn.model_selection import train_test_split
-from dataset_utils import datasets
 
+from dataset_utils import datasets
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
-from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT, log_exec_timer
 from lightautoml.tasks import Task
-from lightautoml.utils.tmp_utils import log_data, LAMA_LIBRARY
+from lightautoml.utils.tmp_utils import LAMA_LIBRARY, log_data
+from sklearn.model_selection import train_test_split
+
+from slama.utils import VERBOSE_LOGGING_FORMAT, log_exec_timer, logging_config
+
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_automl(path: str,
-                     task_type: str,
-                     metric_name: str,
-                     target_col: str = 'target',
-                     seed: int = 42,
-                     cv: int = 5,
-                     use_algos = ("lgb", "linear_l2"),
-                     roles: Optional[Dict] = None,
-                     dtype: Optional[Dict] = None,
-                     **_) -> Dict[str, Any]:
+def calculate_automl(
+    path: str,
+    task_type: str,
+    metric_name: str,
+    target_col: str = "target",
+    seed: int = 42,
+    cv: int = 5,
+    use_algos=("lgb", "linear_l2"),
+    roles: Optional[Dict] = None,
+    dtype: Optional[Dict] = None,
+    **_,
+) -> Dict[str, Any]:
     os.environ[LAMA_LIBRARY] = "lama"
 
     with log_exec_timer("LAMA") as train_timer:
@@ -39,7 +42,7 @@ def calculate_automl(path: str,
         roles = roles if roles else {}
         dtype = dtype if dtype else {}
 
-        data = pd.read_csv(path,  dtype=dtype)
+        data = pd.read_csv(path, dtype=dtype)
         train_data, test_data = train_test_split(data, test_size=0.2, random_state=seed)
 
         task = Task(task_type)
@@ -49,13 +52,10 @@ def calculate_automl(path: str,
             timeout=3600 * 3,
             general_params={"use_algos": use_algos},
             reader_params={"cv": cv, "advanced_roles": False},
-            tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 101, 'max_tuning_time': 3600}
+            tuning_params={"fit_on_holdout": True, "max_tuning_iter": 101, "max_tuning_time": 3600},
         )
 
-        oof_predictions = automl.fit_predict(
-            train_data,
-            roles=roles
-        )
+        oof_predictions = automl.fit_predict(train_data, roles=roles)
 
     logger.info("Predicting on out of fold")
 
@@ -78,7 +78,7 @@ def calculate_automl(path: str,
         "metric_value": metric_value,
         "test_metric_value": test_metric_value,
         "train_duration_secs": train_timer.duration,
-        "predict_duration_secs": predict_timer.duration
+        "predict_duration_secs": predict_timer.duration,
     }
 
 
@@ -106,10 +106,10 @@ if __name__ == "__main__":
     with open(config_path, "r") as stream:
         config_data = yaml.safe_load(stream)
 
-    func_name = config_data['func']
+    func_name = config_data["func"]
 
-    if 'dataset' in config_data:
-        ds_cfg = datasets()[config_data['dataset']]
+    if "dataset" in config_data:
+        ds_cfg = datasets()[config_data["dataset"]]
     else:
         ds_cfg = dict()
 

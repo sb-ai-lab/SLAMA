@@ -1,21 +1,14 @@
-import datetime
-import glob
-import itertools
-import json
-import logging
-import os
-import random
-import subprocess
-import time
-import uuid
+import datetime, glob, itertools, json, logging, os, random, subprocess, time, uuid
+
 from copy import copy
 from dataclasses import dataclass, field
-from typing import List, Set, Dict, Any, Iterator, Optional
+from typing import Any, Dict, Iterator, List, Optional, Set
 
 import yaml
+
 from tqdm import tqdm
 
-from lightautoml.spark.utils import VERBOSE_LOGGING_FORMAT
+from slama.utils import VERBOSE_LOGGING_FORMAT
 
 
 DEFAULT_SPARK_CONFIG_SETTINGS = "dev-tools/config/experiments/default-spark-conf.yaml"
@@ -45,7 +38,7 @@ class ExpInstanceProc:
     id: str = field(init=False)
 
     def __post_init__(self):
-        self.id = f'{uuid.uuid4()}'
+        self.id = f"{uuid.uuid4()}"
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -78,9 +71,11 @@ def process_state_file(config_data: Dict[str, Any]) -> Set[str]:
     else:
         raise ValueError(f"Unsupported mode for state file: {state_file_mode}")
 
-    logger.info(f"Found {len(exp_instances_ids)} existing experiments "
-                f"in state file {state_file_path}. "
-                f"Exp instance ids: \n{exp_instances_ids}")
+    logger.info(
+        f"Found {len(exp_instances_ids)} existing experiments "
+        f"in state file {state_file_path}. "
+        f"Exp instance ids: \n{exp_instances_ids}"
+    )
 
     return exp_instances_ids
 
@@ -92,7 +87,7 @@ def generate_experiments(config_data: Dict) -> List[ExpInstanceConfig]:
     existing_exp_instances_ids = process_state_file(config_data)
 
     with open(DEFAULT_SPARK_CONFIG_SETTINGS, "r") as f:
-        default_spark_config = yaml.safe_load(f)['default_spark_config']
+        default_spark_config = yaml.safe_load(f)["default_spark_config"]
 
     exp_instances = []
     for experiment in experiments:
@@ -106,15 +101,16 @@ def generate_experiments(config_data: Dict) -> List[ExpInstanceConfig]:
 
         if "spark" in libraries:
             assert "spark_config" in experiment, f"No spark_config set (even empty one) for experiment {name}"
-            keys_exps, values_exps = zip(*experiment['spark_config'].items())
+            keys_exps, values_exps = zip(*experiment["spark_config"].items())
             spark_param_sets = [dict(zip(keys_exps, v)) for v in itertools.product(*values_exps)]
 
             spark_configs = []
             for spark_params in spark_param_sets:
                 spark_config = copy(default_spark_config)
                 spark_config.update(spark_params)
-                spark_config['spark.cores.max'] = \
-                    int(spark_config['spark.executor.cores']) * int(spark_config['spark.executor.instances'])
+                spark_config["spark.cores.max"] = int(spark_config["spark.executor.cores"]) * int(
+                    spark_config["spark.executor.instances"]
+                )
                 spark_configs.append(spark_config)
             spark_instances = itertools.product(["spark"], param_sets, spark_configs)
         else:
@@ -125,10 +121,7 @@ def generate_experiments(config_data: Dict) -> List[ExpInstanceConfig]:
         else:
             lama_instances = []
 
-        instances = (
-            (i, el) for el in itertools.chain(spark_instances, lama_instances)
-            for i in range(repeat_rate)
-        )
+        instances = ((i, el) for el in itertools.chain(spark_instances, lama_instances) for i in range(repeat_rate))
 
         for repeat_seq_id, (library, params, spark_config) in instances:
             params = copy(params)
@@ -146,7 +139,7 @@ def generate_experiments(config_data: Dict) -> List[ExpInstanceConfig]:
                 "exp_name": name,
                 "instance_id": instance_id,
                 "params": params,
-                "calculation_script": config_data["calculation_scripts"][library]
+                "calculation_script": config_data["calculation_scripts"][library],
             }
 
             exp_instances.append(exp_instance)
@@ -155,46 +148,53 @@ def generate_experiments(config_data: Dict) -> List[ExpInstanceConfig]:
 
 
 # Run subprocesses with Spark jobs
-def run_experiments(experiments_configs: List[ExpInstanceConfig]) \
-        -> Iterator[ExpInstanceProc]:
+def run_experiments(experiments_configs: List[ExpInstanceConfig]) -> Iterator[ExpInstanceProc]:
     logger.info(f"Starting to run experiments. Experiments count: {len(experiments_configs)}")
     for exp_instance in experiments_configs:
         exp_name = exp_instance["exp_name"]
         instance_id = exp_instance["instance_id"]
         launch_script_name = exp_instance["calculation_script"]
-        jobname = instance_id[:50].strip('-')
+        jobname = instance_id[:50].strip("-")
 
         instance_config_path = f"/tmp/{jobname}/config.yaml"
         os.makedirs(os.path.dirname(instance_config_path), exist_ok=True)
 
-        spark_master = exp_instance['params']['spark_config']['spark.master']
+        spark_master = exp_instance["params"]["spark_config"]["spark.master"]
 
-        py_files = glob.glob(os.path.join(EXP_PY_FILES_DIR, '*.py'))
-        py_files = ','.join(py_files)
+        py_files = glob.glob(os.path.join(EXP_PY_FILES_DIR, "*.py"))
+        py_files = ",".join(py_files)
 
         with open(instance_config_path, "w+") as f:
             yaml.dump(exp_instance["params"], f, default_flow_style=False)
 
         outfile = os.path.abspath(f"{results_path}/Results_{instance_id}.log")
 
-        confs = [f'{setting}={value}' for setting, value in exp_instance['params']['spark_config'].items()]
-        conf_args = [el for c in confs for el in ['--conf', c]]
-        conf_args.extend([
-            '--conf', f'spark.kubernetes.driver.label.appname={instance_id}',
-            '--conf', f'spark.kubernetes.executor.label.appname={instance_id}',
-            '--conf', f'spark.kubernetes.driver.label.expname={exp_name}',
-            '--conf', f'spark.kubernetes.executor.label.expname={exp_name}',
-            '--py-files', py_files,
-            '--files', instance_config_path
-        ])
+        confs = [f"{setting}={value}" for setting, value in exp_instance["params"]["spark_config"].items()]
+        conf_args = [el for c in confs for el in ["--conf", c]]
+        conf_args.extend(
+            [
+                "--conf",
+                f"spark.kubernetes.driver.label.appname={instance_id}",
+                "--conf",
+                f"spark.kubernetes.executor.label.appname={instance_id}",
+                "--conf",
+                f"spark.kubernetes.driver.label.expname={exp_name}",
+                "--conf",
+                f"spark.kubernetes.executor.label.expname={exp_name}",
+                "--py-files",
+                py_files,
+                "--files",
+                instance_config_path,
+            ]
+        )
 
         custom_env = os.environ.copy()
         custom_env["PYSPARK_PYTHON"] = "python3"
         p = subprocess.Popen(
-            ["spark-submit", '--master', spark_master, '--deploy-mode', 'cluster',  *conf_args, launch_script_name],
+            ["spark-submit", "--master", spark_master, "--deploy-mode", "cluster", *conf_args, launch_script_name],
             env=custom_env,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
         )
 
         logger.info(f"Started process with instance id {instance_id} and args {p.args}. ")
@@ -202,10 +202,9 @@ def run_experiments(experiments_configs: List[ExpInstanceConfig]) \
         yield ExpInstanceProc(exp_instance=exp_instance, p=p, outfile=outfile)
 
 
-def limit_procs(it: Iterator[ExpInstanceProc],
-                max_parallel_ops: int = 1,
-                check_period_secs: float = 1.0) \
-        -> Iterator[ExpInstanceProc]:
+def limit_procs(
+    it: Iterator[ExpInstanceProc], max_parallel_ops: int = 1, check_period_secs: float = 1.0
+) -> Iterator[ExpInstanceProc]:
     assert max_parallel_ops > 0
 
     exp_procs: Set[ExpInstanceProc] = set()
@@ -218,9 +217,11 @@ def limit_procs(it: Iterator[ExpInstanceProc],
                 break
 
         if proc_to_remove is not None:
-            msg = f"Removing proc {proc_to_remove.p.pid} " \
-                  f"because it is ended (exit code {proc_to_remove.p.returncode}) " \
-                  f"for instance id {proc_to_remove.exp_instance['instance_id']}"
+            msg = (
+                f"Removing proc {proc_to_remove.p.pid} "
+                f"because it is ended (exit code {proc_to_remove.p.returncode}) "
+                f"for instance id {proc_to_remove.exp_instance['instance_id']}"
+            )
             if proc_to_remove.p.returncode != 0:
                 logger.warning(msg)
             else:
@@ -263,22 +264,24 @@ def process_outfile(exp_instance: ExpInstanceConfig, outfile: str, result_file: 
         return
 
     if len(res_lines) > 1:
-        logger.warning(f"More than one results ({len(res_lines)}) are found "
-                       f"for exp with instance id {exp_instance['instance_id']} in {outfile}")
+        logger.warning(
+            f"More than one results ({len(res_lines)}) are found "
+            f"for exp with instance id {exp_instance['instance_id']} in {outfile}"
+        )
 
     result_line = res_lines[-1]
-    result_str = result_line[result_line.index(MARKER) + len(MARKER):].strip('\n \t')
+    result_str = result_line[result_line.index(MARKER) + len(MARKER) :].strip("\n \t")
     if len(result_str) == 0:
         logger.error(f"Found result line for exp with instance id {exp_instance['instance_id']} in {outfile} is empty")
 
     curr_time = datetime.datetime.now()
 
     record = {
-        "time": curr_time.strftime('%Y-%m-%d %H:%M:%S'),
+        "time": curr_time.strftime("%Y-%m-%d %H:%M:%S"),
         "timestamp": curr_time.timestamp(),
         "exp_instance": exp_instance,
         "outfile": outfile,
-        "result": result_str
+        "result": result_str,
     }
 
     with open(result_file, "a") as f:
@@ -294,16 +297,14 @@ def register_results(exp_procs: Iterator[ExpInstanceProc], total: int):
     exp_proc: ExpInstanceProc
     for exp_proc in tqdm(exp_procs, desc="Experiment", total=total):
         # Mark exp_instance as completed in the state file
-        instance_id = exp_proc.exp_instance['instance_id']
+        instance_id = exp_proc.exp_instance["instance_id"]
         logger.info(f"Registering finished process with instance id: {instance_id}")
 
         # kubectl -n spark-lama-exps logs -l spark-role=driver,spark-app-selector=spark-ba10619fe245432d9153bc0fcd96abae
-        kube_ns = exp_proc.exp_instance['params']['spark_config']['spark.kubernetes.namespace']
-        with open(exp_proc.outfile, 'w') as f:
+        kube_ns = exp_proc.exp_instance["params"]["spark_config"]["spark.kubernetes.namespace"]
+        with open(exp_proc.outfile, "w") as f:
             logs_fetcher = subprocess.Popen(
-                ['kubectl', '-n', kube_ns, 'logs', '-l', f'spark-role=driver,appname={instance_id}'],
-                stdout=f,
-                stderr=f
+                ["kubectl", "-n", kube_ns, "logs", "-l", f"spark-role=driver,appname={instance_id}"], stdout=f, stderr=f
             )
             logs_fetcher.wait()
 

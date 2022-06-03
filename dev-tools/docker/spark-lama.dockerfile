@@ -22,5 +22,3 @@ RUN pip install /tmp/LightAutoML-0.3.0-py3-none-any.whl
 RUN python3 -c 'from pyspark.sql import SparkSession; SparkSession.builder.config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5").config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven").getOrCreate()'
 
 COPY jars jars
-
-

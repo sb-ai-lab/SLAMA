@@ -1,15 +1,12 @@
-import datetime
-import itertools
-import json
-import pprint
-import sys
+import datetime, itertools, json, pprint, sys
+
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, cast, Dict
+from typing import Dict, Iterable, List, Optional, cast
 
 
 @dataclass
 class EventStartOrEnd:
-    event: 'Event'
+    event: "Event"
     time: datetime.datetime
     is_start: bool
 
@@ -30,8 +27,8 @@ class Event:
 
     @staticmethod
     def parse_line(line: str) -> datetime.datetime:
-        date, time, *_ = line.split(' ')
-        dt = datetime.datetime.strptime(f"{date} {time}", '%Y-%m-%d %H:%M:%S,%f')
+        date, time, *_ = line.split(" ")
+        dt = datetime.datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M:%S,%f")
         return dt
 
     def check(self, line: str) -> Optional[EventStartOrEnd]:
@@ -92,19 +89,17 @@ def select_lines(events: List[Event], lines: Iterable[str]) -> Iterable[EventSta
 def extract_result(lines: Iterable[str]) -> Dict:
     result_marker = "EXP-RESULT: "
     try:
-        result_line = next(
-            line for line in lines
-            if line.startswith(result_marker)
-        )
+        result_line = next(line for line in lines if line.startswith(result_marker))
     except StopIteration:
         result_line = None
 
     if result_line is not None:
-        result = json.loads(result_line[len(result_marker):].strip().replace("'", '"'))
+        result = json.loads(result_line[len(result_marker) :].strip().replace("'", '"'))
     else:
         result = None
 
     return result
+
 
 events = [
     Event("Reader", "Reader starting fit_read", "Reader finished fit_read"),
@@ -112,15 +107,38 @@ events = [
     Event("TE", "(TE)] fit_transform is started", "(TE)] fit_transform is finished"),
     Event("SparkFeaturePipeline", "SparkFeaturePipeline is started", "SparkFeaturePipeline is finished"),
     Event("LinearLBGFS", "Starting LinearLGBFS", "LinearLGBFS is finished"),
-    Event("LinearLBGFS single fold", "fit_predict single fold in LinearLBGFS",
-          "fit_predict single fold finished in LinearLBGFS"),
+    Event(
+        "LinearLBGFS single fold",
+        "fit_predict single fold in LinearLBGFS",
+        "fit_predict single fold finished in LinearLBGFS",
+    ),
     Event("LGBM", "Starting LGBM fit", "Finished LGBM fit"),
     Event("Cacher", "Starting to materialize data", "Finished data materialization"),
-    Event("SparkReaderHelper._create_unique_ids()", "SparkReaderHelper._create_unique_ids() is started", "SparkReaderHelper._create_unique_ids() is finished"),
-    Event("SparkToSparkReader infer roles", "SparkToSparkReader infer roles is started", "SparkToSparkReader infer roles is finished"),
-    Event("SparkToSparkReader._create_target()", "SparkToSparkReader._create_target() is started", "SparkToSparkReader._create_target() is finished"),
-    Event("SparkToSparkReader._guess_role()", "SparkToSparkReader._guess_role() is started", "SparkToSparkReader._guess_role() is finished"),
-    Event("SparkToSparkReader._ok_features()", "SparkToSparkReader._ok_features() is started", "SparkToSparkReader._ok_features() is finished")
+    Event(
+        "SparkReaderHelper._create_unique_ids()",
+        "SparkReaderHelper._create_unique_ids() is started",
+        "SparkReaderHelper._create_unique_ids() is finished",
+    ),
+    Event(
+        "SparkToSparkReader infer roles",
+        "SparkToSparkReader infer roles is started",
+        "SparkToSparkReader infer roles is finished",
+    ),
+    Event(
+        "SparkToSparkReader._create_target()",
+        "SparkToSparkReader._create_target() is started",
+        "SparkToSparkReader._create_target() is finished",
+    ),
+    Event(
+        "SparkToSparkReader._guess_role()",
+        "SparkToSparkReader._guess_role() is started",
+        "SparkToSparkReader._guess_role() is finished",
+    ),
+    Event(
+        "SparkToSparkReader._ok_features()",
+        "SparkToSparkReader._ok_features() is started",
+        "SparkToSparkReader._ok_features() is finished",
+    ),
 ]
 
 

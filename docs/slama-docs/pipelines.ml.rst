@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.pipelines.ml
+slama.pipelines.ml
 ==============================
 
 Pipelines that merge together single model training steps.
@@ -10,7 +10,7 @@ Pipelines that merge together single model training steps.
 Base Classes
 -----------------
 
-.. currentmodule:: lightautoml.spark.pipelines.ml.base
+.. currentmodule:: slama.pipelines.ml.base
 
 .. autosummary::
     :toctree: ./generated
@@ -22,7 +22,7 @@ Base Classes
 Pipeline for Nested Cross-Validation
 ------------------------------------
 
-.. currentmodule:: lightautoml.spark.pipelines.ml.nested_ml_pipe
+.. currentmodule:: slama.pipelines.ml.nested_ml_pipe
 
 .. autosummary::
     :toctree: ./generated

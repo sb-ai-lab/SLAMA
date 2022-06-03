@@ -1,1 +1,0 @@
-VALIDATION_COLUMN = "is_val"

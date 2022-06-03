@@ -2,12 +2,12 @@
     :class: hidden-section
 
 
-lightautoml.spark.report
+slama.report
 ==================
 
 Report generators and templates.
 
-.. currentmodule:: lightautoml.spark.report.report_deco
+.. currentmodule:: slama.report.report_deco
 
 .. autosummary::
     :toctree: ./generated

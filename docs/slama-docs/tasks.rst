@@ -2,14 +2,14 @@
     :class: hidden-section
 
 
-lightautoml.spark.tasks
+slama.tasks
 ==============================
 
 
 Task Class
 ----------
 
-.. currentmodule:: lightautoml.spark.tasks.base
+.. currentmodule:: slama.tasks.base
 
 .. autosummary::
     :toctree: ./generated

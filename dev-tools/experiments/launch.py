@@ -1,19 +1,19 @@
-import logging
-import logging.config
-import os
-import shutil
-from copy import deepcopy, copy
+import logging, logging.config, os, shutil
+
+from copy import copy, deepcopy
 from pprint import pprint
 from typing import Callable
 
 from dataset_utils import datasets
-
 from lama_experiments import calculate_automl as lama_automl
-from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.utils.tmp_utils import LOG_DATA_DIR, log_config
-from spark_experiments import calculate_automl as spark_automl, calculate_lgbadv_boostlgb
+from spark_experiments import calculate_automl as spark_automl
+from spark_experiments import calculate_lgbadv_boostlgb
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='./lama.log'))
+from slama.utils import VERBOSE_LOGGING_FORMAT, logging_config
+
+
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="./lama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -37,10 +37,10 @@ def calculate_quality(calc_automl: Callable, delete_dir: bool = True):
     results = []
     for seed in seeds:
         cfg = deepcopy(config)
-        cfg['seed'] = seed
-        cfg['cv'] = cv
+        cfg["seed"] = seed
+        cfg["cv"] = cv
 
-        cfg['checkpoint_path'] = '/opt/checkpoints/tmp_chck'
+        cfg["checkpoint_path"] = "/opt/checkpoints/tmp_chck"
         log_config("general", cfg)
 
         res = calc_automl(**cfg)

@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.spark.pipelines.features
+slama.pipelines.features
 ==============================
 
 Pipelines for features generation.
@@ -10,7 +10,7 @@ Pipelines for features generation.
 Base Classes
 -----------------
 
-.. currentmodule:: lightautoml.spark.pipelines.features.base
+.. currentmodule:: slama.pipelines.features.base
 
 .. autosummary::
     :toctree: ./generated
@@ -27,7 +27,7 @@ Base Classes
 Feature Pipelines for Boosting Models
 -----------------------------------------
 
-.. currentmodule:: lightautoml.spark.pipelines.features.lgb_pipeline
+.. currentmodule:: slama.pipelines.features.lgb_pipeline
 
 .. autosummary::
     :toctree: ./generated
@@ -41,7 +41,7 @@ Feature Pipelines for Boosting Models
 Feature Pipelines for Linear Models
 -----------------------------------
 
-.. currentmodule:: lightautoml.spark.pipelines.features.linear_pipeline
+.. currentmodule:: slama.pipelines.features.linear_pipeline
 
 .. autosummary::
     :toctree: ./generated
@@ -53,7 +53,7 @@ Feature Pipelines for Linear Models
 Utility Functions
 -----------------
 
-.. currentmodule:: lightautoml.spark.pipelines.features.base
+.. currentmodule:: slama.pipelines.features.base
 
 .. autosummary::
     :toctree: ./generated
