@@ -14,4 +14,4 @@ Report generators and templates.
     :nosignatures:
     :template: classtemplate.rst
 
-    SparkReportDeco
+    .. SparkReportDeco

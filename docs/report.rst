@@ -14,5 +14,5 @@ Report generators and templates.
     :nosignatures:
     :template: classtemplate.rst
 
-    ReportDeco
-    ReportDecoWhitebox
+    .. ReportDeco
+    .. ReportDecoWhitebox
