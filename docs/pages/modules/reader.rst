@@ -8,7 +8,7 @@ slama.reader
 Utils for reading, training and analysing data.
 
 Readers
--------------
+-------
 
 .. currentmodule:: slama.reader.base
 
@@ -22,7 +22,7 @@ Readers
     SparkReaderHelper
 
 Utility functions for advanced roles guessing
--------------
+---------------------------------------------
 
 .. currentmodule:: slama.reader.guess_roles
 

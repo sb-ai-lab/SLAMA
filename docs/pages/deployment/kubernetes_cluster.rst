@@ -46,14 +46,11 @@ On this step use slamactl.sh utility to build dependencies and docker images: ::
 
 It will:
 
-    - compile jars containing Scala-based components
-    (currently only LAMLStringIndexer required for LE-family transformers)
+    - compile jars containing Scala-based components (currently only LAMLStringIndexer required for LE-family transformers)
 
-    - download Spark distro and use dockerfiles from there to build base pyspark images
-    (and push these images to the remote docker repo)
+    - download Spark distro and use dockerfiles from there to build base pyspark images (and push these images to the remote docker repo)
 
-    - compile lama wheel (including spark subpackage) and build a docker image based upon mentioned above pyspark images
-    (this image will be pushed to the remote repository too)
+    - compile lama wheel (including spark subpackage) and build a docker image based upon mentioned above pyspark images (this image will be pushed to the remote repository too)
 
 5. Run an example on the remote cluster
 """""""""""""""""""""""""""""""""""""""

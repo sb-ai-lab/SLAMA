@@ -165,5 +165,5 @@ dumps
 *.orig
 
 docs/generated
-docs/slama-docs/generated
+docs/pages/modules/generated
 rsync-repo.sh

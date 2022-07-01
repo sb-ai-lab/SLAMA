@@ -2,20 +2,20 @@
     :class: hidden-section
 
 
-lightautoml.pipelines
+slama.pipelines
 =====================
 
 Pipelines for solving different tasks.
 
-Utils
--------
+Utility traits
+--------------
 
-.. currentmodule:: lightautoml.pipelines.utils
+.. currentmodule:: slama.pipelines.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
-    :template: functiontemplate.rst
+    :template: classtemplate.rst
 
-    map_pipeline_names
-    get_columns_by_role
+    InputFeaturesAndRoles
+    OutputFeaturesAndRoles

@@ -5,7 +5,7 @@ Next, it will be shown how to run the ``examples/tabular-preset-automl.py`` scri
 
 1. First, let's go to the SLAMA project directory
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. image:: imgs/LightAutoML_repo_files.png
+.. image:: ../../imgs/LightAutoML_repo_files.png
 
 Make sure that in the ``dist`` directory there is a wheel assembly and in the ``jars`` directory there is a jar file.
 If the ``dist`` directory does not exist, or if there are no files in it, then you need to build lama dist files. ::

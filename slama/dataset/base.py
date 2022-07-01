@@ -1,3 +1,5 @@
+"""Contains base classes for internal dataset interface."""
+
 from copy import copy
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
@@ -274,9 +276,10 @@ class SparkDataset(LAMLDataset):
 
         Args:
             data: Table with features.
-            features: `ignored, always None. just for same interface.
+            features: `ignored`, always None. just for same interface.
             roles: Dict with roles.
-            dependencies: spark dataframes that should be uncached when this spark dataframe has been materialized
+            dependencies: spark dataframes that should be uncached when this spark dataframe has been materialized.
+
         """
         self._validate_dataframe(data)
         super().set_data(data, None, roles)
