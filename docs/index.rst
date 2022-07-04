@@ -1,4 +1,4 @@
-SLAMA (Spark version of LAMA)
+SLAMA
 =============================
 
 This is a distributed version of `LAMA <https://github.com/sb-ai-lab/LightAutoML>` library written on Spark framework.
