@@ -1,7 +1,7 @@
 SLAMA (Spark version of LAMA)
 =============================
 
-This is a distributed version of `LAMA <https://github.com/sb-ai-lab/LightAutoML` library written on Spark framework.
+This is a distributed version of `LAMA <https://github.com/sb-ai-lab/LightAutoML>` library written on Spark framework.
 SLAMA brings LAMA functionality on Spark including:
 
 - Automatic hyperparameter tuning, data processing.
