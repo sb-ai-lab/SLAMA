@@ -2,7 +2,7 @@
 
 set -ex
 
-BASE_IMAGE_TAG="lama-v3.2.0"
+BASE_IMAGE_TAG="slama-v3.2.0"
 
 if [[ -z "${KUBE_NAMESPACE}" ]]
 then
@@ -35,7 +35,7 @@ function build_jars() {
 
   echo "Building jars"
   docker run -it \
-    -v "${cur_dir}/scala-lightautoml-transformers:/scala-lightautoml-transformers" \
+    -v "${cur_dir}/scala-slama-transformers:/scala-slama-transformers" \
     -v "${cur_dir}/jars:/jars" \
     lama-jar-builder
 }
@@ -71,13 +71,13 @@ function build_pyspark_images() {
   fi
 }
 
-function build_lama_dist() {
+function build_slama_dist() {
   # shellcheck disable=SC2094
   poetry export -f requirements.txt > requirements.txt
   poetry build
 }
 
-function build_lama_image() {
+function build_slama_image() {
   # shellcheck disable=SC2094
   poetry export -f requirements.txt > requirements.txt
   poetry build
@@ -99,7 +99,7 @@ function build_lama_image() {
 function build_dist() {
     build_jars
     build_pyspark_images
-    build_lama_image
+    build_slama_image
 }
 
 function submit_job() {
@@ -259,7 +259,7 @@ spark-submit \
   --conf 'spark.scheduler.minRegisteredResourcesRatio=1.0' \
   --conf 'spark.scheduler.maxRegisteredResourcesWaitingTime=180s' \
   --jars jars/spark-lightautoml_2.12-0.1.jar \
-  --py-files dist/LightAutoML-0.3.0.tar.gz ${script_path}
+  --py-files dist/SLAMA-0.1.0.tar.gz ${script_path}
 }
 
 function help() {
@@ -272,8 +272,8 @@ function help() {
     build-jars - Builds scala-based components of Slama and creates appropriate jar files in jar folder of the project
     build-pyspark-images - Builds and pushes base pyspark images required to start pyspark on cluster.
       Pushing requires remote docker repo address accessible from the cluster.
-    build-lama-image - Builds and pushes a docker image to be used for running lama remotely on the cluster.
-    build-dist - build_jars, build_pyspark_images, build_lama_image in a sequence
+    build-slama-image - Builds and pushes a docker image to be used for running lama remotely on the cluster.
+    build-dist - build_jars, build_pyspark_images, build_slama_image in a sequence
     submit-job - Submit a pyspark application with script that represent SLAMA automl app.
     submit-job-yarn - Submit a pyspark application to YARN cluster to execution.
     port-forward - Forwards port 4040 of the driver to 9040 port
@@ -281,9 +281,9 @@ function help() {
 
   Examples:
   1. Start job
-     KUBE_NAMESPACE=spark-lama-exps REPO=node2.bdcl:5000 ./bin/slamactl.sh submit-job ./examples/spark/tabular-preset-automl.py
+     KUBE_NAMESPACE=spark-lama-exps REPO=node2.bdcl:5000 ./bin/slamactl.sh submit-job ./examples/tabular-preset-automl.py
   2. Forward Spark WebUI on local port
-     KUBE_NAMESPACE=spark-lama-exps REPO=node2.bdcl:5000 ./bin/slamactl.sh port-forward ./examples/spark/tabular-preset-automl.py
+     KUBE_NAMESPACE=spark-lama-exps REPO=node2.bdcl:5000 ./bin/slamactl.sh port-forward ./examples/tabular-preset-automl.py
   "
 }
 
@@ -311,12 +311,12 @@ function main () {
         build_pyspark_images
         ;;
 
-    "build-lama-dist")
-        build_lama_dist
+    "build-slama-dist")
+        build_slama_dist
         ;;
 
-    "build-lama-image")
-        build_lama_image
+    "build-slama-image")
+        build_slama_image
         ;;
 
     "build-dist")

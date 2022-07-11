@@ -10,7 +10,7 @@ FROM ubuntu:20.04
 
 RUN apt-get update && \
     apt-get install -y wget apt-transport-https curl gnupg software-properties-common && \
-	apt-get install -y openjdk-11-jre
+    apt-get install -y openjdk-11-jre
 
 # Install SBT
 RUN echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" | tee /etc/apt/sources.list.d/sbt.list && \
@@ -26,9 +26,9 @@ RUN rm -rf /var/lib/apt/lists/*
 COPY build.sh /bin
 
 ## Copy source code. Instead of copying every time you are able to mount source code directory in this path.
-#COPY scala-lightautoml-transformers /src
-RUN mkdir -p scala-lightautoml-transformers
-WORKDIR /scala-lightautoml-transformers
+#COPY scala-slama-transformers /src
+RUN mkdir -p scala-slama-transformers
+WORKDIR /scala-slama-transformers
 
 # Just for cache the spark packages
 RUN sbt clean && \

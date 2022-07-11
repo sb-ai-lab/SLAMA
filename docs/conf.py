@@ -6,21 +6,18 @@
 
 # -- Path setup --------------------------------------------------------------
 
-import datetime
-
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
-import sys
+import datetime, os, sys
 
 
 CURR_PATH = os.path.abspath(os.path.dirname(__file__))
 LIB_PATH = os.path.join(CURR_PATH, os.path.pardir)
 sys.path.insert(0, LIB_PATH)
 
-project = "LightAutoML"
+project = "SLAMA"
 copyright = "%s, AI Lab ML Tools" % str(datetime.datetime.now().year)
 author = "AI Lab ML Tools"
 
