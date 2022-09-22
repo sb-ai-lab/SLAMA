@@ -15,6 +15,8 @@ optional = false
 python-versions = ">=3.7"
 
 [package.dependencies]
+importlib-metadata = {version = "*", markers = "python_version < \"3.9\""}
+importlib-resources = {version = "*", markers = "python_version < \"3.9\""}
 Mako = "*"
 SQLAlchemy = ">=1.3.0"
 
@@ -327,14 +329,6 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
-name = "dataclasses"
-version = "0.6"
-description = "A backport of the dataclasses module for Python 3.6"
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "debugpy"
 version = "1.6.3"
 description = "An implementation of the Debug Adapter Protocol for Python"
@@ -525,6 +519,21 @@ perf = ["ipython"]
 testing = ["flufl.flake8", "importlib-resources (>=1.3)", "packaging", "pyfakefs", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)", "pytest-perf (>=0.9.2)"]
 
 [[package]]
+name = "importlib-resources"
+version = "5.9.0"
+description = "Read resources from Python packages"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+zipp = {version = ">=3.1.0", markers = "python_version < \"3.10\""}
+
+[package.extras]
+docs = ["jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx"]
+testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
+
+[[package]]
 name = "iniconfig"
 version = "1.1.1"
 description = "iniconfig: brain-dead simple config-ini parsing"
@@ -654,6 +663,8 @@ python-versions = ">=3.7"
 
 [package.dependencies]
 attrs = ">=17.4.0"
+importlib-resources = {version = ">=1.4.0", markers = "python_version < \"3.9\""}
+pkgutil-resolve-name = {version = ">=1.3.10", markers = "python_version < \"3.9\""}
 pyrsistent = ">=0.14.0,<0.17.0 || >0.17.0,<0.17.1 || >0.17.1,<0.17.2 || >0.17.2"
 
 [package.extras]
@@ -722,7 +733,7 @@ python-versions = "*"
 
 [[package]]
 name = "lightautoml"
-version = "0.3.0"
+version = "0.3.7.1"
 description = "Fast and customizable framework for automatic ML model creation (AutoML)"
 category = "main"
 optional = false
@@ -730,36 +741,33 @@ python-versions = ">=3.6.1,<3.10"
 
 [package.dependencies]
 autowoe = ">=1.2"
-catboost = "*"
+catboost = ">=0.26.1"
 cmaes = "*"
-dataclasses = "0.6"
 holidays = "*"
 jinja2 = "*"
 joblib = "*"
 json2html = "*"
-lightgbm = ">=2.3,<3.0"
+lightgbm = "3.2.1"
 networkx = "*"
-numpy = {version = ">=1.20.0", markers = "python_version >= \"3.7\""}
 optuna = "*"
-pandas = ">=1"
+pandas = {version = "<=1.4.3", markers = "python_version >= \"3.8\""}
 poetry-core = ">=1.0.0,<2.0.0"
 pyyaml = "*"
 scikit-learn = ">=0.22"
-scipy = "*"
 seaborn = "*"
 torch = "<1.9"
-torchvision = "*"
 tqdm = "*"
 
 [package.extras]
-all = ["albumentations (>=0.4.6)", "cffi (>=1.14.5,<2.0.0)", "efficientnet-pytorch", "gensim (>=4)", "nltk", "opencv-python", "pywavelets", "scikit-image", "torchvision (==0.8.0)", "transformers (>=4)", "weasyprint (>=52.5,<53.0)"]
-cv = ["albumentations (>=0.4.6)", "efficientnet-pytorch", "opencv-python", "pywavelets", "scikit-image", "torchvision (==0.8.0)"]
+afg = ["featuretools (>=1.11.1)"]
+all = ["albumentations (<=1.0.3)", "cffi (==1.14.5)", "efficientnet-pytorch", "featuretools (>=1.11.1)", "gensim (>=4)", "nltk", "opencv-python (<=4.5.2.52)", "pywavelets", "torchvision", "torchvision (==0.8.0)", "transformers (>=4)", "weasyprint (==52.5)"]
+cv = ["albumentations (<=1.0.3)", "efficientnet-pytorch", "opencv-python (<=4.5.2.52)", "pywavelets", "torchvision", "torchvision (==0.8.0)"]
 nlp = ["gensim (>=4)", "nltk", "transformers (>=4)"]
-report = ["cffi (>=1.14.5,<2.0.0)", "weasyprint (>=52.5,<53.0)"]
+report = ["cffi (==1.14.5)", "weasyprint (==52.5)"]
 
 [[package]]
 name = "lightgbm"
-version = "2.3.1"
+version = "3.2.1"
 description = "LightGBM Python Package"
 category = "main"
 optional = false
@@ -767,8 +775,11 @@ python-versions = "*"
 
 [package.dependencies]
 numpy = "*"
-scikit-learn = "*"
+scikit-learn = "!=0.22.0"
 scipy = "*"
+
+[package.extras]
+dask = ["dask[array] (>=2.0.0)", "dask[dataframe] (>=2.0.0)", "dask[distributed] (>=2.0.0)", "pandas"]
 
 [[package]]
 name = "lxml"
@@ -1214,6 +1225,14 @@ python-versions = ">=3.7"
 [package.extras]
 docs = ["furo", "olefile", "sphinx (>=2.4)", "sphinx-copybutton", "sphinx-issues (>=3.0.1)", "sphinx-removed-in", "sphinxext-opengraph"]
 tests = ["check-manifest", "coverage", "defusedxml", "markdown2", "olefile", "packaging", "pyroma", "pytest", "pytest-cov", "pytest-timeout"]
+
+[[package]]
+name = "pkgutil-resolve-name"
+version = "1.3.10"
+description = "Resolve a name to an object."
+category = "dev"
+optional = false
+python-versions = ">=3.6"
 
 [[package]]
 name = "platformdirs"
@@ -1986,24 +2005,6 @@ numpy = "*"
 typing-extensions = "*"
 
 [[package]]
-name = "torchvision"
-version = "0.12.0"
-description = "image and video datasets and models for torch deep learning"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-
-[package.dependencies]
-numpy = "*"
-pillow = ">=5.3.0,<8.3.0 || >=8.4.0"
-requests = "*"
-torch = "*"
-typing-extensions = "*"
-
-[package.extras]
-scipy = ["scipy"]
-
-[[package]]
 name = "tornado"
 version = "6.2"
 description = "Tornado is a Python web framework and asynchronous networking library, originally developed at FriendFeed."
@@ -2129,8 +2130,8 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 
 [metadata]
 lock-version = "1.1"
-python-versions = "~3.9"
-content-hash = "08aeae365ad11b0bee6a3c65d002b97939d450ac5a3a896ded4270fcc8be06a4"
+python-versions = ">=3.8, <3.10"
+content-hash = "fdc35b6f8ceb7a6694919252cb11ae26e23c740d634d722c701788b4e49bd388"
 
 [metadata.files]
 alabaster = [
@@ -2330,10 +2331,6 @@ cycler = [
     {file = "cycler-0.11.0-py3-none-any.whl", hash = "sha256:3a27e95f763a428a739d2add979fa7494c912a32c17c4c38c4d5f082cad165a3"},
     {file = "cycler-0.11.0.tar.gz", hash = "sha256:9c87405839a19696e837b3b818fed3f5f69f16f1eec1a1ad77e043dcea9c772f"},
 ]
-dataclasses = [
-    {file = "dataclasses-0.6-py3-none-any.whl", hash = "sha256:454a69d788c7fda44efd71e259be79577822f5e3f53f029a22d08004e951dc9f"},
-    {file = "dataclasses-0.6.tar.gz", hash = "sha256:6988bd2b895eef432d562370bb707d540f32f7360ab13da45340101bc2307d84"},
-]
 debugpy = [
     {file = "debugpy-1.6.3-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:c4b2bd5c245eeb49824bf7e539f95fb17f9a756186e51c3e513e32999d8846f3"},
     {file = "debugpy-1.6.3-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:b8deaeb779699350deeed835322730a3efec170b88927debc9ba07a1a38e2585"},
@@ -2474,6 +2471,10 @@ importlib-metadata = [
     {file = "importlib_metadata-4.12.0-py3-none-any.whl", hash = "sha256:7401a975809ea1fdc658c3aa4f78cc2195a0e019c5cbc4c06122884e9ae80c23"},
     {file = "importlib_metadata-4.12.0.tar.gz", hash = "sha256:637245b8bab2b6502fcbc752cc4b7a6f6243bb02b31c5c26156ad103d3d45670"},
 ]
+importlib-resources = [
+    {file = "importlib_resources-5.9.0-py3-none-any.whl", hash = "sha256:f78a8df21a79bcc30cfd400bdc38f314333de7c0fb619763f6b9dabab8268bb7"},
+    {file = "importlib_resources-5.9.0.tar.gz", hash = "sha256:5481e97fb45af8dcf2f798952625591c58fe599d0735d86b10f54de086a61681"},
+]
 iniconfig = [
     {file = "iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3"},
     {file = "iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32"},
@@ -2596,14 +2597,15 @@ korean-lunar-calendar = [
     {file = "korean_lunar_calendar-0.2.1.tar.gz", hash = "sha256:12ce54b1392ed45a82dc6cea85ee5f7e33630556e82488f57e37a22482c8275d"},
 ]
 lightautoml = [
-    {file = "LightAutoML-0.3.0-py3-none-any.whl", hash = "sha256:291cd53d47a1b5b0959105fdabfc9503e5ea4e50f492b0f80299d768dc577528"},
-    {file = "LightAutoML-0.3.0.tar.gz", hash = "sha256:01324d66744ffb3656857b8d4aa16f5a6a3e12d62cec1972f07359a7cbc21f0a"},
+    {file = "LightAutoML-0.3.7.1.tar.gz", hash = "sha256:cec6f2d8a62bda7617534f5961a0b9c4daff4f12e4b1cf0f8fbc89c8e7acbc9d"},
+    {file = "lightautoml-0.3.7.1-py3-none-any.whl", hash = "sha256:eb8d1021a4bb9fc91bed4de4b4a5b040b7e5c44d349f614b15e0ec6690716183"},
 ]
 lightgbm = [
-    {file = "lightgbm-2.3.1-py2.py3-none-macosx_10_9_x86_64.macosx_10_10_x86_64.macosx_10_11_x86_64.macosx_10_12_x86_64.macosx_10_13_x86_64.macosx_10_14_x86_64.macosx_10_15_x86_64.whl", hash = "sha256:c35743f825af65bd96106d4df1ee36a5f0f2d1140e2ed2e98e6742a931771730"},
-    {file = "lightgbm-2.3.1-py2.py3-none-manylinux1_x86_64.whl", hash = "sha256:d0c51c79cf34c6dc717fd6a1c1e5c73eb428ade51228fedd6e6ca26ed4756190"},
-    {file = "lightgbm-2.3.1-py2.py3-none-win_amd64.whl", hash = "sha256:c6968efcc5c19f9867592f885edbfaf2d753f7fd8ce924453ac8b453dbf81f55"},
-    {file = "lightgbm-2.3.1.tar.gz", hash = "sha256:bd1817be401e74c0d8b049e97ea2f35d2ce155cfa130119ce4195ea207bd6388"},
+    {file = "lightgbm-3.2.1-py3-none-macosx_10_14_x86_64.macosx_10_15_x86_64.macosx_11_0_x86_64.whl", hash = "sha256:79719706046faf708d9436cd989e9c61696ceb1c5fbaf1257ae9c2fa7bcff686"},
+    {file = "lightgbm-3.2.1-py3-none-manylinux1_x86_64.whl", hash = "sha256:b4c158f3026cdf5087a047945686a38b6a1e0f761627907fd959cb7afc2743b3"},
+    {file = "lightgbm-3.2.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:95b0f1c8fec232be2995502151f8a168e30e7fd9a8e89d835ca5919820cd9033"},
+    {file = "lightgbm-3.2.1-py3-none-win_amd64.whl", hash = "sha256:0999f69e420281fc450d5ee4559ce0595931750aa377ff1c0228150505ea2bf8"},
+    {file = "lightgbm-3.2.1.tar.gz", hash = "sha256:bd98e3b501b4c24dc127f4ad93e467f42923fe3eefa99e143b5b93158f024395"},
 ]
 lxml = [
     {file = "lxml-4.9.1-cp27-cp27m-macosx_10_15_x86_64.whl", hash = "sha256:98cafc618614d72b02185ac583c6f7796202062c41d2eeecdf07820bad3295ed"},
@@ -3005,6 +3007,10 @@ pillow = [
     {file = "Pillow-9.2.0-pp38-pypy38_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:96b5e6874431df16aee0c1ba237574cb6dff1dcb173798faa6a9d8b399a05d0e"},
     {file = "Pillow-9.2.0-pp38-pypy38_pp73-win_amd64.whl", hash = "sha256:0030fdbd926fb85844b8b92e2f9449ba89607231d3dd597a21ae72dc7fe26927"},
     {file = "Pillow-9.2.0.tar.gz", hash = "sha256:75e636fd3e0fb872693f23ccb8a5ff2cd578801251f3a4f6854c6a5d437d3c04"},
+]
+pkgutil-resolve-name = [
+    {file = "pkgutil_resolve_name-1.3.10-py3-none-any.whl", hash = "sha256:ca27cc078d25c5ad71a9de0a7a330146c4e014c2462d9af19c6b828280649c5e"},
+    {file = "pkgutil_resolve_name-1.3.10.tar.gz", hash = "sha256:357d6c9e6a755653cfd78893817c0853af365dd51ec97f3d358a819373bbd174"},
 ]
 platformdirs = [
     {file = "platformdirs-2.5.2-py3-none-any.whl", hash = "sha256:027d8e83a2d7de06bbac4e5ef7e023c02b863d7ea5d079477e722bb41ab25788"},
@@ -3553,27 +3559,6 @@ torch = [
     {file = "torch-1.8.1-cp39-cp39-manylinux2014_aarch64.whl", hash = "sha256:a50ea8ed900927fb30cadb63aa7a32fdd59c7d7abe5012348dfbe35a8355c083"},
     {file = "torch-1.8.1-cp39-cp39-win_amd64.whl", hash = "sha256:dac4d10494e74f7e553c92d7263e19ea501742c4825ddd26c4decfa27be95981"},
     {file = "torch-1.8.1-cp39-none-macosx_10_9_x86_64.whl", hash = "sha256:225ee4238c019b28369c71977327deeeb2bd1c6b8557e6fcf631b8866bdc5447"},
-]
-torchvision = [
-    {file = "torchvision-0.12.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:693656e6790b6ab21e4a6e87e81c2982bad9e455b5eb24e14bb672382ec6130f"},
-    {file = "torchvision-0.12.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:a0be4501ca0ba1b195644c9243f49a1c49a26e52a7f37924c4239d0bf5ecbd8d"},
-    {file = "torchvision-0.12.0-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:ebfb47adf65bf3926b990b2c4767e291f135e259e03232e0e1a30ecdb05eb087"},
-    {file = "torchvision-0.12.0-cp310-cp310-manylinux2014_aarch64.whl", hash = "sha256:9771231639afb5973cdaea1d449b451e2982e1ef5410ca67bbdc2b465565573a"},
-    {file = "torchvision-0.12.0-cp310-cp310-win_amd64.whl", hash = "sha256:894dacdc64b6e35e3f330722db51c76f4de016c7bf7bd79cf02ed2f4c106e625"},
-    {file = "torchvision-0.12.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:36dfdf6451fe3072ab15118982853b848896c0fd3b26cb8135e1e7981dbb0916"},
-    {file = "torchvision-0.12.0-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:aac76d52c5ce4229cb0eaebb762f3391fa736565eb35a4184fa0f7be30b705cd"},
-    {file = "torchvision-0.12.0-cp37-cp37m-manylinux2014_aarch64.whl", hash = "sha256:926666f0b893dce6619759c19b0dd3884af7a9d7022b10395653659d28e43c48"},
-    {file = "torchvision-0.12.0-cp37-cp37m-win_amd64.whl", hash = "sha256:c225f55c1bfce027a03f4ca46ddb9559c83f8087c2880bed3261a76c49bb7996"},
-    {file = "torchvision-0.12.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:d1ccb53836ba886320dcda12d00ee8b5f8f38b6c36d7906f141d25778cf74104"},
-    {file = "torchvision-0.12.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:9f42420f7f0b29cd3d61776df3157827257a0cf16b2c02776dc16c96abb1256d"},
-    {file = "torchvision-0.12.0-cp38-cp38-manylinux1_x86_64.whl", hash = "sha256:9017248c7e526c8cdcaaab8cf41d904a520a409d707398189a06d0757901d235"},
-    {file = "torchvision-0.12.0-cp38-cp38-manylinux2014_aarch64.whl", hash = "sha256:0744902f2265d4c3e83c44a06b567df312e4a9faf8c92620016c7bed7056b5a7"},
-    {file = "torchvision-0.12.0-cp38-cp38-win_amd64.whl", hash = "sha256:a91db01496932350bf9c0ee8607ac8ef31c3ebfdaedefe5c5cda0515317f8b8e"},
-    {file = "torchvision-0.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:24d03fcaa28004c64a24124ac4a894c50f5948c8eb290e398d6c76fff2bc678f"},
-    {file = "torchvision-0.12.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:69d82f47b67bad6ddcbb87833ba5950a6c271ba97baae4c0955610071bf034f5"},
-    {file = "torchvision-0.12.0-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:49ed7886b93b80c9733462edd06a07f8d4c6ea4d5bd2894e7268f7a3774f4f7d"},
-    {file = "torchvision-0.12.0-cp39-cp39-manylinux2014_aarch64.whl", hash = "sha256:b93a767f44e3933cb3b01a6fe9727db54590f57b7dac09d5aaf15966c6c151dd"},
-    {file = "torchvision-0.12.0-cp39-cp39-win_amd64.whl", hash = "sha256:edab05f7ba9f648c00435b384ffdbd7bde79a3b8ea893813fb50f6ccf28b1e76"},
 ]
 tornado = [
     {file = "tornado-6.2-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:20f638fd8cc85f3cbae3c732326e96addff0a15e22d80f049e00121651e82e72"},

@@ -141,19 +141,21 @@ class LAMLStringIndexer @Since("1.4.0")(
     implicit val encoder: Encoder[Array[OpenHashMap[String, Long]]] = Encoders.kryo[Array[OpenHashMap[String, Long]]]
 
     val selectedCols = getSelectedCols(dataset, inputCols)
-//    dataset.select(selectedCols: _*)
-//            .toDF
-//            .groupBy().agg(aggregator.toColumn)
-//            .as[Array[OpenHashMap[String, Long]]]
-//            .collect()(0)
 
-    val result = dataset.select(selectedCols: _*).toDF.rdd
-      .treeAggregate(aggregator.zero)(
-        seqOp = aggregator.reduce,
-        combOp = aggregator.merge,
-        depth = 2
-      )
-    result
+    // TODO: make switching here
+    dataset.select(selectedCols: _*)
+            .toDF
+            .groupBy().agg(aggregator.toColumn)
+            .as[Array[OpenHashMap[String, Long]]]
+            .collect()(0)
+
+//    val result = dataset.select(selectedCols: _*).toDF.rdd
+//      .treeAggregate(aggregator.zero)(
+//        seqOp = aggregator.reduce,
+//        combOp = aggregator.merge,
+//        depth = 2
+//      )
+//    result
   }
 
   private def sortByFreq(dataset: Dataset[_], ascending: Boolean): Array[Array[(String, Long)]] = {
