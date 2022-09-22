@@ -100,7 +100,8 @@ def test_base_diff(spark: SparkSession, dataset: DatasetForTest):
         spark,
         ds,
         BaseDiff(base_names=base_names, diff_names=diff_names),
-        SparkBaseDiffTransformer(input_roles=ds.roles, base_names=base_names, diff_names=diff_names)
+        SparkBaseDiffTransformer(input_roles=ds.roles, base_names=base_names, diff_names=diff_names),
+        rtol = 1.e-3
     )
 
 
