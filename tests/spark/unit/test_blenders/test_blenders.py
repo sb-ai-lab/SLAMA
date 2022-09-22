@@ -11,18 +11,18 @@ from pyspark.sql import SparkSession
 from lightautoml.automl.blend import BestModelSelector, Blender, WeightedBlender
 from lightautoml.dataset.np_pd_dataset import NumpyDataset
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.automl.blend import SparkBestModelSelector, SparkWeightedBlender
+from sparklightautoml.automl.blend import SparkBestModelSelector, SparkWeightedBlender
 
-from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
-from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM as SparkBoostLGBM
-from lightautoml.spark.ml_algo.linear_pyspark import SparkLinearLBFGS
-from lightautoml.spark.pipelines.ml.base import SparkMLPipeline
-from lightautoml.spark.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline as SparkNestedTabularMLPipeline
-from lightautoml.spark.tasks.base import SparkTask as SparkTask
-from lightautoml.spark.transformers.base import ColumnsSelectorTransformer, DropColumnsTransformer
-from lightautoml.spark.utils import log_exec_time, VERBOSE_LOGGING_FORMAT
-from lightautoml.spark.validation.iterators import SparkDummyIterator
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
+from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM as SparkBoostLGBM
+from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
+from sparklightautoml.pipelines.ml.base import SparkMLPipeline
+from sparklightautoml.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline as SparkNestedTabularMLPipeline
+from sparklightautoml.tasks.base import SparkTask as SparkTask
+from sparklightautoml.transformers.base import ColumnsSelectorTransformer, DropColumnsTransformer
+from sparklightautoml.utils import log_exec_time, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.validation.iterators import SparkDummyIterator
 from lightautoml.tasks import Task
 from .. import from_pandas_to_spark, spark as spark_sess, compare_obtained_datasets
 

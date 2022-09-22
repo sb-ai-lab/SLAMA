@@ -5,9 +5,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 
 from pyspark.sql import SparkSession
 
-from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.reader.base import SparkToSparkReader
-from lightautoml.spark.tasks.base import SparkTask
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.reader.base import SparkToSparkReader
+from sparklightautoml.tasks.base import SparkTask
 
 import pyspark.sql.functions as F
 

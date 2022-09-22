@@ -2,20 +2,20 @@
     :class: hidden-section
 
 
-lightautoml.pipelines
+sparklightautoml.pipelines
 =====================
 
 Pipelines for solving different tasks.
 
-Utils
+Utility traits
 -------
 
-.. currentmodule:: lightautoml.pipelines.utils
+.. currentmodule:: sparklightautoml.pipelines.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
-    :template: functiontemplate.rst
+    :template: classtemplate.rst
 
-    map_pipeline_names
-    get_columns_by_role
+    InputFeaturesAndRoles
+    OutputFeaturesAndRoles

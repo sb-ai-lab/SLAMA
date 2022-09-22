@@ -1,19 +1,19 @@
 .. role:: hidden
     :class: hidden-section
 
-lightautoml.automl
+sparklightautoml.automl
 ======================
 
-The main module, which includes the AutoML class, blenders and ready-made presets.
+The main module, which includes the SparkAutoML class, blenders and ready-made presets.
 
-.. currentmodule:: lightautoml.automl.base
+.. currentmodule:: sparklightautoml.automl.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    AutoML
+    SparkAutoML
 
 
 Presets
@@ -21,32 +21,28 @@ Presets
 
 Presets for end-to-end model training for special tasks.
 
-.. currentmodule:: lightautoml.automl.presets
+.. currentmodule:: sparklightautoml.automl.presets
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    base.AutoMLPreset
-    tabular_presets.TabularAutoML
-    tabular_presets.TabularUtilizedAutoML
-    image_presets.TabularCVAutoML
-    text_presets.TabularNLPAutoML
-    whitebox_presets.WhiteBoxPreset
+    base.SparkAutoMLPreset
+    tabular_presets.SparkTabularAutoML
 
 
 Blenders
 --------
 
-.. currentmodule:: lightautoml.automl.blend
+.. currentmodule:: sparklightautoml.automl.blend
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    Blender
-    BestModelSelector
-    MeanBlender
-    WeightedBlender
+    SparkBlender
+    SparkBestModelSelector
+    SparkMeanBlender
+    SparkWeightedBlender

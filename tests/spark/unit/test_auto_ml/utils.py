@@ -9,17 +9,17 @@ from pyspark.ml.functions import array_to_vector
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.reader.base import UserDefinedRolesDict
 from lightautoml.reader.tabular_batch_generator import ReadableToDf
-from lightautoml.spark.automl.blend import SparkWeightedBlender
-from lightautoml.spark.automl.presets.base import SparkAutoMLPreset
-from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.utils import SparkDataFrame
-from lightautoml.spark.dataset.roles import NumericVectorOrArrayRole
-from lightautoml.spark.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer
-from lightautoml.spark.pipelines.ml.base import SparkMLPipeline
-from lightautoml.spark.reader.base import SparkToSparkReader
-from lightautoml.spark.tasks.base import SparkTask
-from lightautoml.spark.validation.base import SparkBaseTrainValidIterator
-from lightautoml.spark.validation.iterators import SparkFoldsIterator
+from sparklightautoml.automl.blend import SparkWeightedBlender
+from sparklightautoml.automl.presets.base import SparkAutoMLPreset
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
+from sparklightautoml.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer
+from sparklightautoml.pipelines.ml.base import SparkMLPipeline
+from sparklightautoml.reader.base import SparkToSparkReader
+from sparklightautoml.tasks.base import SparkTask
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 
 class FakeOpTransformer(Transformer):

@@ -15,13 +15,13 @@ from lightautoml.ml_algo.utils import tune_and_fit_predict
 from lightautoml.pipelines.features.lgb_pipeline import LGBAdvancedPipeline, LGBSimpleFeatures
 from lightautoml.pipelines.features.linear_pipeline import LinearFeatures
 from lightautoml.reader.base import PandasToPandasReader
-from lightautoml.spark.ml_algo.base import SparkTabularMLAlgo
-from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
-from lightautoml.spark.ml_algo.linear_pyspark import SparkLinearLBFGS
-from lightautoml.spark.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline, SparkLGBSimpleFeatures
-from lightautoml.spark.pipelines.features.linear_pipeline import SparkLinearFeatures
-from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
-from lightautoml.spark.validation.iterators import SparkFoldsIterator
+from sparklightautoml.ml_algo.base import SparkTabularMLAlgo
+from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
+from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline, SparkLGBSimpleFeatures
+from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
+from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.validation.iterators import SparkFoldsIterator
 from lightautoml.tasks import Task
 from lightautoml.validation.np_iterators import FoldsIterator
 from .. import spark as spark_sess

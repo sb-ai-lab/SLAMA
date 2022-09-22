@@ -1,7 +1,7 @@
 .. role:: hidden
     :class: hidden-section
 
-lightautoml.ml_algo
+sparklightautoml.ml_algo
 ===================
 
 Models used for machine learning pipelines.
@@ -9,52 +9,39 @@ Models used for machine learning pipelines.
 Base Classes
 ------------------------
 
-.. currentmodule:: lightautoml.ml_algo.base
+.. currentmodule:: sparklightautoml.ml_algo.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    MLAlgo
-    TabularMLAlgo
+    SparkTabularMLAlgo
+    AveragingTransformer
 
 
-Linear Models
+Available Models
 -------------------------
 
-.. currentmodule:: lightautoml.ml_algo
+.. currentmodule:: sparklightautoml.ml_algo
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    ~linear_sklearn.LinearLBFGS
-    ~linear_sklearn.LinearL1CD
-    ~dl_model.TorchModel
+    linear_pyspark.SparkLinearLBFGS
+    boost_lgbm.SparkBoostLGBM
 
-Boosted Trees
+Utilities
 -------------------------
 
-.. currentmodule:: lightautoml.ml_algo
+.. currentmodule:: sparklightautoml.ml_algo
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    ~boost_lgbm.BoostLGBM
-    ~boost_cb.BoostCB
-
-WhiteBox
--------------------------
-
-.. currentmodule:: lightautoml.ml_algo
-
-.. autosummary::
-    :toctree: ./generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    ~whitebox.WbMLAlgo
+    boost_lgbm.LightGBMModelWrapper
+    boost_lgbm.ONNXModelWrapper

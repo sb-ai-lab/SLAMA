@@ -7,7 +7,7 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import DatetimeRole
-from lightautoml.spark.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer, \
+from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer, \
     SparkTimeToNumTransformer
 from lightautoml.tasks import Task
 from lightautoml.transformers.datetime import TimeToNum, BaseDiff, DateSeasons

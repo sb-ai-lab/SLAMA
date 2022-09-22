@@ -4,7 +4,7 @@ import time
 
 from pyspark.sql import SparkSession
 
-from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from .utils import DummyTabularAutoML
 from .. import spark as spark_sess
 

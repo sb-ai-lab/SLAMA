@@ -9,7 +9,7 @@ from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.pipelines.utils import get_columns_by_role
 from lightautoml.reader.base import PandasToPandasReader
-from lightautoml.spark.transformers.categorical import SparkLabelEncoderEstimator, SparkFreqEncoderEstimator, \
+from sparklightautoml.transformers.categorical import SparkLabelEncoderEstimator, SparkFreqEncoderEstimator, \
     SparkOrdinalEncoderEstimator, SparkCatIntersectionsEstimator, SparkTargetEncoderEstimator, \
     SparkMulticlassTargetEncoderEstimator
 from lightautoml.tasks import Task

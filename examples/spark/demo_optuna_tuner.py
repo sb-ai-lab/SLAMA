@@ -23,19 +23,19 @@ from lightautoml.pipelines.selection.importance_based import (
     ImportanceCutoffSelector,
     ModelBasedImportanceEstimator,
 )
-from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.ml_algo.boost_lgbm import SparkBoostLGBM
-from lightautoml.spark.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
-from lightautoml.spark.pipelines.ml.base import SparkMLPipeline
-from lightautoml.spark.reader.base import SparkToSparkReader
-from lightautoml.spark.tasks.base import SparkTask
-from lightautoml.spark.validation.iterators import SparkFoldsIterator
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
+from sparklightautoml.pipelines.ml.base import SparkMLPipeline
+from sparklightautoml.reader.base import SparkToSparkReader
+from sparklightautoml.tasks.base import SparkTask
+from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 from examples_utils import get_spark_session
 from pyspark.sql import functions as F
 from pyspark.ml import PipelineModel
 
-from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

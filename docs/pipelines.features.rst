@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.pipelines.features
+sparklightautoml.pipelines.features
 ==============================
 
 Pipelines for features generation.
@@ -10,84 +10,54 @@ Pipelines for features generation.
 Base Classes
 -----------------
 
-.. currentmodule:: lightautoml.pipelines.features.base
+.. currentmodule:: sparklightautoml.pipelines.features.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    FeaturesPipeline
-    EmptyFeaturePipeline
-    TabularDataFeatures
-
-
+    SparkFeaturesPipeline
+    SparkTabularDataFeatures
+    SparkEmptyFeaturePipeline
+    SparkNoOpTransformer
+    SelectTransformer
+    FittedPipe
 
 Feature Pipelines for Boosting Models
 -----------------------------------------
 
-.. currentmodule:: lightautoml.pipelines.features.lgb_pipeline
+.. currentmodule:: sparklightautoml.pipelines.features.lgb_pipeline
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    LGBSimpleFeatures
-    LGBAdvancedPipeline
+    SparkLGBSimpleFeatures
+    SparkLGBAdvancedPipeline
 
 
 Feature Pipelines for Linear Models
 -----------------------------------
 
-.. currentmodule:: lightautoml.pipelines.features.linear_pipeline
+.. currentmodule:: sparklightautoml.pipelines.features.linear_pipeline
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    LinearFeatures
+    SparkLinearFeatures
 
-Feature Pipelines for WhiteBox
-------------------------------
+Utility Functions
+-----------------
 
-.. currentmodule:: lightautoml.pipelines.features.wb_pipeline
-
-.. autosummary::
-    :toctree: ./generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    WBFeatures
-
-
-Image Feature Pipelines
-----------------------------------
-
-.. currentmodule:: lightautoml.pipelines.features.image_pipeline
+.. currentmodule:: sparklightautoml.pipelines.features.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
-    :template: classtemplate.rst
+    :template: functiontemplate.rst
 
-    ImageDataFeatures
-    ImageSimpleFeatures
-    ImageAutoFeatures
-
-
-Text Feature Pipelines
-------------------------------
-
-.. currentmodule:: lightautoml.pipelines.features.text_pipeline
-
-.. autosummary::
-    :toctree: ./generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    NLPDataFeatures
-    TextAutoFeatures
-    NLPTFiDFFeatures
-    TextBertFeatures
+    build_graph

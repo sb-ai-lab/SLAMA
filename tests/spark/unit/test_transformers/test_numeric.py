@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession
 
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole
-from lightautoml.spark.transformers.numeric import SparkFillInfTransformer, SparkLogOddsTransformer, \
+from sparklightautoml.transformers.numeric import SparkFillInfTransformer, SparkLogOddsTransformer, \
     SparkNaNFlagsEstimator, SparkFillnaMedianEstimator, SparkQuantileBinningEstimator, SparkStandardScalerEstimator
 from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, StandardScaler, LogOdds, QuantileBinning, FillInf
 from .. import DatasetForTest, spark, compare_by_content, compare_by_metadata, compare_sparkml_by_content, \

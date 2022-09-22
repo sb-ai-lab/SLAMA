@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 
 from examples_utils import get_dataset_attrs
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
-from lightautoml.spark.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.tasks import Task
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))

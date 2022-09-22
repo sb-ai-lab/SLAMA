@@ -1,29 +1,27 @@
-LightAutoML documentation
-=========================
+SLAMA (Spark version of LAMA)
+==================
 
-`LightAutoML <https://github.com/fonhorst/LightAutoML_Spark>`_ is open-source Python library aimed at automated machine learning.
-It is designed to be lightweight and efficient for various tasks with tabular, text data.
-LightAutoML provides easy-to-use pipeline creation, that enables:
+This is a distributed version of LAMA library written on Spark framework.
+SLAMA brings LAMA functionality on Spark including:
 
 - Automatic hyperparameter tuning, data processing.
 - Automatic typing, feature selection.
 - Automatic time utilization.
 - Automatic report creation.
-- Graphical profiling system.
 - Easy-to-use modular scheme to create your own pipelines.
+- Support of Spark ML pipelines, including saving/loading.
+- Caching and checkpointing of intermediate results
 
-
+Known limitations:
+- Only the tabular preset is currently supported
 
 .. toctree::
     :maxdepth: 1
     :caption: Python API
 
     automl
-    addons
     dataset
-    image
     ml_algo
-    ml_algo.tuning
     pipelines
     pipelines.selection
     pipelines.features
@@ -31,21 +29,33 @@ LightAutoML provides easy-to-use pipeline creation, that enables:
     reader
     report
     tasks
-    tasks.losses
-    text
     transformers
-    utils
     validation
 
 
-SLAMA (Spark version of LAMA)
-==================
 .. toctree::
     :maxdepth: 1
+    :caption: Deploy on Minikube
 
-    slama-docs/slama_index
+    slama_minikube_readme
 
-Indices and Tables
-==================
 
-* :ref:`genindex`
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on Kubernetes Cluster
+
+    kubernetes_cluster
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on Spark Standalone Cluster
+
+    standalone_cluster
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on YARN Cluster
+
+    yarn_cluster

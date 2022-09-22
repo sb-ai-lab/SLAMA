@@ -10,10 +10,10 @@ from pyspark.sql.types import NumericType
 
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.reader.base import PandasToPandasReader
-from lightautoml.spark.dataset.base import SparkDataset
-from lightautoml.spark.reader.base import SparkToSparkReader
-from lightautoml.spark.tasks.base import SparkTask as SparkTask
-from lightautoml.spark.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.reader.base import SparkToSparkReader
+from sparklightautoml.tasks.base import SparkTask as SparkTask
+from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from lightautoml.tasks import Task
 from .. import spark as spark_sess
 from ..dataset_utils import get_test_datasets, prepared_datasets

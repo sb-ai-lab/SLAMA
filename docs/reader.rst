@@ -2,7 +2,7 @@
     :class: hidden-section
 
 
-lightautoml.reader
+sparklightautoml.reader
 =====================
 
 Utils for reading, training and analysing data.
@@ -10,45 +10,29 @@ Utils for reading, training and analysing data.
 Readers
 -------------
 
-.. currentmodule:: lightautoml.reader.base
+.. currentmodule:: sparklightautoml.reader.base
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: classtemplate.rst
 
-    Reader
-    PandasToPandasReader
+    SparkToSparkReader
+    SparkToSparkReaderTransformer
+    SparkReaderHelper
 
+Utility functions for advanced roles guessing
+-------------
 
-Tabular Batch Generators
------------------------------
-
-Batch Handler Classes
-^^^^^^^^^^^^^^^^^^^^^
-
-.. currentmodule:: lightautoml.reader.tabular_batch_generator
-
-.. autosummary::
-    :toctree: ./generated
-    :nosignatures:
-    :template: classtemplate.rst
-
-    Batch
-    FileBatch
-    BatchGenerator
-    DfBatchGenerator
-    FileBatchGenerator
-
-Data Read Functions
-^^^^^^^^^^^^^^^^^^^
-
-.. currentmodule:: lightautoml.reader.tabular_batch_generator
+.. currentmodule:: sparklightautoml.reader.guess_roles
 
 .. autosummary::
     :toctree: ./generated
     :nosignatures:
     :template: functiontemplate.rst
 
-    read_batch
-    read_data
+    get_category_roles_stat
+    get_gini_func
+    get_null_scores
+    get_numeric_roles_stat
+    get_score_from_pipe
