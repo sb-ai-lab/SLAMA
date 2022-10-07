@@ -233,7 +233,7 @@ class Cacher(Estimator):
         # using local checkpoints
         ds = dataset.localCheckpoint(eager=True)
 
-        # using plain caching
+        # # using plain caching
         # ds = SparkSession.getActiveSession().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
         # ds.write.mode('overwrite').format('noop').save()
 

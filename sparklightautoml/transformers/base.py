@@ -5,8 +5,8 @@ from typing import Dict, cast, Sequence, List, Set, Optional, Union
 
 from pyspark.sql import Column
 from pyspark.sql import functions as F
-from pyspark.ml.functions import array_to_vector
 
+from sparklightautoml.spark_functions import array_to_vector
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import ColumnRole
 from lightautoml.dataset.utils import concatenate

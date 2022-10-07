@@ -1,6 +1,6 @@
 package org.apache.spark.lightautoml.utils
 
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.lightautoml.functions.col
 import org.apache.spark.sql.{Row, SparkSession}
 
 import scala.util.Random

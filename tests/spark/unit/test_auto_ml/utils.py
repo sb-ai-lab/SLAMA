@@ -4,7 +4,8 @@ from typing import List, cast, Optional, Any, Tuple, Callable
 import numpy as np
 import pyspark.sql.functions as F
 from pyspark.ml import Transformer, PipelineModel
-from pyspark.ml.functions import array_to_vector
+
+from sparklightautoml.spark_functions import array_to_vector
 
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.reader.base import UserDefinedRolesDict

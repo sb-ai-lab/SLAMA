@@ -6,9 +6,13 @@ import org.apache.spark.ml.feature.{StringIndexer, StringIndexerAggregator, Stri
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.NominalAttribute
+import org.apache.spark.ml.feature.{StringIndexer, StringIndexerAggregator, StringIndexerBase}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.sql.catalyst.expressions.{GenericRowWithSchema, If, Literal}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions.{GenericRowWithSchema, If, Literal}
 import org.apache.spark.sql.functions.{collect_set, lit, udf}
