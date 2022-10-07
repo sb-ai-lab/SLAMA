@@ -1,6 +1,7 @@
 import logging.config
 import os
 import uuid
+from typing import cast
 
 import pandas as pd
 import pyspark.sql.functions as F
@@ -10,7 +11,7 @@ from pyspark.sql import SparkSession
 from examples_utils import get_dataset_attrs, prepare_test_and_train, get_spark_session
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.tasks.base import SparkTask
+from sparklightautoml.tasks.base import SparkTask, SparkMetric
 from sparklightautoml.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
@@ -29,7 +30,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
     use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    cv = 2
+    cv = 5
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
     with log_exec_timer("spark-lama training") as train_timer:
@@ -76,7 +77,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         te_pred = automl.make_transformer().transform(test_data_dropped)
 
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
-        score = task.get_dataset_metric()
+        score = cast(SparkMetric, task.get_dataset_metric())
         test_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
             F.col(roles['target']).alias('target'),
@@ -99,7 +100,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         te_pred = pipeline_model.transform(test_data_dropped)
 
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
-        score = task.get_dataset_metric()
+        score = cast(SparkMetric, task.get_dataset_metric())
         test_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
             F.col(roles['target']).alias('target'),
