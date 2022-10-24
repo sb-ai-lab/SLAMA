@@ -159,10 +159,15 @@ temp/
 
 ivy2_jars
 ivy2_cache
+requirements.txt
 jars_cache
 dumps
 *.orig
 
+jars/*.jar
+
 docs/generated
-docs/pages/modules/generated
+docs/slama-docs/generated
+
 rsync-repo.sh
+dev-tools/spark-cluster-lama/dockerfiles/base/build_tmp/

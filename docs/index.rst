@@ -1,7 +1,7 @@
-SLAMA
-=============================
+SLAMA (Spark version of LAMA)
+==================
 
-This is a distributed version of `LAMA <https://github.com/sb-ai-lab/LightAutoML>`_ library written on Spark framework.
+This is a distributed version of LAMA library written on Spark framework.
 SLAMA brings LAMA functionality on Spark including:
 
 - Automatic hyperparameter tuning, data processing.
@@ -15,17 +15,47 @@ SLAMA brings LAMA functionality on Spark including:
 Known limitations:
 - Only the tabular preset is currently supported
 
+.. toctree::
+    :maxdepth: 1
+    :caption: Python API
+
+    automl
+    dataset
+    ml_algo
+    pipelines
+    pipelines.selection
+    pipelines.features
+    pipelines.ml
+    reader
+    report
+    tasks
+    transformers
+    validation
 
 
 .. toctree::
     :maxdepth: 1
-    :caption: Contents:
+    :caption: Deploy on Minikube
 
-    Deployment <pages/Deployment.rst>
-    Python-API <pages/Python-API>
+    slama_minikube_readme
 
 
-Indices and Tables
-==================
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on Kubernetes Cluster
 
-* :ref:`genindex`
+    kubernetes_cluster
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on Spark Standalone Cluster
+
+    standalone_cluster
+
+
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on YARN Cluster
+
+    yarn_cluster
