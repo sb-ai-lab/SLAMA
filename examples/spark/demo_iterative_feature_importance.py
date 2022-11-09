@@ -22,6 +22,7 @@ from sparklightautoml.automl.base import SparkAutoML
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.ml.base import SparkMLPipeline
+from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
@@ -102,7 +103,7 @@ if __name__ == "__main__":
     pie1 = ModelBasedImportanceEstimator()
     sel1 = ImportanceCutoffSelector(pipe0, model01, pie1, cutoff=0)
     sel2 = NpIterativeFeatureSelector(pipe0, model02, pie, feature_group_size=1, max_features_cnt_in_result=15)
-    selector = ComposedSelector([sel1, sel2])
+    selector = BugFixSelectionPipelineWrapper(ComposedSelector([sel1, sel2]))
     logger.info("Feature selector created")
 
     # pipeline 1 level parts

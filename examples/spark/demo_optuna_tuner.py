@@ -27,6 +27,7 @@ from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.ml.base import SparkMLPipeline
+from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.validation.iterators import SparkFoldsIterator
@@ -134,7 +135,7 @@ if __name__ == "__main__":
     )
 
     mbie = ModelBasedImportanceEstimator()
-    selector = ImportanceCutoffSelector(pipe, model0, mbie, cutoff=10)
+    selector = BugFixSelectionPipelineWrapper(ImportanceCutoffSelector(pipe, model0, mbie, cutoff=10))
     start_time = time.time()
     selector.fit(selector_iterator)
     logger.info("Feature selector fitted. Time = {:.3f} sec".format(time.time() - start_time))

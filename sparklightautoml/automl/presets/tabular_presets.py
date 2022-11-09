@@ -31,6 +31,7 @@ from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures, SparkLGBAdvancedPipeline
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline
+from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
@@ -242,7 +243,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
 
                 pre_selector = ComposedSelector([pre_selector, extra_selector])
 
-        return pre_selector
+        return BugFixSelectionPipelineWrapper(pre_selector)
 
     def get_linear(
         self, cacher_key: str, n_level: int = 1, pre_selector: Optional[SelectionPipeline] = None

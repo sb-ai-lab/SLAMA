@@ -30,7 +30,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
     use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    cv = 5
+    cv = 3
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
     with log_exec_timer("spark-lama training") as train_timer:
@@ -44,7 +44,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
-            # linear_l2_params={"default_params": {"regParam": [1e-5]}},
+            linear_l2_params={"default_params": {"regParam": [1e-5]}},
             lgb_params={'use_single_dataset_mode': True, 'convert_to_onnx': False, 'mini_batch_size': 1000},
             reader_params={"cv": cv, "advanced_roles": False}
         )

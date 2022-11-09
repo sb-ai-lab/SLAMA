@@ -73,7 +73,11 @@ class SparkBaseTrainValidIterator(TrainValidIterator, InputFeaturesAndRoles, ABC
         # we don't need to create transformer for subselecting
         # because train_valid.input_roles is used in fit_... methods
         # of features pipelines and ml_algo to define columns they work with
-        train_valid.input_roles = {feat: self.input_roles[feat] for feat in selector.selected_features}
+        selected_features = selector.select(train_valid.train).features
+        train_valid.input_roles = {
+            feat: self.input_roles[feat]
+            for feat in selected_features if feat in self.input_roles
+        }
 
         return train_valid
 
