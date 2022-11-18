@@ -24,7 +24,7 @@ for name, ds in dss:
     train_part = [line for line, r in data_rand if r <= 0.8]
     test_part = [line for line, r in data_rand if r > 0.8]
 
-    hash_intersection = set(hash(l) for l in train_part).intersection(set(hash(l) for l in test_part))
+    hash_intersection = set(hash(el) for el in train_part).intersection(set(hash(elt) for elt in test_part))
     # assert len(hash_intersection) == 0, f"Len: {len(hash_intersection)}"
     if len(hash_intersection) != 0:
         print(f"Warning! Intersections length: {len(hash_intersection)}. "

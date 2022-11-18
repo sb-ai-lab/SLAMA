@@ -41,7 +41,7 @@ if __name__ == "__main__":
         oof_predictions = automl.fit_predict(
             train_data,
             roles=roles
-        )
+        ).persist()
 
     logger.info("Predicting on out of fold")
 
@@ -51,4 +51,10 @@ if __name__ == "__main__":
     logger.info(f"score for out-of-fold predictions: {metric_value}")
 
     feature_scores = automl.get_feature_scores(calc_method="fast", data=test_data_dropped, silent=False)
+
     print(feature_scores)
+
+    oof_predictions.unpersist()
+    # this is necessary if persistence_manager is of CompositeManager type
+    # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all
+    automl.persistence_manager.unpersist_all()

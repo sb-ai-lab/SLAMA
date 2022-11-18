@@ -1,16 +1,15 @@
 import os
 import pickle
 import shutil
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+from typing import Any, Dict, List, Optional, Tuple
 
+import pyspark.sql.functions as sf
 from pyspark.sql import SparkSession
 
-from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
+from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-
-import pyspark.sql.functions as F
-
 
 DUMP_METADATA_NAME = "metadata.pickle"
 DUMP_DATA_NAME = "data.parquet"
@@ -37,14 +36,17 @@ def dump_data(path: str, ds: SparkDataset, **meta_kwargs):
         pickle.dump(metadata, f)
 
     cols_to_rename = [
-        F.col(c).alias(c.replace("(", "[").replace(")", "]"))
+        sf.col(c).alias(c.replace("(", "[").replace(")", "]"))
         for c in ds.data.columns
     ]
 
     ds.data.select(*cols_to_rename).write.parquet(data_file)
 
 
-def load_dump_if_exist(spark: SparkSession, path: Optional[str] = None) -> Optional[Tuple[SparkDataset, Dict]]:
+def load_dump_if_exist(
+        spark: SparkSession,
+        persistence_manager: PersistenceManager,
+        path: Optional[str] = None) -> Optional[Tuple[SparkDataset, Dict]]:
     if path is None:
         return None
 
@@ -60,7 +62,7 @@ def load_dump_if_exist(spark: SparkSession, path: Optional[str] = None) -> Optio
     df = spark.read.parquet(data_file)
 
     cols_to_rename = [
-        F.col(c).alias(c.replace("[", "(").replace("]", ")"))
+        sf.col(c).alias(c.replace("[", "(").replace("]", ")"))
         for c in df.columns
     ]
 
@@ -70,6 +72,7 @@ def load_dump_if_exist(spark: SparkSession, path: Optional[str] = None) -> Optio
     ds = SparkDataset(
         data=df,
         roles=metadata["roles"],
+        persistence_manager=persistence_manager,
         task=SparkTask(metadata["task_name"]),
         target=metadata["target"],
         folds=metadata["folds"]
@@ -580,7 +583,9 @@ def datasets() -> Dict[str, Any]:
 def prepared_datasets(spark: SparkSession,
                       cv: int,
                       ds_configs: List[Dict[str, Any]],
+                      persistence_manager: PersistenceManager,
                       checkpoint_dir: Optional[str] = None) -> List[Tuple[SparkDataset, SparkDataset]]:
+    persistence_manager = PlainCachePersistenceManager()
     sds = []
     for config in ds_configs:
         path = config['path']
@@ -597,8 +602,8 @@ def prepared_datasets(spark: SparkSession,
         test_dump_path = os.path.join(checkpoint_dir, f"dump_{ds_name}_{cv}_test.dump") \
             if checkpoint_dir is not None else None
 
-        res_train = load_dump_if_exist(spark, train_dump_path)
-        res_test = load_dump_if_exist(spark, test_dump_path)
+        res_train = load_dump_if_exist(spark, persistence_manager, train_dump_path)
+        res_test = load_dump_if_exist(spark, persistence_manager, test_dump_path)
         if res_train and res_test:
             dumped_train_ds, _ = res_train
             dumped_test_ds, _ = res_test
@@ -616,7 +621,7 @@ def prepared_datasets(spark: SparkSession,
         test_df = spark.read.csv(test_path, header=True, escape="\"")
 
         sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv, advanced_roles=False)
-        train_ds = sreader.fit_read(train_df, roles=roles)
+        train_ds = sreader.fit_read(train_df, roles=roles, persistence_manager=persistence_manager)
         test_ds = sreader.read(test_df, add_array_attrs=True)
 
         if train_dump_path is not None:

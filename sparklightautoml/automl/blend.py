@@ -1,33 +1,27 @@
 import logging
 from abc import ABC
 from copy import copy
-from typing import List, Optional, Sequence, Tuple, cast, Callable
+from typing import List, Optional, Sequence, Tuple, cast
 
 import numpy as np
-from pyspark.ml import Transformer
-from pyspark.ml.param import Params
-from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
-from pyspark.ml.util import MLWritable
-from pyspark.sql import functions as F
-from pyspark.sql.functions import isnan
-
 from lightautoml.automl.blend import WeightedBlender
-from lightautoml.dataset.np_pd_dataset import NumpyDataset
 from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.reader.base import RolesDict
+from pyspark.ml import Transformer, Pipeline, PipelineModel
+from pyspark.ml.feature import SQLTransformer
+
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.utils import SparkDataFrame
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.ml_algo.base import AveragingTransformer
+from sparklightautoml.pipelines.base import TransformerInputOutputRoles
 from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.tasks.base import DEFAULT_PREDICTION_COL_NAME, SparkTask
-from sparklightautoml.transformers.base import ColumnsSelectorTransformer
-
+from sparklightautoml.utils import NoOpTransformer, ColumnsSelectorTransformer
 
 logger = logging.getLogger(__name__)
 
 
-class SparkBlender(ABC):
+class SparkBlender(TransformerInputOutputRoles, ABC):
     """Basic class for blending.
 
     Blender learns how to make blend
@@ -40,16 +34,26 @@ class SparkBlender(ABC):
         self._transformer = None
         self._single_prediction_col_name = DEFAULT_PREDICTION_COL_NAME
         self._pred_role: Optional[ColumnRole] = None
+        self._input_roles: Optional[RolesDict] = None
         self._output_roles: Optional[RolesDict] = None
         self._task: Optional[SparkTask] = None
+        self._service_columns: Optional[List[str]] = None
+        super().__init__()
 
     @property
-    def output_roles(self) -> RolesDict:
-        assert self._output_roles is not None, "Blender has not been fitted yet"
+    def input_roles(self) -> Optional[RolesDict]:
+        """Returns dict of input roles"""
+        return self._input_roles
+
+    @property
+    def output_roles(self) -> Optional[RolesDict]:
+        """Returns dict of output roles"""
         return self._output_roles
 
-    @property
-    def transformer(self) -> Transformer:
+    def _get_service_columns(self) -> List[str]:
+        return self._service_columns
+
+    def transformer(self, *args, **kwargs) -> Optional[Transformer]:
         """Returns Spark MLlib Transformer.
         Represents a Transformer with fitted models."""
 
@@ -57,45 +61,64 @@ class SparkBlender(ABC):
 
         return self._transformer
 
+    def _build_transformer(self, *args, **kwargs) -> Optional[Transformer]:
+        return self._transformer
+
     def fit_predict(
         self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]
     ) -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
         logger.info(f"Blender {type(self)} starting fit_predict")
 
-        if len(pipes) == 1 and len(pipes[0].ml_algos) == 1:
-            self._transformer = ColumnsSelectorTransformer(
-                input_cols=[SparkDataset.ID_COLUMN] + list(pipes[0].output_roles.keys()),
-                optional_cols=[predictions.target_column] if predictions.target_column else [],
-            )
-            self._output_roles = copy(predictions.roles)
-            return predictions, pipes
-
         self._set_metadata(predictions, pipes)
 
+        if len(pipes) == 1 and len(pipes[0].ml_algos) == 1:
+            # sel_stmnt = ', '.join([
+            #     *[c for c in predictions.service_columns if c in predictions.data.columns],
+            #     f'{pipes[0].ml_algos[0].prediction_feature} AS {self._single_prediction_col_name}'
+            # ])
+            self._transformer = Pipeline(stages=[
+                SQLTransformer(statement=f"SELECT *, {pipes[0].ml_algos[0].prediction_feature} AS {self._single_prediction_col_name} FROM __THIS__"),
+                ColumnsSelectorTransformer(
+                    name=f"{type(self)}",
+                    input_cols=[self._single_prediction_col_name],
+                    optional_cols=predictions.service_columns
+                )
+            ]).fit(predictions.data)
+
+            preds = predictions.empty()
+            preds.set_data(
+                self._transformer.transform(predictions.data),
+                list(self.output_roles.keys()),
+                self.output_roles,
+                name=type(self).__name__
+            )
+
+            return preds, pipes
+
         result = self._fit_predict(predictions, pipes)
+
+        self._output_roles = result[0].roles
+        self._service_columns = predictions.service_columns
 
         logger.info(f"Blender {type(self)} finished fit_predict")
 
         return result
 
     def predict(self, predictions: SparkDataset) -> SparkDataset:
-        sdf = self._transformer.transform(predictions.data)
-
-        sds = predictions.empty()
-        sds.set_data(sdf, list(self.output_roles.keys()), self.output_roles)
-
-        return sds
+        return self._make_transformed_dataset(predictions)
 
     def _fit_predict(
         self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]
     ) -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
         raise NotImplementedError()
 
+    # noinspection PyMethodMayBeStatic
     def split_models(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]) -> List[Tuple[str, int, int]]:
         """Split predictions by single model prediction datasets.
 
         Args:
             predictions: Dataset with predictions.
+            pipes: ml pipelines to be associated with the predictions
 
         Returns:
             Each tuple in the list is:
@@ -111,7 +134,9 @@ class SparkBlender(ABC):
         ]
 
     def _set_metadata(self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]):
-        self._pred_role = predictions.roles[pipes[0].ml_algos[0].prediction_feature]
+        assert len(predictions.roles) > 0, "The predictions dataset should have at least one column"
+        self._input_roles = copy(predictions.roles)
+        self._pred_role = list(predictions.roles.values())[0]
         self._output_roles = {self._single_prediction_col_name: self._pred_role}
 
         if isinstance(self._pred_role, NumericVectorOrArrayRole):
@@ -121,16 +146,6 @@ class SparkBlender(ABC):
         self._outp_prob = predictions.task.name in ["binary", "multiclass"]
         self._score = predictions.task.get_dataset_metric()
         self._task = predictions.task
-
-    def _make_single_pred_ds(self, predictions: SparkDataset, pred_col: str) -> SparkDataset:
-        pred_sdf = predictions.data.select(
-            SparkDataset.ID_COLUMN, predictions.target_column, F.col(pred_col).alias(self._single_prediction_col_name)
-        )
-        pred_roles = {c: predictions.roles[c] for c in pred_sdf.columns}
-        pred_ds = predictions.empty()
-        pred_ds.set_data(pred_sdf, pred_sdf.columns, pred_roles)
-
-        return pred_ds
 
     def score(self, dataset: SparkDataset) -> float:
         """Score metric for blender.
@@ -172,12 +187,14 @@ class SparkBestModelSelector(SparkBlender, WeightedBlender):
         splitted_models_and_pipes = self.split_models(predictions, pipes)
 
         best_pred = None
+        best_pred_col = None
         best_pipe_idx = 0
         best_model_idx = 0
         best_score = -np.inf
 
         for pred_col, mod, pipe in splitted_models_and_pipes:
-            pred_ds = self._make_single_pred_ds(predictions, pred_col)
+            # pred_ds = self._make_single_pred_ds(predictions, pred_col)
+            pred_ds = cast(SparkDataset, predictions[:, [pred_col]])
             score = self.score(pred_ds)
 
             if score > best_score:
@@ -185,17 +202,32 @@ class SparkBestModelSelector(SparkBlender, WeightedBlender):
                 best_model_idx = mod
                 best_score = score
                 best_pred = pred_ds
+                best_pred_col = pred_col
 
         best_pipe = pipes[best_pipe_idx]
         best_pipe.ml_algos = [best_pipe.ml_algos[best_model_idx]]
 
-        self._transformer = ColumnsSelectorTransformer(
-            input_cols=[SparkDataset.ID_COLUMN, self._single_prediction_col_name]
+        self._transformer = Pipeline(stages=[
+            SQLTransformer(
+                statement=f"SELECT *, {best_pred_col} AS {self._single_prediction_col_name} FROM __THIS__"),
+            ColumnsSelectorTransformer(
+                name=f"{type(self)}",
+                input_cols=[self._single_prediction_col_name],
+                optional_cols=predictions.service_columns
+            )
+        ]).fit(best_pred.data)
+
+        self._output_roles = {self._single_prediction_col_name: best_pred.roles[best_pred_col]}
+
+        out_ds = best_pred.empty()
+        out_ds.set_data(
+            self._transformer.transform(best_pred.data),
+            list(self._output_roles.keys()),
+            self._output_roles,
+            name=type(self).__name__
         )
 
-        self._output_roles = copy(best_pred.roles)
-
-        return best_pred, [best_pipe]
+        return out_ds, [best_pipe]
 
 
 class SparkWeightedBlender(SparkBlender, WeightedBlender):
@@ -225,11 +257,17 @@ class SparkWeightedBlender(SparkBlender, WeightedBlender):
         remove_splitted_preds_cols: Optional[List[str]] = None,
     ) -> SparkDataset:
         avr = self._build_avr_transformer(splitted_preds, wts, remove_splitted_preds_cols)
+        vsh = self._build_vector_size_hint(self._single_prediction_col_name, self._pred_role)
 
-        weighted_preds_sdf = avr.transform(self._predictions_dataset.data)
+        weighted_preds_sdf = PipelineModel(stages=[avr, vsh]).transform(self._predictions_dataset.data)
 
         wpreds_sds = self._predictions_dataset.empty()
-        wpreds_sds.set_data(weighted_preds_sdf, list(self.output_roles.keys()), self.output_roles)
+        wpreds_sds.set_data(
+            weighted_preds_sdf,
+            list(self.output_roles.keys()),
+            self.output_roles,
+            name=type(self).__name__
+        )
 
         return wpreds_sds
 
@@ -294,7 +332,7 @@ class SparkMeanBlender(SparkBlender):
 
         pred_cols = [pred_col for pred_col, _, _ in self.split_models(predictions, pipes)]
 
-        self._transformer = AveragingTransformer(
+        avr = AveragingTransformer(
             task_name=predictions.task.name,
             input_cols=pred_cols,
             output_col=self._single_prediction_col_name,
@@ -302,6 +340,9 @@ class SparkMeanBlender(SparkBlender):
             convert_to_array_first=not (predictions.task.name == "reg"),
             dim_num=self._outp_dim,
         )
+        vsh = self._build_vector_size_hint(self._single_prediction_col_name, self._pred_role)
+
+        self._transformer = PipelineModel(stages=[avr, vsh])
 
         df = self._transformer.transform(predictions.data)
 
@@ -317,10 +358,11 @@ class SparkMeanBlender(SparkBlender):
         else:
             output_role = NumericRole(np.float32, prob=self._outp_prob)
 
-        roles = {f: predictions.roles[f] for f in predictions.features if f not in pred_cols}
-        roles[self._single_prediction_col_name] = output_role
+        roles = {
+            self._single_prediction_col_name: output_role
+        }
         pred_ds = predictions.empty()
-        pred_ds.set_data(df, df.columns, roles)
+        pred_ds.set_data(df, df.columns, roles, name=type(self).__name__)
 
         self._output_roles = copy(roles)
 

@@ -1,11 +1,15 @@
+import functools
+import logging
+import uuid
+import warnings
+from abc import ABC, abstractmethod
+from collections import Counter
 from copy import copy
-from typing import Sequence, Any, Tuple, Union, Optional, List, cast, Dict, Set
+from dataclasses import dataclass
+from enum import Enum
+from typing import Sequence, Any, Tuple, Union, Optional, List, cast, Dict, Set, Callable
 
 import pandas as pd
-from pyspark.ml.functions import vector_to_array
-from pyspark.sql import functions as F, Column
-from pyspark.sql.session import SparkSession
-
 from lightautoml.dataset.base import (
     LAMLDataset,
     IntIdx,
@@ -18,16 +22,45 @@ from lightautoml.dataset.base import (
 )
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
 from lightautoml.dataset.roles import ColumnRole, NumericRole, DropRole
+from lightautoml.tasks import Task
+from pyspark.ml.functions import vector_to_array
+from pyspark.sql import functions as sf, Column
+from pyspark.sql.session import SparkSession
+
 from sparklightautoml import VALIDATION_COLUMN
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.utils import warn_if_not_cached, SparkDataFrame
-from lightautoml.tasks import Task
+from sparklightautoml.utils import SparkDataFrame
+
+logger = logging.getLogger(__name__)
+
+Dependency = Union[str, 'SparkDataset', 'Unpersistable', Callable]
+DepIdentifable = Union[str, 'SparkDataset']
 
 
-class SparkDataset(LAMLDataset):
+class PersistenceLevel(Enum):
+    READER = 0
+    REGULAR = 1
+    CHECKPOINT = 2
+
+
+class Unpersistable(ABC):
+    def unpersist(self):
+        ...
+
+
+class SparkDataset(LAMLDataset, Unpersistable):
     """
-    Implements a dataset that uses a ``pyspark.sql.DataFrame`` internally, stores some internal state (features, roles, ...) and provide methods to work with dataset.
+    Implements a dataset that uses a ``pyspark.sql.DataFrame`` internally,
+    stores some internal state (features, roles, ...) and provide methods to work with dataset.
     """
+
+    @staticmethod
+    def _get_rows(data, k: IntIdx) -> Any:
+        raise NotImplementedError("This method is not supported")
+
+    @staticmethod
+    def _set_col(data: Any, k: int, val: Any):
+        raise NotImplementedError("This method is not supported")
 
     _init_checks = ()
     _data_checks = ()
@@ -36,14 +69,14 @@ class SparkDataset(LAMLDataset):
 
     ID_COLUMN = "_id"
 
-    def empty(self) -> "SparkDataset":
-
-        dataset = cast(SparkDataset, super().empty())
-
-        return dataset
-
+    # TODO: SLAMA - implement filling dependencies
     @classmethod
-    def concatenate(cls, datasets: Sequence["SparkDataset"]) -> "SparkDataset":
+    def concatenate(
+            cls,
+            datasets: Sequence["SparkDataset"],
+            name: Optional[str] = None,
+            extra_dependencies: Optional[List[Dependency]] = None
+    ) -> "SparkDataset":
         """
         Concat multiple datasets by joining their internal ``pyspark.sql.DataFrame``
         using inner join on special hidden '_id' column
@@ -56,23 +89,44 @@ class SparkDataset(LAMLDataset):
         """
         assert len(datasets) > 0, "Cannot join an empty list of datasets"
 
-        # requires presence of hidden "_id" column in each dataset
-        # that should be saved across all transformations
+        if len(datasets) == 1:
+            return datasets[0]
+
+        if any(not d.bucketized for d in datasets):
+            warnings.warn(
+                f"NOT bucketized datasets are requested to be joined. It may severely affect performance",
+                RuntimeWarning
+            )
+
+        # we should join datasets only with unique features
         features = [feat for ds in datasets for feat in ds.features]
+        feat_counter = Counter(features)
+
+        assert all(count == 1 for el, count in feat_counter.items()), \
+            f"Different datasets being joined contain columns with the same names: {feat_counter}"
+
         roles = {col: role for ds in datasets for col, role in ds.roles.items()}
-        curr_sdf = datasets[0].data
 
-        for ds in datasets[1:]:
-            curr_sdf = curr_sdf.join(ds.data, cls.ID_COLUMN)
-
-        curr_sdf = curr_sdf.select(datasets[0].data[cls.ID_COLUMN], *features)
+        except_cols = [c for c in datasets[0].service_columns if c != SparkDataset.ID_COLUMN]
+        concatenated_sdf = functools.reduce(
+            lambda acc, sdf: acc.join(sdf.drop(*except_cols), on=cls.ID_COLUMN, how='left'),
+            (d.data for d in datasets)
+        )
 
         output = datasets[0].empty()
-        output.set_data(curr_sdf, features, roles)
+        output.set_data(concatenated_sdf, features, roles, dependencies=[*datasets, *(extra_dependencies or [])], name=name)
 
         return output
 
-    def __init__(self, data: SparkDataFrame, roles: Optional[RolesDict], task: Optional[Task] = None, **kwargs: Any):
+    def __init__(self,
+                 data: SparkDataFrame,
+                 roles: Optional[RolesDict],
+                 persistence_manager: Optional['PersistenceManager'] = None,
+                 task: Optional[Task] = None,
+                 bucketized: bool = False,
+                 dependencies: Optional[List[Dependency]] = None,
+                 name: Optional[str] = None,
+                 **kwargs: Any):
 
         if "target" in kwargs:
             assert isinstance(kwargs["target"], str), "Target should be a str representing column name"
@@ -101,7 +155,25 @@ class SparkDataset(LAMLDataset):
                 if roles[f].name == r:
                     roles[f] = DropRole()
 
+        self._bucketized = bucketized
+        self._roles = None
+
+        self._uid = str(uuid.uuid4())
+        self._persistence_manager = persistence_manager
+        self._dependencies = dependencies
+        self._frozen = False
+        self._name = name
+        self._is_persisted = False
+
         super().__init__(data, None, roles, task, **kwargs)
+
+    @property
+    def uid(self) -> str:
+        return self._uid
+
+    @property
+    def name(self) -> Optional[str]:
+        return self._name
 
     @property
     def spark_session(self):
@@ -114,6 +186,10 @@ class SparkDataset(LAMLDataset):
     @data.setter
     def data(self, val: SparkDataFrame) -> None:
         self._data = val
+
+    @property
+    def dependencies(self) -> Optional[List[Dependency]]:
+        return self._dependencies
 
     @property
     def features(self) -> List[str]:
@@ -168,9 +244,15 @@ class SparkDataset(LAMLDataset):
             raise ValueError()
 
     @property
+    def bucketized(self) -> bool:
+        return self._bucketized
+
+    @property
     def shape(self) -> Tuple[Optional[int], Optional[int]]:
-        warn_if_not_cached(self.data)
-        return self.data.count(), len(self.features)
+        return -1, len(self.features)
+        # with JobGroup("sparkdataset.shape", f"Finding count for dataset (uid={self.uid}, name={self.name})"):
+        #     warn_if_not_cached(self.data)
+        #     return self.data.count(), len(self.features)
 
     @property
     def target_column(self) -> Optional[str]:
@@ -183,6 +265,10 @@ class SparkDataset(LAMLDataset):
     @property
     def service_columns(self) -> List[str]:
         return [sc for sc in self._service_columns if sc in self.data.columns]
+
+    @property
+    def persistence_manager(self) -> 'PersistenceManager':
+        return self._persistence_manager
 
     def __repr__(self):
         return f"SparkDataset ({self.data})"
@@ -202,13 +288,19 @@ class SparkDataset(LAMLDataset):
         roles = {c: self.roles[c] for c in clice}
 
         output = self.empty()
-        output.set_data(sdf, clice, roles)
+        output.set_data(sdf, clice, roles, name=self.name)
 
         return output
         # raise NotImplementedError(f"The method is not supported by {self._dataset_type}")
 
     def __setitem__(self, k: str, val: Any):
         raise NotImplementedError(f"The method is not supported by {self._dataset_type}")
+
+    def __eq__(self, o: object) -> bool:
+        return isinstance(o, SparkDataset) and o.uid == self.uid
+
+    def __hash__(self) -> int:
+        return hash(self.uid)
 
     def _validate_dataframe(self, sdf: SparkDataFrame) -> None:
         assert (
@@ -232,7 +324,7 @@ class SparkDataset(LAMLDataset):
                     return vector_to_array(column)
                 return column
 
-            arr = [to_array(F.col(col))[i].alias(vrole.feature_name_at(i)) for i in range(vrole.size)]
+            arr = [to_array(sf.col(col))[i].alias(vrole.feature_name_at(i)) for i in range(vrole.size)]
 
             return arr, NumericRole(dtype=vrole.dtype)
 
@@ -255,29 +347,126 @@ class SparkDataset(LAMLDataset):
 
         if self.target_column is not None:
             target_series = df[self.target_column]
-            df = df.drop(self.target_column, 1)
+            df = df.drop(self.target_column, axis=1)
         else:
             target_series = None
 
         if self.folds_column is not None:
             folds_series = df[self.folds_column]
-            df = df.drop(self.folds_column, 1)
+            df = df.drop(self.folds_column, axis=1)
         else:
             folds_series = None
 
         return df, target_series, folds_series, all_roles
 
-    def set_data(self, data: SparkDataFrame, features: List[str], roles: NpRoles = None):
+    def _initialize(self, task: Optional[Task], **kwargs: Any):
+        super()._initialize(task, **kwargs)
+        self._dependencies = None
+
+    def empty(self) -> "SparkDataset":
+        dataset = cast(SparkDataset, super().empty())
+        dataset._dependencies = [self]
+        dataset._uid = str(uuid.uuid4())
+        dataset._frozen = False
+        return dataset
+
+    def set_data(
+            self,
+            data: SparkDataFrame,
+            features: List[str],
+            roles: NpRoles = None,
+            persistence_manager: Optional['PersistenceManager'] = None,
+            dependencies: Optional[List[Dependency]] = None,
+            uid: Optional[str] = None,
+            name: Optional[str] = None,
+            frozen: bool = False
+    ):
         """Inplace set data, features, roles for empty dataset.
 
         Args:
             data: Table with features.
             features: `ignored, always None. just for same interface.
             roles: Dict with roles.
-            dependencies: spark dataframes that should be uncached when this spark dataframe has been materialized
         """
         self._validate_dataframe(data)
         super().set_data(data, None, roles)
+        self._persistence_manager = persistence_manager or self._persistence_manager
+        self._dependencies = dependencies if dependencies is not None else self._dependencies
+        self._uid = uid or self._uid
+        self._name = name or self._name
+        self._frozen = frozen
+
+    def persist(self, level: Optional[PersistenceLevel] = None, force: bool=False) -> 'SparkDataset':
+        """
+        Materializes current Spark DataFrame and unpersists all its dependencies
+        Args:
+            level:
+
+        Returns:
+            a new SparkDataset that is persisted and materialized
+        """
+        # if self._is_persisted:
+        #     return self
+
+        assert self.persistence_manager, "Cannot persist when persistence_manager is None"
+
+        logger.debug(f"Persisting SparkDataset (uid={self.uid}, name={self.name})")
+        level = level if level is not None else PersistenceLevel.REGULAR
+
+        if force:
+            ds = self.empty()
+            ds.set_data(self.data, self.features, self.roles)
+            persisted_dataset = self.persistence_manager.persist(ds, level).to_dataset()
+        else:
+            persisted_dataset = self.persistence_manager.persist(self, level).to_dataset()
+
+        self._unpersist_dependencies()
+        self._is_persisted = True
+
+        return persisted_dataset
+
+    def unpersist(self):
+        """
+        Unpersists current dataframe if it is persisted and all its dependencies.
+        It does nothing if the dataset is frozen
+        """
+        assert self.persistence_manager, "Cannot unpersist when persistence_manager is None"
+
+        if self.frozen:
+            logger.debug(f"Cannot unpersist frozen SparkDataset (uid={self.uid}, name={self.name})")
+            return
+
+        logger.debug(f"Unpersisting SparkDataset (uid={self.uid}, name={self.name})")
+
+        self.persistence_manager.unpersist(self.uid)
+        self._unpersist_dependencies()
+
+        # if self._is_persisted:
+        #     self.persistence_manager.unpersist(self.uid)
+        # else:
+        #     self._unpersist_dependencies()
+
+    def _unpersist_dependencies(self):
+        for dep in (self.dependencies or []):
+            if isinstance(dep, str):
+                self.persistence_manager.unpersist(dep)
+            elif isinstance(dep, Unpersistable):
+                dep.unpersist()
+            else:
+                dep()
+
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
+    @frozen.setter
+    def frozen(self, val: bool):
+        self._frozen = val
+
+    def freeze(self) -> 'SparkDataset':
+        ds = self.empty()
+        ds.set_data(self.data, self.features, self.roles, frozen=True)
+        return ds
 
     def to_pandas(self) -> PandasDataset:
         data, target_data, folds_data, roles = self._materialize_to_pandas()
@@ -329,3 +518,91 @@ class SparkDataset(LAMLDataset):
     def from_dataset(dataset: "LAMLDataset") -> "LAMLDataset":
         assert isinstance(dataset, SparkDataset), "Can only convert from SparkDataset"
         return dataset
+
+
+@dataclass(frozen=True)
+class PersistableDataFrame:
+    sdf: SparkDataFrame
+    uid: str
+    callback: Optional[Callable] = None
+    base_dataset: Optional[SparkDataset] = None
+    custom_name: Optional[str] = None
+
+    def to_dataset(self) -> SparkDataset:
+        assert self.base_dataset is not None
+        ds = self.base_dataset.empty()
+        ds.set_data(
+            self.sdf,
+            self.base_dataset.features,
+            self.base_dataset.roles,
+            dependencies=list(self.base_dataset.dependencies or []),
+            uid=self.uid,
+            name=self.base_dataset.name
+        )
+        return ds
+
+    @property
+    def name(self) -> Optional[str]:
+        ds_name = self.base_dataset.name if self.base_dataset is not None else None
+        return self.custom_name or ds_name
+
+
+class PersistenceManager(ABC):
+    @staticmethod
+    def to_persistable_dataframe(dataset: SparkDataset) -> PersistableDataFrame:
+        # we intentially create new uid to use to distinguish a persisted and unpersisted dataset
+        return PersistableDataFrame(dataset.data, uid=dataset.uid, base_dataset=dataset)
+
+    @property
+    @abstractmethod
+    def uid(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def children(self) -> List['PersistenceManager']:
+        ...
+
+    @property
+    @abstractmethod
+    def datasets(self) -> List[SparkDataset]:
+        ...
+
+    @property
+    @abstractmethod
+    def all_datasets(self) -> List[SparkDataset]:
+        """
+        Returns:
+            all persisted datasets including persisted with children contexts
+        """
+        ...
+
+    @abstractmethod
+    def persist(self,
+                dataset: Union[SparkDataset, PersistableDataFrame],
+                level: PersistenceLevel = PersistenceLevel.REGULAR) -> PersistableDataFrame:
+        ...
+
+    @abstractmethod
+    def unpersist(self, uid: str):
+        ...
+
+    @abstractmethod
+    def unpersist_all(self):
+        ...
+
+    @abstractmethod
+    def unpersist_children(self):
+        ...
+
+    @abstractmethod
+    def child(self) -> 'PersistenceManager':
+        ...
+
+    @abstractmethod
+    def remove_child(self, child: Union['PersistenceManager', str]):
+        ...
+
+    @abstractmethod
+    def is_persisted(self, pdf: PersistableDataFrame) -> bool:
+        ...

@@ -1,30 +1,24 @@
 from typing import Optional, Union, cast
 
+import numpy as np
+import pandas as pd
+from lightautoml.tasks import Task as LAMATask
+from lightautoml.tasks.base import LAMLMetric, _default_losses
 from pyspark.ml.evaluation import (
     BinaryClassificationEvaluator,
     RegressionEvaluator,
     MulticlassClassificationEvaluator,
-    Evaluator,
 )
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql.pandas.functions import pandas_udf
 
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.utils import SparkDataFrame
 from sparklightautoml.tasks.losses.base import SparkLoss
-from lightautoml.tasks import Task as LAMATask
-from lightautoml.tasks.base import LAMLMetric, _default_losses
-
-import pandas as pd
-import numpy as np
+from sparklightautoml.utils import SparkDataFrame
 
 DEFAULT_PREDICTION_COL_NAME = "prediction"
 DEFAULT_TARGET_COL_NAME = "target"
 DEFAULT_PROBABILITY_COL_NAME = "probability"
-
-
-def argmax_in_vector(vec: pd.Series) -> pd.Series:
-    vec.transform()
 
 
 class SparkMetric(LAMLMetric):
@@ -43,14 +37,10 @@ class SparkMetric(LAMLMetric):
         """
 
         Args:
-            metric: Specifies metric. Format:
-                ``func(y_true, y_false, Optional[sample_weight], **kwargs)`` -> `float`.
             name: Name of metric.
+            target_col: Name of column that stores targets
+            prediction_col: Name of column that stores predictions
             greater_is_better: Whether or not higher metric value is better.
-            one_dim: `True` for single class, False for multiclass.
-            weighted: Weights of classes.
-            **kwargs: Other parameters for metric.
-
         """
         self._name = name
         self._metric_name = metric_name
@@ -142,8 +132,9 @@ class SparkTask(LAMATask):
         # add losses
         # if None - infer from task
         self.losses = {}
-        if loss is None:
-            loss = _default_losses[self.name]
+        # TODO: SLAMA - check working with loss functions
+        # if loss is None:
+        #     loss = _default_losses[self.name]
         # SparkLoss actualy does nothing, but it is there
         # to male TabularAutoML work
         self.losses = {"lgb": SparkLoss(), "linear_l2": SparkLoss()}

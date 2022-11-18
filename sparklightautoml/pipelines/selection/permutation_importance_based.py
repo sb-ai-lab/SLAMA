@@ -1,26 +1,19 @@
 """Iterative feature selector."""
 
 import logging
-
-from copy import deepcopy
 from typing import Optional, cast, Iterator
 
 import numpy as np
-
+import pandas as pd
+from lightautoml.validation.base import TrainValidIterator
 from pandas import Series
-
-from pyspark.sql import functions as F
-from pyspark.sql.functions import shuffle
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import StructField
 
-from lightautoml.validation.base import TrainValidIterator
-
-from ...dataset.base import LAMLDataset, SparkDataset
-from ...ml_algo.base import MLAlgo
 from sparklightautoml.pipelines.selection.base import SparkImportanceEstimator
-
-import pandas as pd
+from ...dataset.base import LAMLDataset, SparkDataset
+from ...ml_algo.base import MLAlgo, SparkTabularMLAlgo
+from ...validation.base import SparkBaseTrainValidIterator
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +37,9 @@ class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
 
     def fit(
         self,
-        train_valid: Optional[TrainValidIterator] = None,
-        ml_algo: Optional[MLAlgo] = None,
-        preds: Optional[LAMLDataset] = None,
+        train_valid: Optional[SparkBaseTrainValidIterator] = None,
+        ml_algo: Optional[SparkTabularMLAlgo] = None,
+        preds: Optional[SparkDataset] = None,
     ):
         """Find importances for each feature in dataset.
 
@@ -57,6 +50,8 @@ class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
 
         """
         logger.info(f"Starting importance estimating with {type(self)}")
+
+        assert train_valid is not None, "train_valid cannot be None"
 
         normal_score = ml_algo.score(preds)
         logger.debug(f"Normal score = {normal_score}")
@@ -83,7 +78,7 @@ class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
             permutated_df = df.withColumn(feat, permutate(feat))
 
             ds: SparkDataset = valid_data.empty()
-            ds.set_data(permutated_df, valid_data.features, valid_data.roles)
+            ds.set_data(permutated_df, valid_data.features, valid_data.roles, name=type(self).__name__)
             logger.debug("Dataframe with shuffled column prepared")
 
             # Calculate predict and metric

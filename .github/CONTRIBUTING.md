@@ -189,8 +189,6 @@ There are some rules, that docstrings should fit.
 ```python3
 from typing import List, Union
 
-import numpy as np
-import torch
 
 def typical_function(a: int, b: Union['np.ndarray', None] = None) -> List[int]:
     """Short function description, terminated by dot.
@@ -266,10 +264,11 @@ def generator_func(n: int):
         x += 1
 ```
 7. Documenting classes.
+
 ```python3
-from typing import List, Union
+from typing import List
+
 import numpy as np
-import torch
 
 
 class ExampleClass:
@@ -310,7 +309,7 @@ class ExampleClass:
         self.attr2 = param2
         if len(args) > 0:
             self.attr2 = args[0]
-        self.attr3 = kwargs # will not be documented.
+        self.attr3 = kwargs  # will not be documented.
         self.figure = 4 * self.attr1
 
     @property
@@ -356,7 +355,6 @@ class ExampleClass:
         self.attr2 += param2
 
         return [1, 2, 3]
-
 
     def __special__(self):
         """By default we aren`t include dundered members.

@@ -6,18 +6,18 @@ from typing import Tuple, Optional, List
 from typing import Union
 
 import numpy as np
+from lightautoml.utils.timer import TaskTimer
 from pyspark.ml import Pipeline, Transformer, PipelineModel, Estimator
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
-from pyspark.ml.feature import VectorAssembler, OneHotEncoder
+from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import LinearRegression, LinearRegressionModel
-from pyspark.sql import functions as F
+from pyspark.sql import functions as sf
 
 from sparklightautoml.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
-from ..dataset.base import SparkDataset
+from ..dataset.base import SparkDataset, PersistenceManager
 from ..transformers.base import DropColumnsTransformer
-from ..utils import DebugTransformer, SparkDataFrame
-from lightautoml.utils.timer import TaskTimer
+from ..utils import SparkDataFrame, log_exception
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +82,13 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
 
     def __init__(
         self,
-        cacher_key: str,
         default_params: Optional[dict] = None,
         freeze_defaults: bool = True,
         timer: Optional[TaskTimer] = None,
-        optimization_search_space: Optional[dict] = {},
+        optimization_search_space: Optional[dict] = None,
     ):
-        super().__init__(cacher_key, default_params, freeze_defaults, timer, optimization_search_space)
+        optimization_search_space = optimization_search_space if optimization_search_space else dict()
+        super().__init__(default_params, freeze_defaults, timer, optimization_search_space)
 
         self._prediction_col = f"prediction_{self._name}"
         self.task = None
@@ -148,13 +148,12 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         return estimators, es
 
     def fit_predict_single_fold(
-        self, fold_prediction_column: str, full: SparkDataset, train: SparkDataset, valid: SparkDataset
+        self, fold_prediction_column: str, train: SparkDataset, valid: SparkDataset
     ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
         """Train on train dataset and predict on holdout dataset.
 
         Args:
             fold_prediction_column: column name for predictions made for this fold
-            full: Full dataset that include train and valid parts and a bool column that delimits records
             train: Train Dataset.
             valid: Validation Dataset.
 
@@ -162,7 +161,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             Target predictions for valid dataset.
 
         """
-        logger.info(f"fit_predict single fold in LinearLBGFS. Num of features: {len(self.input_features)} ")
+        logger.info(f"fit_predict single fold in LinearLBGFS. Num of features: {len(self.input_roles.keys())} ")
 
         if self.task is None:
             self.task = train.task
@@ -185,7 +184,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             ml_model = pipeline.fit(train_sdf)
             val_pred = ml_model.transform(val_sdf)
             preds_to_score = val_pred.select(
-                F.col(fold_prediction_column).alias("prediction"), F.col(valid.target_column).alias("target")
+                sf.col(fold_prediction_column).alias("prediction"), sf.col(valid.target_column).alias("target")
             )
             current_score = self.score(preds_to_score)
             if current_score > best_score:
@@ -234,7 +233,12 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
                 ),
             ]
         ]
-        averaging_model = PipelineModel(stages=[self._assembler] + models + [avr])
+        averaging_model = PipelineModel(stages=[
+            self._assembler,
+            *models,
+            avr,
+            self._build_vector_size_hint(self.prediction_feature, self.prediction_role)
+        ])
         return averaging_model
 
     def _build_averaging_transformer(self) -> Transformer:
@@ -248,6 +252,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         )
         return avr
 
+    @log_exception(logger=logger)
     def fit_predict(self, train_valid_iterator: SparkBaseTrainValidIterator) -> SparkDataset:
         """Fit and then predict accordig the strategy that uses train_valid_iterator.
 
@@ -266,14 +271,11 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         logger.info("Starting LinearLGBFS")
         self.timer.start()
 
-        self.input_roles = train_valid_iterator.input_roles
-        cat_feats = [feat for feat in self.input_features if self.input_roles[feat].name == "Category"]
-        # self._ohe = OneHotEncoder(inputCols=cat_feats, outputCols=[f"{f}_{self._name}_ohe" for f in cat_feats])
-        # self._ohe = self._ohe.fit(train_valid_iterator.train.data)
+        cat_feats = [feat for feat, role in train_valid_iterator.train.roles.items() if role.name == "Category"]
+        non_cat_feats = [feat for feat, role in train_valid_iterator.train.roles.items() if role.name != "Category"]
 
-        non_cat_feats = [feat for feat in self.input_features if self.input_roles[feat].name != "Category"]
         self._assembler = VectorAssembler(
-            inputCols=non_cat_feats + cat_feats,  # self._ohe.getOutputCols(),
+            inputCols=non_cat_feats + cat_feats,
             outputCol=f"{self._name}_vassembler_features",
         )
 

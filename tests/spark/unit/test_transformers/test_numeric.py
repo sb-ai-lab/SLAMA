@@ -1,17 +1,17 @@
-import time
 import numpy as np
 import pandas as pd
 import pytest
-from pyspark.sql import SparkSession
-
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import NumericRole
+from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, StandardScaler, LogOdds, QuantileBinning, FillInf
+from pyspark.sql import SparkSession
+
 from sparklightautoml.transformers.numeric import SparkFillInfTransformer, SparkLogOddsTransformer, \
     SparkNaNFlagsEstimator, SparkFillnaMedianEstimator, SparkQuantileBinningEstimator, SparkStandardScalerEstimator
-from lightautoml.transformers.numeric import NaNFlags, FillnaMedian, StandardScaler, LogOdds, QuantileBinning, FillInf
-from .. import DatasetForTest, spark, compare_by_content, compare_by_metadata, compare_sparkml_by_content, \
+from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, \
     compare_sparkml_by_metadata
 
+spark = spark_sess
 # Note:
 # -s means no stdout capturing thus allowing one to see what happens in reality
 
@@ -115,7 +115,8 @@ def test_logodds(spark: SparkSession):
 
     ds = PandasDataset(source_data, roles={name: NumericRole(np.float32) for name in source_data.columns})
     # TODO: Change `rtol` when lama improves LogOdds() algorithm
-    # Floating point errors: https://github.com/sb-ai-lab/LightAutoML/blob/master/lightautoml/transformers/numeric.py#L214
+    # Floating point errors:
+    # https://github.com/sb-ai-lab/LightAutoML/blob/master/lightautoml/transformers/numeric.py#L214
     compare_sparkml_by_content(spark, ds, LogOdds(),
                                SparkLogOddsTransformer(input_cols=ds.features, input_roles=ds.roles),
                                rtol=1.e-1)

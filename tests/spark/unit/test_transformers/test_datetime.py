@@ -73,19 +73,29 @@ DATASETS = [
             "2025-01-01 20:00:00",
             "2100-01-01 20:00:00",
         ],
-    }), default_role=DatetimeRole(country="Russia", seasonality=('y', 'm', 'd', 'wd', 'hour', 'min', 'sec', 'ms', 'ns'))),
+    }), default_role=DatetimeRole(
+        country="Russia",
+        seasonality=('y', 'm', 'd', 'wd', 'hour', 'min', 'sec', 'ms', 'ns')
+    )),
 
 ]
 
 
+# noinspection PyShadowingNames
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_time_to_num(spark: SparkSession, dataset: DatasetForTest):
 
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task('binary'))
 
-    compare_sparkml_by_content(spark, ds, TimeToNum(), SparkTimeToNumTransformer(input_cols=ds.features, input_roles=ds.roles))
+    compare_sparkml_by_content(
+        spark,
+        ds,
+        TimeToNum(),
+        SparkTimeToNumTransformer(input_cols=ds.features, input_roles=ds.roles)
+    )
 
 
+# noinspection PyShadowingNames
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_base_diff(spark: SparkSession, dataset: DatasetForTest):
 
@@ -101,10 +111,11 @@ def test_base_diff(spark: SparkSession, dataset: DatasetForTest):
         ds,
         BaseDiff(base_names=base_names, diff_names=diff_names),
         SparkBaseDiffTransformer(input_roles=ds.roles, base_names=base_names, diff_names=diff_names),
-        rtol = 1.e-3
+        rtol=1.e-3
     )
 
 
+# noinspection PyShadowingNames
 @pytest.mark.parametrize("dataset", [DATASETS[1]])
 def test_date_seasons(spark: SparkSession, dataset: DatasetForTest):
 

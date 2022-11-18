@@ -3,30 +3,27 @@ import logging
 import os
 import pickle
 import time
-
-from pathlib import Path
-from typing import Union
 from collections import namedtuple
+from typing import Union
 
 from pyspark import SparkContext
-from pyspark.sql.session import SparkSession
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import DefaultParamsReader
 from pyspark.ml.util import MLReadable
 from pyspark.ml.util import MLReader
 from pyspark.ml.util import MLWritable
 from pyspark.ml.util import MLWriter
+from pyspark.sql.session import SparkSession
 from synapse.ml.lightgbm import LightGBMClassificationModel
 from synapse.ml.lightgbm import LightGBMRegressionModel
 from synapse.ml.onnx import ONNXModel
-
 
 logger = logging.getLogger(__name__)
 
 
 class CommonPickleMLWritable(MLWritable):
     def write(self) -> MLWriter:
-        "Returns MLWriter instance that can save the Transformer instance."
+        """Returns MLWriter instance that can save the Transformer instance."""
         return СommonPickleMLWriter(self)
 
 
@@ -68,15 +65,12 @@ class СommonPickleMLWriter(MLWriter):
         - sparkVersion
         - uid
         - paramMap
-        - defaultParamMap (since 2.4.0)
-        - (optionally, extra metadata)
 
         Parameters
         ----------
-        extraMetadata : dict, optional
-            Extra metadata to be saved at same level as uid, paramMap, etc.
-        paramMap : dict, optional
-            If given, this is saved in the "paramMap" field.
+        instance : Spark ML Transformer to be saved
+        path : local or HDFS path to save the transformer
+        sc : SparkContext
         """
         metadataPath = os.path.join(path, "metadata")
         metadataJson = СommonPickleMLWriter._get_metadata_to_save(instance, sc)
@@ -104,7 +98,7 @@ class СommonPickleMLWriter(MLWriter):
             "defaultParamMap": None,
         }
 
-        return json.dumps(basicMetadata, separators=[",", ":"])
+        return json.dumps(basicMetadata, separators=(",", ":"))
 
 
 class СommonPickleMLReader(MLReader):
@@ -121,7 +115,7 @@ class СommonPickleMLReader(MLReader):
 
 class SparkLabelEncoderTransformerMLWritable(MLWritable):
     def write(self) -> MLWriter:
-        "Returns MLWriter instance that can save the Transformer instance."
+        """Returns MLWriter instance that can save the Transformer instance."""
         return SparkLabelEncoderTransformerMLWriter(self)
 
 
@@ -191,6 +185,7 @@ class ONNXModelWrapperMLWriter(MLWriter):
 
 
 class ONNXModelWrapperMLReader(MLWriter):
+    # noinspection PyMethodMayBeStatic
     def load(self, path):
         """Load the ML instance from the input path and wrap by ONNXModelWrapper()"""
 
@@ -200,6 +195,9 @@ class ONNXModelWrapperMLReader(MLWriter):
         model_wrapper.model = ONNXModel.load(os.path.join(path, "model"))
 
         return model_wrapper
+
+    def saveImpl(self, path):
+        raise NotImplementedError("Not yet implemented")
 
 
 class LightGBMModelWrapperMLWriter(MLWriter):
@@ -230,10 +228,9 @@ class LightGBMModelWrapperMLWriter(MLWriter):
 
         Parameters
         ----------
-        extraMetadata : dict, optional
-            Extra metadata to be saved at same level as uid, paramMap, etc.
-        paramMap : dict, optional
-            If given, this is saved in the "paramMap" field.
+        instance : Spark ML Transformer to be saved
+        path : local or HDFS path to save the transformer
+        sc : SparkContext
         """
         metadataPath = os.path.join(path, "metadata")
         metadataJson = LightGBMModelWrapperMLWriter._get_metadata_to_save(instance, sc)
@@ -263,7 +260,7 @@ class LightGBMModelWrapperMLWriter(MLWriter):
             "modelClass": model_cls,
         }
 
-        return json.dumps(basicMetadata, separators=[",", ":"])
+        return json.dumps(basicMetadata, separators=(",", ":"))
 
 
 class LightGBMModelWrapperMLReader(MLReader):
@@ -286,18 +283,6 @@ class LightGBMModelWrapperMLReader(MLReader):
         return model_wrapper
 
 
-@inherit_doc
-class LAMLStringIndexerModelJavaMLReadable(MLReadable):
-    """
-    (Private) Mixin for instances that provide JavaMLReader.
-    """
-
-    @classmethod
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return LAMLStringIndexerModelJavaMLReader(cls)
-
-
 def _jvm():
     """
     Returns the JVM view associated with SparkContext. Must be called
@@ -311,13 +296,13 @@ def _jvm():
 
 
 @inherit_doc
-class LAMLStringIndexerModelJavaMLReader(MLReader):
+class CommonJavaToPythonMLReader(MLReader):
     """
     (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaParams` types
     """
 
     def __init__(self, clazz):
-        super(LAMLStringIndexerModelJavaMLReader, self).__init__()
+        super().__init__()
         self._clazz = clazz
         self._jread = self._load_java_obj(clazz).read()
 
@@ -338,8 +323,21 @@ class LAMLStringIndexerModelJavaMLReader(MLReader):
     @classmethod
     def _load_java_obj(cls, clazz):
         """Load the peer Java object of the ML instance."""
-        java_class = "org.apache.spark.ml.feature.lightautoml.LAMLStringIndexerModel"
+        # java_class = "org.apache.spark.ml.feature.lightautoml.LAMLStringIndexerModel"
+        java_class = f"org.apache.spark.ml.feature.lightautoml.{clazz.__name__}"
         java_obj = _jvm()
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)
         return java_obj
+
+
+@inherit_doc
+class CommonJavaToPythonMLReadable(MLReadable):
+    """
+    (Private) Mixin for instances that provide JavaMLReader.
+    """
+
+    @classmethod
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return CommonJavaToPythonMLReader(cls)

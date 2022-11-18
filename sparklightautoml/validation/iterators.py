@@ -1,18 +1,13 @@
 import functools
 import logging
-from typing import Optional, cast, Tuple, Iterable, Sequence
+from typing import Optional, cast, Iterable, Sequence
 
-from lightautoml.dataset.base import LAMLDataset, RolesDict
+from pyspark.sql import functions as sf
+
 from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
 from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.transformers.scala_wrappers.balanced_union_partitions_coalescer import (
-    BalancedUnionPartitionsCoalescerTransformer,
-)
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator
-from lightautoml.validation.base import TrainValidIterator, HoldoutIterator
-
-from pyspark.sql import functions as F
-
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator, TrainVal, SparkSelectionPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +17,8 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
     Simple one step iterator over train part of SparkDataset
     """
 
-    def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):
-        super().__init__(train, input_roles)
+    def __init__(self, train: SparkDataset):
+        super().__init__(train)
         self._curr_idx = 0
 
     def __iter__(self) -> Iterable:
@@ -33,7 +28,7 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
     def __len__(self) -> Optional[int]:
         return 1
 
-    def __next__(self) -> Tuple[SparkDataset, SparkDataset, SparkDataset]:
+    def __next__(self) -> TrainVal:
         """Define how to get next object.
 
         Returns:
@@ -46,16 +41,19 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
         self._curr_idx += 1
 
         sdf = cast(SparkDataFrame, self.train.data)
-        sdf = sdf.withColumn(self.TRAIN_VAL_COLUMN, F.lit(0))
+        sdf = sdf.withColumn(self.TRAIN_VAL_COLUMN, sf.lit(0))
 
         train_ds = cast(SparkDataset, self.train.empty())
-        train_ds.set_data(sdf, self.train.features, self.train.roles)
+        train_ds.set_data(sdf, self.train.features, self.train.roles, name=self.train.name)
 
-        return train_ds, train_ds, train_ds
+        return train_ds, train_ds
 
-    def combine_val_preds(self, val_preds: Sequence[SparkDataFrame], include_train: bool = False) -> SparkDataFrame:
-        assert len(val_preds) == 1
-        return val_preds[0]
+    def freeze(self) -> 'SparkDummyIterator':
+        return SparkDummyIterator(self.train.freeze())
+
+    def unpersist(self, skip_val: bool = False):
+        if not skip_val:
+            self.train.unpersist()
 
     def get_validation_data(self) -> SparkDataset:
         return self.train
@@ -63,14 +61,15 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
     def convert_to_holdout_iterator(self) -> "SparkHoldoutIterator":
         sds = cast(SparkDataset, self.train)
         assert sds.folds_column is not None, "Cannot convert to Holdout iterator when folds_column is not defined"
-        return SparkHoldoutIterator(self.train, self.input_roles)
+        return SparkHoldoutIterator(self.train, self.train)
 
 
 class SparkHoldoutIterator(SparkBaseTrainValidIterator):
     """Simple one step iterator over one fold of SparkDataset"""
 
-    def __init__(self, train: SparkDataset, input_roles: Optional[RolesDict] = None):
-        super().__init__(train, input_roles)
+    def __init__(self, train: SparkDataset, valid: SparkDataset):
+        super().__init__(train)
+        self._valid = valid
         self._curr_idx = 0
 
     def __iter__(self) -> Iterable:
@@ -80,7 +79,7 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
     def __len__(self) -> Optional[int]:
         return 1
 
-    def __next__(self) -> Tuple[SparkDataset, SparkDataset, SparkDataset]:
+    def __next__(self) -> TrainVal:
         """Define how to get next object.
 
         Returns:
@@ -90,36 +89,35 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
         if self._curr_idx > 0:
             raise StopIteration
 
-        full_ds, train_part_ds, valid_part_ds = self._split_by_fold(self._curr_idx)
+        # full_ds, train_part_ds, valid_part_ds = self._split_by_fold(self._curr_idx)
         self._curr_idx += 1
 
-        return full_ds, train_part_ds, valid_part_ds
+        return self.train, self._valid
+
+    def freeze(self) -> 'SparkHoldoutIterator':
+        return SparkHoldoutIterator(self.train.freeze(), self._valid.freeze())
+
+    def unpersist(self, skip_val: bool = False):
+        self.train.unpersist()
+        if not skip_val:
+            self._valid.unpersist()
 
     def get_validation_data(self) -> SparkDataset:
-        full_ds, train_part_ds, valid_part_ds = self._split_by_fold(fold=0)
-        return valid_part_ds
+        # full_ds, train_part_ds, valid_part_ds = self._split_by_fold(fold=0)
+        return self._valid
 
     def convert_to_holdout_iterator(self) -> "SparkHoldoutIterator":
         return self
 
-    def combine_val_preds(self, val_preds: Sequence[SparkDataFrame], include_train: bool = False) -> SparkDataFrame:
-        if len(val_preds) != 1:
-            k = 0
-        assert len(val_preds) == 1
+    def apply_selector(self, selector: SparkSelectionPipeline) -> "SparkBaseTrainValidIterator":
+        train_valid = super().apply_selector(selector)
+        train_valid._valid = selector.select(train_valid._valid)
+        return train_valid
 
-        if not include_train:
-            return val_preds[0]
-
-        val_pred_cols = set(val_preds[0].columns)
-        train_cols = set(self.train.columns)
-        assert len(train_cols.difference(val_pred_cols)) == 0
-        new_feats = val_pred_cols.difference(train_cols)
-
-        _, train_ds, _ = self._split_by_fold(0)
-        missing_cols = [F.lit(None).alias(f) for f in new_feats]
-        full_val_preds = train_ds.select("*", *missing_cols).unionByName(val_preds[0])
-
-        return full_val_preds
+    def apply_feature_pipeline(self, features_pipeline: SparkFeaturesPipeline) -> "SparkBaseTrainValidIterator":
+        train_valid = super().apply_feature_pipeline(features_pipeline)
+        train_valid._valid = features_pipeline.transform(train_valid._valid)
+        return train_valid
 
 
 class SparkFoldsIterator(SparkBaseTrainValidIterator):
@@ -128,7 +126,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
     Folds should be defined in Reader, based on cross validation method.
     """
 
-    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None, input_roles: Optional[RolesDict] = None):
+    def __init__(self, train: SparkDataset, n_folds: Optional[int] = None):
         """Creates iterator.
 
         Args:
@@ -136,12 +134,16 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             n_folds: Number of folds.
 
         """
-        super().__init__(train, input_roles)
+        super().__init__(train)
 
-        num_folds = train.data.select(F.max(train.folds_column).alias("max")).first()["max"]
+        num_folds = train.data.select(sf.max(train.folds_column).alias("max")).first()["max"]
         self.n_folds = num_folds + 1
         if n_folds is not None:
             self.n_folds = min(self.n_folds, n_folds)
+
+        self._base_train_frozen = train.frozen
+        self._train_frozen = self._base_train_frozen
+        self._val_frozen = self._base_train_frozen
 
     def __len__(self) -> int:
         """Get len of iterator.
@@ -165,7 +167,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
         return self
 
-    def __next__(self) -> Tuple[SparkDataset, SparkDataset, SparkDataset]:
+    def __next__(self) -> TrainVal:
         """Define how to get next object.
 
         Returns:
@@ -181,15 +183,34 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
         full_ds, train_part_ds, valid_part_ds = self._split_by_fold(self._curr_idx)
         self._curr_idx += 1
 
-        return full_ds, train_part_ds, valid_part_ds
+        return train_part_ds, valid_part_ds
+
+    def freeze(self) -> 'SparkFoldsIterator':
+        return SparkFoldsIterator(self.train.freeze(), n_folds=self.n_folds)
+
+    # @property
+    # def train_frozen(self) -> bool:
+    #     return self._train_frozen
+    #
+    # @property
+    # def val_frozen(self) -> bool:
+    #     return self._val_frozen
+    #
+    # @train_frozen.setter
+    # def train_frozen(self, val: bool):
+    #     self._base_train_frozen = val
+    #     self.train.frozen = self._base_train_frozen or self._base_train_frozen or self._val_frozen
+    #
+    # @val_frozen.setter
+    # def val_frozen(self, val: bool):
+    #     self._val_frozen = val
+    #     self.train.frozen = self._base_train_frozen or self._train_frozen or self._val_frozen
+
+    def unpersist(self, skip_val: bool = False):
+        if not skip_val:
+            self.train.unpersist()
 
     def get_validation_data(self) -> SparkDataset:
-        """Just return train dataset.
-
-        Returns:
-            Whole train dataset.
-
-        """
         return self.train
 
     def convert_to_holdout_iterator(self) -> SparkHoldoutIterator:
@@ -201,19 +222,5 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             new hold-out-iterator.
 
         """
-        return SparkHoldoutIterator(self.train, self.input_roles)
-
-    def combine_val_preds(self, val_preds: Sequence[SparkDataFrame], include_train: bool = False) -> SparkDataFrame:
-        assert len(val_preds) > 0
-
-        if len(val_preds) == 1:
-            return val_preds[0]
-
-        full_val_preds = functools.reduce(lambda x, y: x.unionByName(y), val_preds)
-
-        # This transformer is necessary to prevent uneven distribution of partitions after coalescing
-        # It assumes that the dataset sent in had been splitted before union corresponding to folds
-        # The transformer is very specific and shouldn't be used anywhere else
-        full_val_preds = BalancedUnionPartitionsCoalescerTransformer().transform(full_val_preds)
-
-        return full_val_preds
+        _, train, valid = self._split_by_fold(0)
+        return SparkHoldoutIterator(train, valid)

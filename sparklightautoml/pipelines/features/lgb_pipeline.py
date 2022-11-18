@@ -1,11 +1,11 @@
 from copy import deepcopy
-from typing import Optional, Union, Set
+from typing import Optional, Union
 
 import numpy as np
-
 from lightautoml.dataset.roles import CategoryRole, NumericRole
 from lightautoml.pipelines.selection.base import ImportanceEstimator
-from sparklightautoml.dataset.base import SparkDataset
+
+from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline, SparkTabularDataFeatures
 from sparklightautoml.transformers.base import (
     SparkChangeRolesTransformer,
@@ -27,11 +27,8 @@ class SparkLGBSimpleFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
 
     """
 
-    def __init__(self, cacher_key: str = "default_cacher"):
-        super().__init__(cacher_key)
-
-    def _get_input_features(self) -> Set[str]:
-        return set(self.input_features)
+    def __init__(self):
+        super().__init__()
 
     def create_pipeline(self, train: SparkDataset) -> Union[SparkUnionTransformer, SparkSequentialTransformer]:
         """Create tree pipeline.
@@ -62,6 +59,7 @@ class SparkLGBSimpleFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
             transformers_list.append(dt_processing)
 
         transformers_list.append(self.get_numeric_data(train))
+        transformers_list.append(self.get_numeric_vectors_data(train))
 
         union_all = SparkUnionTransformer([x for x in transformers_list if x is not None])
 
@@ -88,7 +86,6 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
         multiclass_te_co: int = 3,
         auto_unique_co: int = 10,
         output_categories: bool = False,
-        cacher_key: str = "default_cacher",
         **kwargs
     ):
         """
@@ -105,7 +102,6 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
 
         """
         super().__init__(
-            cacher_key=cacher_key,
             multiclass_te_co=multiclass_te_co,
             top_intersections=top_intersections,
             max_intersection_depth=max_intersection_depth,
@@ -115,9 +111,6 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
             output_categories=output_categories,
             ascending_by_cardinality=False,
         )
-
-    def _get_input_features(self) -> Set[str]:
-        return set(self.input_features)
 
     def create_pipeline(self, train: SparkDataset) -> SparkEstOrTrans:
         """Create tree pipeline.
@@ -182,7 +175,7 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
         if le_part is not None:
             # le_part = SequentialTransformer([le_part, ChangeRoles(output_category_role)])
             change_roles_stage = SparkChangeRolesTransformer(
-                input_cols=le_part.getOutputCols(), input_roles=le_part.getOutputRoles(), role=output_category_role
+                input_cols=le_part.getOutputCols(), input_roles=le_part.get_output_roles(), role=output_category_role
             )
             le_part = SparkSequentialTransformer([le_part, change_roles_stage])
             transformer_list.append(le_part)
@@ -192,7 +185,7 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
         if te_part is not None:
             target_encoder_stage = target_encoder(
                 input_cols=te_part.getOutputCols(),
-                input_roles=te_part.getOutputRoles(),
+                input_roles=te_part.get_output_roles(),
                 task_name=train.task.name,
                 folds_column=train.folds_column,
                 target_column=train.target_column,
@@ -207,7 +200,7 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
             if target_encoder is not None:
                 target_encoder_stage = target_encoder(
                     input_cols=intersections.getOutputCols(),
-                    input_roles=intersections.getOutputRoles(),
+                    input_roles=intersections.get_output_roles(),
                     task_name=train.task.name,
                     folds_column=train.folds_column,
                     target_column=train.target_column,
@@ -217,7 +210,7 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
             else:
                 change_roles_stage = SparkChangeRolesTransformer(
                     input_cols=intersections.getOutputCols(),
-                    input_roles=intersections.getOutputRoles(),
+                    input_roles=intersections.get_output_roles(),
                     role=output_category_role,
                 )
                 ints_part = SparkSequentialTransformer([intersections, change_roles_stage])
@@ -225,6 +218,7 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
             transformer_list.append(ints_part)
 
         transformer_list.append(self.get_numeric_data(train))
+        transformer_list.append(self.get_numeric_vectors_data(train))
         transformer_list.append(self.get_ordinal_encoding(train, ordinal))
         transformer_list.append(self.get_datetime_diffs(train))
         transformer_list.append(self.get_datetime_seasons(train, NumericRole(np.float32)))

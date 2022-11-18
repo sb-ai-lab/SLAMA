@@ -2,27 +2,26 @@ import logging
 from typing import Optional, Dict, List
 
 import numpy as np
-import pandas as pd
-from pyspark.ml import Transformer
-from pyspark.ml.feature import QuantileDiscretizer, Bucketizer
-from pyspark.sql import functions as F
-from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-from pyspark.sql.types import FloatType, IntegerType
 from lightautoml.dataset.base import RolesDict
-
 from lightautoml.dataset.roles import ColumnRole, NumericRole, CategoryRole
-from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
-from sparklightautoml.transformers.base import SparkBaseEstimator, SparkBaseTransformer, ObsoleteSparkTransformer
 from lightautoml.transformers.numeric import numeric_check
+from pyspark.ml import Transformer
+from pyspark.ml.feature import QuantileDiscretizer
+from pyspark.sql import functions as sf
+from pyspark.sql.types import FloatType, IntegerType
 
+from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
+from sparklightautoml.transformers.base import SparkBaseEstimator, SparkBaseTransformer
+from sparklightautoml.utils import SparkDataFrame
 
 logger = logging.getLogger(__name__)
 
 
 class SparkNaNFlagsEstimator(SparkBaseEstimator):
-    """Estimator that calculate nan rate for input columns and build :class:`~sparklightautoml.transformers.numeric.SparkNaNFlagsTransformer`."""
+    """
+    Estimator that calculate nan rate for input columns and
+    build :class:`~sparklightautoml.transformers.numeric.SparkNaNFlagsTransformer`.
+    """
 
     _fit_checks = (numeric_check,)
     _transform_checks = ()
@@ -54,7 +53,7 @@ class SparkNaNFlagsEstimator(SparkBaseEstimator):
 
     def _fit(self, sdf: SparkDataFrame) -> "Transformer":
 
-        row = sdf.select([F.mean(F.isnan(c).astype(FloatType())).alias(c) for c in self.getInputCols()]).first()
+        row = sdf.select([sf.mean(sf.isnan(c).astype(FloatType())).alias(c) for c in self.getInputCols()]).first()
 
         self._nan_cols = [
             f"{self._fname_prefix}__{col}"
@@ -67,10 +66,10 @@ class SparkNaNFlagsEstimator(SparkBaseEstimator):
 
         return SparkNaNFlagsTransformer(
             input_cols=self.getInputCols(),
-            input_roles=self.getInputRoles(),
+            input_roles=self.get_input_roles(),
             output_cols=self.getOutputCols(),
-            output_roles=self.getOutputRoles(),
-            do_replace_columns=self.getDoReplaceColumns(),
+            output_roles=self.get_output_roles(),
+            do_replace_columns=self.get_do_replace_columns(),
         )
 
 
@@ -99,7 +98,7 @@ class SparkNaNFlagsTransformer(SparkBaseTransformer, CommonPickleMLWritable, Com
     def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
 
         new_cols = [
-            F.isnan(in_c).astype(FloatType()).alias(out_c)
+            sf.isnan(in_c).astype(FloatType()).alias(out_c)
             for in_c, out_c in zip(self.getInputCols(), self.getOutputCols())
         ]
 
@@ -127,10 +126,10 @@ class SparkFillInfTransformer(SparkBaseTransformer, CommonPickleMLWritable, Comm
 
     def _transform(self, df: SparkDataFrame) -> SparkDataFrame:
         def is_inf(col: str):
-            return F.col(col).isin([F.lit("+Infinity").cast("double"), F.lit("-Infinity").cast("double")])
+            return sf.col(col).isin([sf.lit("+Infinity").cast("double"), sf.lit("-Infinity").cast("double")])
 
         new_cols = [
-            F.when(is_inf(i), np.nan).otherwise(F.col(i)).alias(f"{self._fname_prefix}__{i}")
+            sf.when(is_inf(i), np.nan).otherwise(sf.col(i)).alias(f"{self._fname_prefix}__{i}")
             for i in self.getInputCols()
         ]
 
@@ -165,7 +164,7 @@ class SparkFillnaMedianEstimator(SparkBaseEstimator):
         """Approximately estimates medians.
 
         Args:
-            dataset: SparkDataFrame with numerical features.
+            sdf: SparkDataFrame with numerical features.
 
         Returns:
             Spark MLlib Transformer
@@ -183,8 +182,8 @@ class SparkFillnaMedianEstimator(SparkBaseEstimator):
         logger.debug(f"Sample size: {sdf.count()}")
 
         row = (
-            sdf.select([F.percentile_approx(c, 0.5).alias(c) for c in self.getInputCols()])
-            .select([F.when(F.isnan(c), 0).otherwise(F.col(c)).alias(c) for c in self.getInputCols()])
+            sdf.select([sf.percentile_approx(c, 0.5).alias(c) for c in self.getInputCols()])
+            .select([sf.when(sf.isnan(c), 0).otherwise(sf.col(c)).alias(c) for c in self.getInputCols()])
             .first()
         )
 
@@ -195,10 +194,10 @@ class SparkFillnaMedianEstimator(SparkBaseEstimator):
         return SparkFillnaMedianTransformer(
             input_cols=self.getInputCols(),
             output_cols=self.getOutputCols(),
-            input_roles=self.getInputRoles(),
-            output_roles=self.getOutputRoles(),
+            input_roles=self.get_input_roles(),
+            output_roles=self.get_output_roles(),
             meds=self._meds,
-            do_replace_columns=self.getDoReplaceColumns(),
+            do_replace_columns=self.get_do_replace_columns(),
         )
 
 
@@ -231,7 +230,7 @@ class SparkFillnaMedianTransformer(SparkBaseTransformer, CommonPickleMLWritable,
         """Transform - fillna with medians.
 
         Args:
-            dataset: SparkDataFrame of numerical features
+            sdf: SparkDataFrame of numerical features
 
         Returns:
             SparkDataFrame with replaced NaN with medians
@@ -239,7 +238,7 @@ class SparkFillnaMedianTransformer(SparkBaseTransformer, CommonPickleMLWritable,
         """
 
         new_cols = [
-            F.when(F.isnan(c), self._meds[c]).otherwise(F.col(c)).alias(f"{self._fname_prefix}__{c}")
+            sf.when(sf.isnan(c), self._meds[c]).otherwise(sf.col(c)).alias(f"{self._fname_prefix}__{c}")
             for c in self.getInputCols()
         ]
 
@@ -271,7 +270,7 @@ class SparkLogOddsTransformer(SparkBaseTransformer, CommonPickleMLWritable, Comm
         """Transform - convert num values to logodds.
 
         Args:
-            dataset: SparkDataFrame dataset of categorical features.
+            sdf: SparkDataFrame dataset of categorical features.
 
         Returns:
             SparkDataFrame with encoded labels.
@@ -279,8 +278,8 @@ class SparkLogOddsTransformer(SparkBaseTransformer, CommonPickleMLWritable, Comm
         """
         new_cols = []
         for i in self.getInputCols():
-            col = F.when(F.col(i) < 1e-7, 1e-7).when(F.col(i) > 1 - 1e-7, 1 - 1e-7).otherwise(F.col(i))
-            col = F.log(col / (F.lit(1) - col))
+            col = sf.when(sf.col(i) < 1e-7, 1e-7).when(sf.col(i) > 1 - 1e-7, 1 - 1e-7).otherwise(sf.col(i))
+            col = sf.log(col / (sf.lit(1) - col))
             new_cols.append(col.alias(f"{self._fname_prefix}__{i}"))
 
         out_sdf = self._make_output_df(sdf, new_cols)
@@ -312,9 +311,9 @@ class SparkStandardScalerEstimator(SparkBaseEstimator):
 
         """
 
-        means = [F.mean(c).alias(f"mean_{c}") for c in self.getInputCols()]
+        means = [sf.mean(c).alias(f"mean_{c}") for c in self.getInputCols()]
         stds = [
-            F.when(F.stddev(c) == 0, 1).when(F.isnan(F.stddev(c)), 1).otherwise(F.stddev(c)).alias(f"std_{c}")
+            sf.when(sf.stddev(c) == 0, 1).when(sf.isnan(sf.stddev(c)), 1).otherwise(sf.stddev(c)).alias(f"std_{c}")
             for c in self.getInputCols()
         ]
 
@@ -323,10 +322,10 @@ class SparkStandardScalerEstimator(SparkBaseEstimator):
         return SparkStandardScalerTransformer(
             input_cols=self.getInputCols(),
             output_cols=self.getOutputCols(),
-            input_roles=self.getInputRoles(),
-            output_roles=self.getOutputRoles(),
+            input_roles=self.get_input_roles(),
+            output_roles=self.get_output_roles(),
             means_and_stds=self._means_and_stds,
-            do_replace_columns=self.getDoReplaceColumns(),
+            do_replace_columns=self.get_do_replace_columns(),
         )
 
 
@@ -368,7 +367,7 @@ class SparkStandardScalerTransformer(SparkBaseTransformer, CommonPickleMLWritabl
 
         new_cols = []
         for c in self.getInputCols():
-            col = (F.col(c) - self._means_and_stds[f"mean_{c}"]) / F.lit(self._means_and_stds[f"std_{c}"])
+            col = (sf.col(c) - self._means_and_stds[f"mean_{c}"]) / sf.lit(self._means_and_stds[f"std_{c}"])
             new_cols.append(col.alias(f"{self._fname_prefix}__{c}"))
 
         out_sdf = self._make_output_df(sdf, new_cols)
@@ -413,10 +412,10 @@ class SparkQuantileBinningEstimator(SparkBaseEstimator):
             self._nbins,
             self._bucketizer,
             input_cols=self.getInputCols(),
-            input_roles=self.getInputRoles(),
+            input_roles=self.get_input_roles(),
             output_cols=self.getOutputCols(),
-            output_roles=self.getOutputRoles(),
-            do_replace_columns=self.getDoReplaceColumns(),
+            output_roles=self.get_output_roles(),
+            do_replace_columns=self.get_do_replace_columns(),
         )
 
 
@@ -452,8 +451,8 @@ class SparkQuantileBinningTransformer(SparkBaseTransformer, CommonPickleMLWritab
 
     def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
         new_cols = [
-            F.when(F.col(c).astype(IntegerType()) == F.lit(self._bins), 0)
-            .otherwise(F.col(c).astype(IntegerType()) + 1)
+            sf.when(sf.col(c).astype(IntegerType()) == sf.lit(self._bins), 0)
+            .otherwise(sf.col(c).astype(IntegerType()) + 1)
             .alias(c)
             for c in self._bucketizer.getOutputCols()
         ]

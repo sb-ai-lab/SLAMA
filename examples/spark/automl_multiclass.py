@@ -2,8 +2,9 @@ import logging.config
 
 import pytest
 from pyspark.ml import PipelineModel
-from pyspark.sql import functions as F
+from pyspark.sql import functions as sf
 
+from examples_utils import get_persistence_manager, BUCKET_NUMS
 from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
@@ -12,16 +13,17 @@ from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
 # NOTE! This demo requires datasets to be downloaded into a local folder.
 # Run ./bin/download-datasets.sh to get required datasets into the folder.
 
-
 if __name__ == "__main__":
-    spark = get_spark_session()
+    spark = get_spark_session(BUCKET_NUMS)
+
+    persistence_manager = get_persistence_manager()
 
     seed = 42
     cv = 2
@@ -40,10 +42,11 @@ if __name__ == "__main__":
             lgb_params={'use_single_dataset_mode': True},
             general_params={"use_algos": use_algos},
             reader_params={"cv": cv, "advanced_roles": False, 'random_state': seed},
+            linear_l2_params={'default_params': {'regParam': [1e-5]}},
             tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 10, 'max_tuning_time': 3600}
         )
 
-        preds = automl.fit_predict(train_data, roles)
+        preds = automl.fit_predict(train_data, roles, persistence_manager=persistence_manager).persist()
 
     logger.info("Predicting on out of fold")
 
@@ -52,10 +55,9 @@ if __name__ == "__main__":
 
     logger.info(f"score for out-of-fold predictions: {metric_value}")
 
-    transformer = automl.make_transformer()
+    transformer = automl.transformer()
 
-    del preds
-    automl.release_cache()
+    preds.unpersist()
 
     with log_exec_timer("saving model") as saving_timer:
         transformer.write().overwrite().save("file:///tmp/automl_multiclass")
@@ -67,8 +69,8 @@ if __name__ == "__main__":
         score = task.get_dataset_metric()
         expected_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            F.col(roles['target']).alias('target'),
-            F.col(pred_column).alias('prediction')
+            sf.col(roles['target']).alias('target'),
+            sf.col(pred_column).alias('prediction')
         ))
 
         logger.info(f"score for test predictions: {expected_metric_value}")
@@ -86,8 +88,8 @@ if __name__ == "__main__":
         score = task.get_dataset_metric()
         actual_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            F.col(roles['target']).alias('target'),
-            F.col(pred_column).alias('prediction')
+            sf.col(roles['target']).alias('target'),
+            sf.col(pred_column).alias('prediction')
         ))
         logger.info(f"score for test predictions via loaded pipeline: {actual_metric_value}")
 
@@ -105,5 +107,9 @@ if __name__ == "__main__":
     }
 
     print(f"EXP-RESULT: {result}")
+
+    # this is necessary if persistence_manager is of CompositeManager type
+    # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all
+    persistence_manager.unpersist_all()
 
     spark.stop()

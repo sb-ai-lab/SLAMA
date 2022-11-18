@@ -13,7 +13,7 @@ from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.common import inherit_doc
 
-from sparklightautoml.mlwriters import LAMLStringIndexerModelJavaMLReadable
+from sparklightautoml.mlwriters import CommonJavaToPythonMLReadable
 
 
 class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols):
@@ -275,7 +275,7 @@ class LAMLStringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, Jav
 
 
 class LAMLStringIndexerModel(
-    JavaModel, _StringIndexerModelParams, LAMLStringIndexerModelJavaMLReadable, JavaMLWritable
+    JavaModel, _StringIndexerModelParams, CommonJavaToPythonMLReadable, JavaMLWritable
 ):
     """
     Model fitted by :py:class:`StringIndexer`.

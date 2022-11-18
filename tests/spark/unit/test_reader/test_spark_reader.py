@@ -1,31 +1,24 @@
-import logging
-import logging.config
-import os
 from typing import Dict, Any
 
 import pandas as pd
 import pytest
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.reader.base import PandasToPandasReader
+from lightautoml.tasks import Task
 from pyspark.sql import SparkSession
 from pyspark.sql.types import NumericType
 
-from lightautoml.dataset.roles import CategoryRole
-from lightautoml.reader.base import PandasToPandasReader
 from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask as SparkTask
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
-from lightautoml.tasks import Task
 from .. import spark as spark_sess
-from ..dataset_utils import get_test_datasets, prepared_datasets
+from ..dataset_utils import get_test_datasets
 
 spark = spark_sess
 
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/lama.log'))
-logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
-logger = logging.getLogger(__name__)
-
-
+# noinspection PyShadowingNames
 @pytest.mark.parametrize("config,cv,agr", [(ds, 5, False) for ds in get_test_datasets(setting="all-tasks")])
 def test_spark_reader(spark: SparkSession, config: Dict[str, Any], cv: int, agr: bool):
     def checks(sds: SparkDataset, check_target_and_folds: bool = True):
@@ -52,9 +45,10 @@ def test_spark_reader(spark: SparkSession, config: Dict[str, Any], cv: int, agr:
     dtype = config['dtype'] if 'dtype' in config else None
 
     df = spark.read.csv(path, header=True, escape="\"")
+    persistence_manager = PlainCachePersistenceManager()
     sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv, advanced_roles=agr)
 
-    sdataset = sreader.fit_read(df, roles=roles)
+    sdataset = sreader.fit_read(df, roles=roles, persistence_manager=persistence_manager)
     checks(sdataset)
 
     sdataset = sreader.read(df, add_array_attrs=False)
@@ -91,6 +85,7 @@ def test_spark_reader(spark: SparkSession, config: Dict[str, Any], cv: int, agr:
     assert len(not_equal_encoding_types) == 0, f"Encoding types are different: {not_equal_encoding_types}"
 
 
+# noinspection PyShadowingNames
 @pytest.mark.parametrize("config,cv", [(ds, 5) for ds in get_test_datasets(dataset='used_cars_dataset_no_cols_limit')])
 def test_spark_reader_advanced_guess_roles(spark: SparkSession, config: Dict[str, Any], cv: int):
     task_type = config['task_type']
@@ -104,9 +99,9 @@ def test_spark_reader_advanced_guess_roles(spark: SparkSession, config: Dict[str
     pdataset = preader.fit_read(train_pdf, roles=config["roles"])
 
     train_df = spark.read.csv(config['train_path'], header=True, escape="\"")
+    persistence_manager = PlainCachePersistenceManager()
     sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv, advanced_roles=True)
-    sdataset = sreader.fit_read(train_df, roles=config["roles"])
-    # spark_adv_roles = sreader.advanced_roles_guess(spark_train_ds)
+    sdataset = sreader.fit_read(train_df, roles=config["roles"], persistence_manager=persistence_manager)
 
     assert set(sdataset.features) == set(pdataset.features)
     sdiff = set(sdataset.features).symmetric_difference(pdataset.features)
@@ -120,8 +115,11 @@ def test_spark_reader_advanced_guess_roles(spark: SparkSession, config: Dict[str
     # two checks on CategoryRole to make PyCharm field resolution happy
     not_equal_encoding_types = [
         feat for feat, srole, prole in feat_and_roles
-        if isinstance(srole, CategoryRole) and isinstance(prole, CategoryRole)
-           and srole.encoding_type != prole.encoding_type
+        if (
+                isinstance(srole, CategoryRole)
+                and isinstance(prole, CategoryRole)
+                and srole.encoding_type != prole.encoding_type
+        )
     ]
 
-    # assert len(not_equal_encoding_types) == 0, f"Encoding types are different: {not_equal_encoding_types}"
+    assert len(not_equal_encoding_types) == 0, f"Encoding types are different: {not_equal_encoding_types}"

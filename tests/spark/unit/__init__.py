@@ -1,50 +1,68 @@
-import time
+import logging.config
+import logging.config
+import os
+import shutil
 from copy import copy
 from typing import Tuple, get_args, cast, List, Optional, Dict, Union
 
 import numpy as np
 import pandas as pd
 import pytest
-from pyspark.ml import Estimator
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-
+from hdfs import InsecureClient
 from lightautoml.dataset.base import LAMLDataset
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
-from lightautoml.dataset.roles import ColumnRole, CategoryRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.transformers.base import LAMLTransformer
+from lightautoml.transformers.numeric import NumpyTransformable
+from lightautoml.utils.logging import set_stdout_level, verbosity_to_loglevel
+from pyspark.ml import Estimator, Transformer
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as sf
+
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.tasks.base import SparkTask as SparkTask
 from sparklightautoml.transformers.base import ObsoleteSparkTransformer, SparkBaseEstimator, SparkBaseTransformer, \
     SparkColumnsAndRoles
-from sparklightautoml.utils import log_exec_time
-from lightautoml.transformers.base import LAMLTransformer
-from lightautoml.transformers.numeric import NumpyTransformable
-
+from sparklightautoml.utils import log_exec_time, logging_config, VERBOSE_LOGGING_FORMAT
 
 # NOTE!!!
 # All tests require PYSPARK_PYTHON env variable to be set
 # for example: PYSPARK_PYTHON=/home/nikolay/.conda/envs/LAMA/bin/python
 JAR_PATH = 'jars/spark-lightautoml_2.12-0.1.jar'
+PARTITIONS_NUM = 8
+BUCKET_NUMS = PARTITIONS_NUM
+TMP_SLAMA_DIR = "/tmp/slama_test_dir"
+HDFS_TMP_SLAMA_DIR = TMP_SLAMA_DIR
+# TODO: SLAMA - should probably get hdfs settings from an external config
+HDFS_NAME_PORT = "node21.bdcl:9000"
+HDFS_WEB_NAME_PORT = "node21.bdcl:9870"
 
 
-@pytest.fixture(scope="session")
-def spark() -> SparkSession:
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/lama.log'))
+logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
+set_stdout_level(verbosity_to_loglevel(verbosity=5))
+logger = logging.getLogger(__name__)
+
+
+def create_spark_session(warehouse_path: str):
+    shutil.rmtree(warehouse_path, ignore_errors=True)
 
     spark = (
         SparkSession
         .builder
         .appName("LAMA-test-app")
-        .master("local[4]")
+        .master("local-cluster[2,2,2048]")
         .config("spark.driver.memory", "8g")
         .config("spark.jars", JAR_PATH)
-        # .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
-        # .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        # see: https://stackoverflow.com/questions/62109276/errorjava-lang-unsupportedoperationexception-for-pyspark-pandas-udf-documenta
+        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
+        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
         .config("spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
         .config("spark.executor.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
-        .config("spark.sql.shuffle.partitions", 200)
+        .config("spark.sql.shuffle.partitions", PARTITIONS_NUM)
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.sql.autoBroadcastJoinThreshold", "-1")
+        .config("spark.sql.warehouse.dir", warehouse_path)
         .getOrCreate()
     )
 
@@ -55,6 +73,56 @@ def spark() -> SparkSession:
     yield spark
 
     spark.stop()
+
+    shutil.rmtree(warehouse_path, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+def spark() -> SparkSession:
+    for sess in create_spark_session(warehouse_path=TMP_SLAMA_DIR):
+        yield sess
+
+
+@pytest.fixture(scope="function")
+def spark_for_function() -> SparkSession:
+    for sess in create_spark_session(warehouse_path=TMP_SLAMA_DIR):
+        yield sess
+
+
+@pytest.fixture(scope="function")
+def spark_hdfs() -> SparkSession:
+    client = InsecureClient(f'http://{HDFS_WEB_NAME_PORT}')
+    # delete work dir if it exists
+    if client.status(HDFS_TMP_SLAMA_DIR, strict=False):
+        client.delete(HDFS_TMP_SLAMA_DIR, recursive=True)
+
+    spark = (
+        SparkSession
+        .builder
+        .appName("LAMA-test-app")
+        .master("local-cluster[2,2,2048]")
+        .config("spark.driver.memory", "8g")
+        .config("spark.jars", JAR_PATH)
+        # .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
+        # .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
+        .config("spark.sql.shuffle.partitions", PARTITIONS_NUM)
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.sql.autoBroadcastJoinThreshold", "-1")
+        .config("spark.sql.warehouse.dir", f"hdfs://{HDFS_NAME_PORT}{HDFS_TMP_SLAMA_DIR}")
+        .getOrCreate()
+    )
+
+    spark.sparkContext.setLogLevel("WARN")
+
+    print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
+
+    yield spark
+
+    spark.stop()
+
+    # delete work dir if it exists
+    if client.status(HDFS_TMP_SLAMA_DIR, strict=False):
+        client.delete(HDFS_TMP_SLAMA_DIR, recursive=True)
 
 
 @pytest.fixture(scope="session")
@@ -72,6 +140,24 @@ def spark_with_deps() -> SparkSession:
     spark.stop()
 
 
+@pytest.fixture(scope="session")
+def workdir() -> str:
+    """
+    Creates temporary workdir for tests in the begging and cleans in the end.
+    Returns:
+        an absolute path to the workdir
+    """
+
+    workdir_path = os.path.join("/tmp/slama_tests_workdir")
+    if os.path.exists(workdir_path):
+        shutil.rmtree(workdir_path)
+    os.makedirs(workdir_path)
+
+    yield workdir_path
+
+    shutil.rmtree(workdir_path)
+
+
 def compare_feature_distrs_in_datasets(lama_df, spark_df, diff_proc=0.05):
     stats_names = ['count', 'mean',
                    'std', 'min',
@@ -87,7 +173,7 @@ def compare_feature_distrs_in_datasets(lama_df, spark_df, diff_proc=0.05):
     for col in columns:
         if col not in list(spark_df):
             print(col)
-            spark_df = spark_df.rename(columns={'oof__'+col:col})
+            spark_df = spark_df.rename(columns={'oof__' + col: col})
             spark_df_stats = spark_df.describe()
 
         lama_col_uniques = lama_df[col].unique()
@@ -103,9 +189,11 @@ def compare_feature_distrs_in_datasets(lama_df, spark_df, diff_proc=0.05):
             print('Spark: ', spark_col_uniques)
             print()
         for stats_col in stats_names:
-            if abs(lama_df_stats[col][stats_col] - spark_df_stats[col][stats_col]) > abs(lama_df_stats[col][stats_col] * diff_proc):
+            if abs(lama_df_stats[col][stats_col] - spark_df_stats[col][stats_col]) \
+                    > abs(lama_df_stats[col][stats_col] * diff_proc):
                 found_difference = True
-                print(f'Difference in col {col} and stats {stats_col} between {lama_df_stats[col][stats_col]} (lama) and {spark_df_stats[col][stats_col]} (spark)')
+                print(f'Difference in col {col} and stats {stats_col} between {lama_df_stats[col][stats_col]}'
+                      f' (lama) and {spark_df_stats[col][stats_col]} (spark)')
 
     assert not found_difference
 
@@ -179,15 +267,17 @@ def compare_sparkml_transformers_results(spark: SparkSession,
                                          t_spark: Union[SparkBaseEstimator, SparkBaseTransformer],
                                          compare_feature_distributions: bool = True,
                                          compare_content: bool = True,
-                                         rtol: float = 1.e-5):
+                                         rtol: float = 1.e-5) -> Transformer:
     """
     Args:
         spark: session to be used for calculating the example
         ds: a dataset to be transformered by LAMA and Spark transformers
         t_lama: LAMA's version of the transformer
         t_spark: spark's version of the transformer
-        compare_metadata_only: if True comapre only metadata of the resulting pair of datasets - columns
-        count and their labels (e.g. features), roles and shapez
+        compare_feature_distributions: whatever or not
+          to compare statistics of individual features between spark and lama
+        compare_content: whatever or not to compare content of resulting data frames
+        rtol: tolerance level when comparing by content
 
     Returns:
         A tuple of (LAMA transformed dataset, Spark transformed dataset)
@@ -216,43 +306,51 @@ def compare_sparkml_transformers_results(spark: SparkSession,
 
     compare_datasets(ds, transformed_ds, transformed_sds, compare_feature_distributions, compare_content, rtol)
 
+    return t_spark
 
-def compare_sparkml_by_content(spark: SparkSession,
-                       ds: PandasDataset,
-                       t_lama: LAMLTransformer,
-                       t_spark: Union[SparkBaseEstimator, SparkBaseTransformer],
-                       rtol: float = 1.e-5):
+
+def compare_sparkml_by_content(
+        spark: SparkSession,
+        ds: PandasDataset,
+        t_lama: LAMLTransformer,
+        t_spark: Union[SparkBaseEstimator, SparkBaseTransformer],
+        rtol: float = 1.e-5
+) -> Transformer:
     """
         Args:
             spark: session to be used for calculating the example
             ds: a dataset to be transformered by LAMA and Spark transformers
             t_lama: LAMA's version of the transformer
             t_spark: spark's version of the transformer
+            rtol: tolerance level when comparing by content
 
         Returns:
             A tuple of (LAMA transformed dataset, Spark transformed dataset)
         """
-    compare_sparkml_transformers_results(spark, ds, t_lama, t_spark, rtol=rtol)
+    return compare_sparkml_transformers_results(spark, ds, t_lama, t_spark, rtol=rtol)
 
 
-def compare_sparkml_by_metadata(spark: SparkSession,
-                                ds: PandasDataset,
-                                t_lama: LAMLTransformer,
-                                t_spark: Union[SparkBaseEstimator, SparkBaseTransformer],
-                                compare_feature_distributions: bool = False) -> Tuple[NumpyDataset, NumpyDataset]:
+def compare_sparkml_by_metadata(
+        spark: SparkSession,
+        ds: PandasDataset,
+        t_lama: LAMLTransformer,
+        t_spark: Union[SparkBaseEstimator, SparkBaseTransformer],
+        compare_feature_distributions: bool = False) -> Transformer:
     """
         Args:
             spark: session to be used for calculating the example
             ds: a dataset to be transformered by LAMA and Spark transformers
             t_lama: LAMA's version of the transformer
             t_spark: spark's version of the transformer
+            compare_feature_distributions: whatever or not
+            to compare statistics of individual features between spark and lama
 
         Returns:
             A tuple of (LAMA transformed dataset, Spark transformed dataset)
         """
-    compare_sparkml_transformers_results(spark, ds, t_lama, t_spark,
-                                         compare_feature_distributions=compare_feature_distributions,
-                                         compare_content=False)
+    return compare_sparkml_transformers_results(spark, ds, t_lama, t_spark,
+                                                compare_feature_distributions=compare_feature_distributions,
+                                                compare_content=False)
 
 
 def compare_transformers_results(spark: SparkSession,
@@ -407,8 +505,7 @@ def from_pandas_to_spark(p: PandasDataset,
                          target: Optional[pd.Series] = None,
                          folds: Optional[pd.Series] = None,
                          task: Optional[SparkTask] = None,
-                         to_vector: bool = False,
-                         fill_folds_with_zeros_if_not_present: bool = False) -> SparkDataset:
+                         to_vector: bool = False) -> SparkDataset:
     pdf = cast(pd.DataFrame, p.data)
     pdf = pdf.copy()
     pdf[SparkDataset.ID_COLUMN] = pdf.index
@@ -440,7 +537,7 @@ def from_pandas_to_spark(p: PandasDataset,
     if to_vector:
         cols = [c for c in pdf.columns if c != SparkDataset.ID_COLUMN]
         general_feat = cols[0]
-        sdf = sdf.select(SparkDataset.ID_COLUMN, F.array(*cols).alias(general_feat))
+        sdf = sdf.select(SparkDataset.ID_COLUMN, sf.array(*cols).alias(general_feat))
         roles = {general_feat: NumericVectorOrArrayRole(len(cols), f"{general_feat}_{{}}", dtype=roles[cols[0]].dtype)}
 
     if task:
@@ -483,8 +580,14 @@ def compare_obtained_datasets(lama_ds: NumpyDataset, spark_ds: SparkDataset):
     #     f"\n\nLAMA: \n{lama_data}" \
     #     f"\n\nSpark: \n{spark_data}"
 
-    lama_feature_column_ids = {feature: i for i, feature in sorted(enumerate(lama_np_ds.features), key=lambda x: x[1]) }
-    spark_feature_column_ids = {feature: i for i, feature in sorted(enumerate(spark_np_ds.features), key=lambda x: x[1]) }
+    lama_feature_column_ids = {
+        feature: i
+        for i, feature in sorted(enumerate(lama_np_ds.features), key=lambda x: x[1])
+    }
+    spark_feature_column_ids = {
+        feature: i
+        for i, feature in sorted(enumerate(spark_np_ds.features), key=lambda x: x[1])
+    }
     for feature in lama_feature_column_ids.keys():
         lama_column_id = [lama_feature_column_ids[feature]]
         spark_column_id = [spark_feature_column_ids[feature]]
@@ -494,6 +597,7 @@ def compare_obtained_datasets(lama_ds: NumpyDataset, spark_ds: SparkDataset):
         )
         # print(f"feature: {feature}, result: {result}")
         assert result, \
-            f"Results of the LAMA's transformer column '{feature}' and the Spark based transformer column '{feature}' are not equal: " \
+            f"Results of the LAMA's transformer column '{feature}' and " \
+            f"the Spark based transformer column '{feature}' are not equal: " \
             f"\n\nLAMA: \n{lama_data[:, lama_column_id]}" \
             f"\n\nSpark: \n{spark_data[:, spark_column_id]}"

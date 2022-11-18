@@ -10,33 +10,31 @@ import time
 
 import numpy as np
 import pandas as pd
-
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.dataset.roles import DatetimeRole
 from lightautoml.dataset.roles import FoldsRole
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.dataset.roles import TargetRole
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
-
-
 from lightautoml.pipelines.selection.importance_based import (
     ImportanceCutoffSelector,
     ModelBasedImportanceEstimator,
 )
+from pyspark.ml import PipelineModel
+from pyspark.sql import functions as sf
+
+from examples_utils import get_persistence_manager
+from examples_utils import get_spark_session
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
+from sparklightautoml.pipelines.selection.base import SparkSelectionPipelineWrapper
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.validation.iterators import SparkFoldsIterator
-
-from examples_utils import get_spark_session
-from pyspark.sql import functions as F
-from pyspark.ml import PipelineModel
-
 from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -48,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     spark = get_spark_session()
+    persistence_manager = get_persistence_manager()
 
     # Read data from file
     logger.info("Read data from file")
@@ -66,7 +65,9 @@ if __name__ == "__main__":
 
     # Fix dates and convert to date type
     logger.info("Fix dates and convert to date type")
-    data["BIRTH_DATE"] = (np.datetime64("2018-01-01") + data["DAYS_BIRTH"].astype(np.dtype("timedelta64[D]"))).astype(str)
+    data["BIRTH_DATE"] = (
+        (np.datetime64("2018-01-01") + data["DAYS_BIRTH"].astype(np.dtype("timedelta64[D]"))).astype(str)
+    )
     data["EMP_DATE"] = (
         np.datetime64("2018-01-01") + np.clip(data["DAYS_EMPLOYED"], None, 0).astype(np.dtype("timedelta64[D]"))
     ).astype(str)
@@ -83,10 +84,13 @@ if __name__ == "__main__":
     dataset_sdf = spark.createDataFrame(data)
     dataset_sdf = dataset_sdf.select(
         '*',
-        F.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN)
+        sf.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN)
     ).cache()
     dataset_sdf.write.mode('overwrite').format('noop').save()
-    dataset_sdf = dataset_sdf.select(F.col("__fold__").cast("int").alias("__fold__"), *[c for c in dataset_sdf.columns if c != "__fold__"])
+    dataset_sdf = dataset_sdf.select(
+        sf.col("__fold__").cast("int").alias("__fold__"),
+        *[c for c in dataset_sdf.columns if c != "__fold__"]
+    )
 
     # # Set roles for columns
     logger.info("Set roles for columns")
@@ -100,14 +104,13 @@ if __name__ == "__main__":
 
     # create Task
     task = SparkTask("binary")
-    cacher_key = "main_cache"
 
     # # Creating PandasDataSet
     logger.info("Creating PandasDataset")
     start_time = time.time()
     # pd_dataset = PandasDataset(data, roles_parser(check_roles), task=task)
     sreader = SparkToSparkReader(task=task, advanced_roles=False)
-    sdataset = sreader.fit_read(dataset_sdf, roles=check_roles)
+    sdataset = sreader.fit_read(dataset_sdf, roles=check_roles, persistence_manager=persistence_manager)
     logger.info("PandasDataset created. Time = {:.3f} sec".format(time.time() - start_time))
 
     # # Print pandas dataset feature roles
@@ -121,11 +124,10 @@ if __name__ == "__main__":
     selector_iterator = SparkFoldsIterator(sdataset, 1)
     logger.info("Selection iterator created")
 
-    pipe = SparkLGBSimpleFeatures(cacher_key='preselector')
+    pipe = SparkLGBSimpleFeatures()
     logger.info("Pipe and model created")
 
     model0 = SparkBoostLGBM(
-        cacher_key='preselector',
         default_params={
             "learningRate": 0.05,
             "numLeaves": 64,
@@ -145,21 +147,20 @@ if __name__ == "__main__":
 
     # # Build AutoML pipeline
     logger.info("Start building AutoML pipeline")
-    pipe = SparkLGBSimpleFeatures(cacher_key=cacher_key)
+    pipe = SparkLGBSimpleFeatures()
     logger.info("Pipe created")
 
     params_tuner1 = OptunaTuner(n_trials=10, timeout=300)
-    model1 = SparkBoostLGBM(cacher_key=cacher_key, default_params={"learningRate": 0.05, "numLeaves": 128})
+    model1 = SparkBoostLGBM(default_params={"learningRate": 0.05, "numLeaves": 128})
     logger.info("Tuner1 and model1 created")
 
     params_tuner2 = OptunaTuner(n_trials=100, timeout=300)
-    model2 = SparkBoostLGBM(cacher_key=cacher_key, default_params={"learningRate": 0.025, "numLeaves": 64})
+    model2 = SparkBoostLGBM(default_params={"learningRate": 0.025, "numLeaves": 64})
     logger.info("Tuner2 and model2 created")
 
     total = SparkMLPipeline(
-        cacher_key=cacher_key,
         ml_algos=[(model1, params_tuner1), (model2, params_tuner2)],
-        pre_selection=selector,
+        pre_selection=SparkSelectionPipelineWrapper(selector),
         features_pipeline=pipe,
         post_selection=None,
     )
@@ -174,13 +175,15 @@ if __name__ == "__main__":
     # # Fit predict using pipeline
     logger.info("Start AutoML pipeline fit_predict")
     start_time = time.time()
-    pred = total.fit_predict(train_valid)
+    pred = total.fit_predict(train_valid).persist()
     logger.info("Fit_predict finished. Time = {:.3f} sec".format(time.time() - start_time))
 
     # # Check preds
     logger.info("Preds:")
     logger.info("\n{}".format(pred))
     logger.info("Preds.shape = {}".format(pred.shape))
+
+    pred.unpersist()
 
     # # Predict full train dataset
     logger.info("Predict full train dataset")
@@ -192,7 +195,7 @@ if __name__ == "__main__":
     logger.info("Preds.shape = {}".format(train_pred.shape))
 
     logger.info("Save MLPipeline")
-    total.transformer.write().overwrite().save("file:///tmp/SparkMLPipeline")
+    total.transformer().write().overwrite().save("file:///tmp/SparkMLPipeline")
 
     logger.info("Load saved MLPipeline")
     pipeline_model = PipelineModel.load("file:///tmp/SparkMLPipeline")
@@ -206,5 +209,9 @@ if __name__ == "__main__":
     # # Check model feature scores
     logger.info("Feature scores for model_1:\n{}".format(model1.get_features_score()))
     logger.info("Feature scores for model_2:\n{}".format(model2.get_features_score()))
+
+    # this is necessary if persistence_manager is of CompositeManager type
+    # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all
+    persistence_manager.unpersist_all()
 
     spark.stop()

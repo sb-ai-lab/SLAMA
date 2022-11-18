@@ -1,23 +1,24 @@
 import logging
 import os
 from copy import deepcopy, copy
-from typing import Optional, Sequence, Iterable, Union, Tuple, List
+from typing import Optional, Sequence, Iterable, Tuple, List
+
 import numpy as np
-
-from pyspark.ml import PipelineModel
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F, types as SparkTypes, Window
-from tqdm import tqdm
-
 from lightautoml.automl.presets.base import upd_params
 from lightautoml.automl.presets.utils import plot_pdp_with_distribution
-from lightautoml.dataset.base import RolesDict
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
-from lightautoml.pipelines.selection.base import SelectionPipeline, ComposedSelector
+from lightautoml.pipelines.selection.base import ComposedSelector
 from lightautoml.pipelines.selection.importance_based import ModelBasedImportanceEstimator, ImportanceCutoffSelector
 from lightautoml.pipelines.selection.permutation_importance_based import NpIterativeFeatureSelector
 from lightautoml.reader.tabular_batch_generator import ReadableToDf
-from sparklightautoml.automl.blend import SparkWeightedBlender, SparkBestModelSelector
+from pyspark.ml import PipelineModel, Transformer
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as sf, Window
+from pyspark.sql.types import DateType, StringType
+from tqdm import tqdm
+
+from sparklightautoml.automl.base import ReadableIntoSparkDf
+from sparklightautoml.automl.blend import SparkWeightedBlender
 from sparklightautoml.automl.presets.base import SparkAutoMLPreset
 from sparklightautoml.automl.presets.utils import (
     calc_feats_permutation_imps,
@@ -25,22 +26,21 @@ from sparklightautoml.automl.presets.utils import (
     replace_month_in_date,
     replace_year_in_date,
 )
-from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
+from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures, SparkLGBAdvancedPipeline
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline
+from sparklightautoml.pipelines.selection.base import SparkSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.utils import Cacher, SparkDataFrame
+from sparklightautoml.utils import SparkDataFrame
 
 logger = logging.getLogger(__name__)
-
-# Either path/full url, or pyspark.sql.DataFrame
-ReadableIntoSparkDf = Union[str, SparkDataFrame]
 
 base_dir = os.path.dirname(__file__)
 
@@ -97,12 +97,13 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         linear_l2_params: Optional[dict] = None,
         gbm_pipeline_params: Optional[dict] = None,
         linear_pipeline_params: Optional[dict] = None,
+        persistence_manager: Optional[PersistenceManager] = None
     ):
         if config_path is None:
             config_path = os.path.join(base_dir, self._default_config_path)
         super().__init__(task, timeout, memory_limit, cpu_limit, gpu_ids, timing_params, config_path)
 
-        self._cacher_key = "main_cache"
+        self._persistence_manager = persistence_manager or PlainCachePersistenceManager()
 
         self._spark = spark
         # upd manual params
@@ -187,7 +188,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             score *= 0.5
         return score
 
-    def get_selector(self, cacher_key: str, n_level: Optional[int] = 1) -> SelectionPipeline:
+    def get_selector(self, n_level: Optional[int] = 1) -> SparkSelectionPipelineWrapper:
         selection_params = self.selection_params
         # lgb_params
         lgb_params = deepcopy(self.lgb_params)
@@ -206,9 +207,9 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             time_score = self.get_time_score(n_level, "lgb", False)
 
             sel_timer_0 = self.timer.get_task_timer("lgb", time_score)
-            selection_feats = SparkLGBSimpleFeatures(cacher_key=cacher_key)
+            selection_feats = SparkLGBSimpleFeatures()
 
-            selection_gbm = SparkBoostLGBM(cacher_key=cacher_key, timer=sel_timer_0, **lgb_params)
+            selection_gbm = SparkBoostLGBM(timer=sel_timer_0, **lgb_params)
             selection_gbm.set_prefix("Selector")
 
             if selection_params["importance_type"] == "permutation":
@@ -227,8 +228,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                 time_score = self.get_time_score(n_level, "lgb", False)
 
                 sel_timer_1 = self.timer.get_task_timer("lgb", time_score)
-                selection_feats = SparkLGBSimpleFeatures(cacher_key=cacher_key)
-                selection_gbm = SparkBoostLGBM(cacher_key=cacher_key, timer=sel_timer_1, **lgb_params)
+                selection_feats = SparkLGBSimpleFeatures()
+                selection_gbm = SparkBoostLGBM(timer=sel_timer_1, **lgb_params)
                 selection_gbm.set_prefix("Selector")
 
                 importance = SparkNpPermutationImportanceEstimator()
@@ -243,22 +244,22 @@ class SparkTabularAutoML(SparkAutoMLPreset):
 
                 pre_selector = ComposedSelector([pre_selector, extra_selector])
 
-        return BugFixSelectionPipelineWrapper(pre_selector)
+        pre_selector = BugFixSelectionPipelineWrapper(pre_selector)
+        return SparkSelectionPipelineWrapper(pre_selector)
 
     def get_linear(
-        self, cacher_key: str, n_level: int = 1, pre_selector: Optional[SelectionPipeline] = None
+        self, n_level: int = 1, pre_selector: Optional[SparkSelectionPipelineWrapper] = None
     ) -> SparkNestedTabularMLPipeline:
 
         # linear model with l2
         time_score = self.get_time_score(n_level, "linear_l2")
         linear_l2_timer = self.timer.get_task_timer("reg_l2", time_score)
-        linear_l2_model = SparkLinearLBFGS(cacher_key=cacher_key, timer=linear_l2_timer, **self.linear_l2_params)
+        linear_l2_model = SparkLinearLBFGS(timer=linear_l2_timer, **self.linear_l2_params)
         linear_l2_feats = SparkLinearFeatures(
-            output_categories=True, cacher_key=self._cacher_key, **self.linear_pipeline_params
+            output_categories=True, **self.linear_pipeline_params
         )
 
         linear_l2_pipe = SparkNestedTabularMLPipeline(
-            self._cacher_key,
             [linear_l2_model],
             force_calc=True,
             pre_selection=pre_selector,
@@ -271,10 +272,10 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         self,
         keys: Sequence[str],
         n_level: int = 1,
-        pre_selector: Optional[SelectionPipeline] = None,
+        pre_selector: Optional[SparkSelectionPipelineWrapper] = None,
     ):
 
-        gbm_feats = SparkLGBAdvancedPipeline(cacher_key=self._cacher_key, **self.gbm_pipeline_params)
+        gbm_feats = SparkLGBAdvancedPipeline(**self.gbm_pipeline_params)
 
         ml_algos = []
         force_calc = []
@@ -284,7 +285,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             time_score = self.get_time_score(n_level, key)
             gbm_timer = self.timer.get_task_timer(algo_key, time_score)
             if algo_key == "lgb":
-                gbm_model = SparkBoostLGBM(cacher_key=self._cacher_key, timer=gbm_timer, **self.lgb_params)
+                gbm_model = SparkBoostLGBM(timer=gbm_timer, **self.lgb_params)
             elif algo_key == "cb":
                 raise NotImplementedError("Not supported yet")
             else:
@@ -302,7 +303,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             force_calc.append(force)
 
         gbm_pipe = SparkNestedTabularMLPipeline(
-            self._cacher_key,
             ml_algos,
             force_calc,
             pre_selection=pre_selector,
@@ -323,9 +323,9 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         multilevel_avail = fit_args["valid_data"] is None and fit_args["cv_iter"] is None
 
         self.infer_auto_params(train_data, multilevel_avail)
-        reader = SparkToSparkReader(cacher_key=self._cacher_key, task=self.task, **self.reader_params)
+        reader = SparkToSparkReader(task=self.task, **self.reader_params)
 
-        pre_selector = self.get_selector(cacher_key="selector_cache")
+        pre_selector = self.get_selector()
 
         levels = []
 
@@ -338,7 +338,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                     self.general_params["skip_conn"] or n == 0
                 ):
                     selector = pre_selector
-                lvl.append(self.get_linear(self._cacher_key, n + 1, selector))
+                lvl.append(self.get_linear(n + 1, selector))
 
             gbm_models = [
                 x for x in ["lgb", "lgb_tuned", "cb", "cb_tuned"] if x in names and x.split("_")[0] in self.task.losses
@@ -396,6 +396,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         valid_features: Optional[Sequence[str]] = None,
         log_file: str = None,
         verbose: int = 0,
+        persistence_manager: Optional[PersistenceManager] = None
     ) -> SparkDataset:
         """Fit and get prediction on validation dataset.
 
@@ -439,111 +440,22 @@ class SparkTabularAutoML(SparkAutoMLPreset):
 
         if roles is None:
             roles = {}
-        read_csv_params = self._get_read_csv_params()
-        train, upd_roles = self._read_data(train_data, train_features, read_csv_params)
-        if upd_roles:
-            roles = {**roles, **upd_roles}
+        train = self._read_data(train_data, train_features)
+        # if upd_roles:
+        #     roles = {**roles, **upd_roles}
         if valid_data is not None:
-            valid_data, _ = self._read_data(valid_data, valid_features, self.read_csv_params)
+            valid_data = self._read_data(valid_data, valid_features)
 
-        oof_pred = super().fit_predict(train, roles=roles, cv_iter=cv_iter, valid_data=valid_data, verbose=verbose)
+        oof_pred = super().fit_predict(
+            train,
+            roles=roles,
+            cv_iter=cv_iter,
+            valid_data=valid_data,
+            verbose=verbose,
+            persistence_manager=persistence_manager
+        )
 
         return oof_pred
-
-    def predict(
-        self,
-        data: ReadableIntoSparkDf,
-        features_names: Optional[Sequence[str]] = None,
-        return_all_predictions: Optional[bool] = None,
-        add_reader_attrs: bool = False,
-    ) -> SparkDataset:
-        """Get dataset with predictions.
-
-        Almost same as :meth:`lightautoml.automl.base.AutoML.predict`
-        on new dataset, with additional features.
-
-        Additional features - working with different data formats.
-        Supported now:
-
-            - Path to ``.csv``, ``.parquet``, ``.feather`` files.
-            - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`. For example,
-              ``{'data': X...}``. In this case roles are optional,
-              but `train_features` and `valid_features` required.
-            - :class:`pandas.DataFrame`.
-
-        Parallel inference - you can pass ``n_jobs`` to speedup
-        prediction (requires more RAM).
-        Batch_inference - you can pass ``batch_size``
-        to decrease RAM usage (may be longer).
-
-        Args:
-            data: Dataset to perform inference.
-            features_names: Optional features names,
-              if cannot be inferred from `train_data`.
-            batch_size: Batch size or ``None``.
-            n_jobs: Number of jobs.
-            return_all_predictions: if True,
-              returns all model predictions from last level
-
-        Returns:
-            Dataset with predictions.
-
-        """
-
-        read_csv_params = self._get_read_csv_params()
-
-        data, _ = self._read_data(data, features_names, read_csv_params)
-        pred = super().predict(data, features_names, return_all_predictions, add_reader_attrs)
-        return pred
-
-    def release_cache(self):
-        Cacher.release_cache_by_key(self._cacher_key)
-
-    def _read_data(
-        self,
-        data: ReadableIntoSparkDf,
-        features_names: Optional[Sequence[str]] = None,
-        read_csv_params: Optional[dict] = None,
-    ) -> Tuple[SparkDataFrame, Optional[RolesDict]]:
-        """Get :class:`~pyspark.sql.DataFrame` from different data formats.
-
-        Note:
-            Supported now data formats:
-
-                - Path to ``.csv``, ``.parquet``, ``.feather`` files.
-                - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`.
-                  For example, ``{'data': X...}``. In this case,
-                  roles are optional, but `train_features`
-                  and `valid_features` required.
-                - :class:`pandas.DataFrame`.
-
-        Args:
-            data: Readable to DataFrame data.
-            features_names: Optional features names if ``numpy.ndarray``.
-            n_jobs: Number of processes to read file.
-            read_csv_params: Params to read csv file.
-
-        Returns:
-            Tuple with read data and new roles mapping.
-
-        """
-        if read_csv_params is None:
-            read_csv_params = {}
-
-        if isinstance(data, SparkDataFrame):
-            return data, None
-
-        if isinstance(data, str):
-            path: str = data
-            if path.endswith(".parquet"):
-                return self._spark.read.parquet(path), None
-                # return pd.read_parquet(data, columns=read_csv_params["usecols"]), None
-            if path.endswith(".csv"):
-                return self._spark.read.csv(path, **read_csv_params), None
-            else:
-                raise ValueError(f"Unsupported data format: {os.path.splitext(path)[1]}")
-
-        raise ValueError("Input data format is not supported")
 
     def get_feature_scores(
         self,
@@ -581,7 +493,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             return None
 
         read_csv_params = self._get_read_csv_params()
-        data, _ = self._read_data(data, features_names, read_csv_params)
+        data = self._read_data(data, features_names, read_csv_params)
         used_feats = self.collect_used_feats()
         fi = calc_feats_permutation_imps(
             self,
@@ -596,8 +508,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     def get_histogram(data: SparkDataFrame, column: str, n_bins: int) -> Tuple[List, np.ndarray]:
         assert n_bins >= 2, "n_bins must be equal 2 or more"
         bin_edges, counts = (
-            data.select(F.col(column).cast("double"))
-            .where(F.col(column).isNotNull())
+            data.select(sf.col(column).cast("double"))
+            .where(sf.col(column).isNotNull())
             .rdd.map(lambda x: x[0])
             .histogram(n_bins)
         )
@@ -608,7 +520,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     def get_pdp_data_numeric_feature(
         df: SparkDataFrame,
         feature_name: str,
-        model: PipelineModel,
+        model: Transformer,
         prediction_col: str,
         n_bins: int,
         ice_fraction: float = 1.0,
@@ -622,7 +534,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             model (PipelineModel): Spark Pipeline Model
             prediction_col (str): prediction column to be created by the `model`
             n_bins (int): The number of bins to produce. Raises exception if n_bins < 2.
-            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions. Useful for very large dataframe. Defaults to 1.0.
+            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions.
+                Useful for very large dataframe. Defaults to 1.0.
             ice_fraction_seed (int, optional): Seed for `ice_fraction`. Defaults to 42.
 
         Returns:
@@ -641,7 +554,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         )
         for i in tqdm(grid):
             # replace feature column values with constant
-            sdf = sample_df.select("*", F.lit(i).alias(feature_name))
+            sdf = sample_df.select("*", sf.lit(i).alias(feature_name))
 
             # infer via transformer
             preds = model.transform(sdf)
@@ -662,7 +575,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     def get_pdp_data_categorical_feature(
         df: SparkDataFrame,
         feature_name: str,
-        model: PipelineModel,
+        model: Transformer,
         prediction_col: str,
         n_top_cats: int,
         ice_fraction: float = 1.0,
@@ -676,7 +589,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             model (PipelineModel): Spark Pipeline Model
             prediction_col (str): prediction column to be created by the `model`
             n_top_cats (int): param to selection top n categories
-            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions. Useful for very large dataframe. Defaults to 1.0.
+            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions.
+                Useful for very large dataframe. Defaults to 1.0.
             ice_fraction_seed (int, optional): Seed for `ice_fraction`. Defaults to 42.
 
         Returns:
@@ -686,7 +600,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             `counts` is numbers of values by category
         """
         feature_cnt = (
-            df.where(F.col(feature_name).isNotNull()).groupBy(feature_name).count().orderBy(F.desc("count")).collect()
+            df.where(sf.col(feature_name).isNotNull()).groupBy(feature_name).count().orderBy(sf.desc("count")).collect()
         )
         grid = [row[feature_name] for row in feature_cnt[:n_top_cats]]
         counts = [row["count"] for row in feature_cnt[:n_top_cats]]
@@ -697,7 +611,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             .cache()
         )
         for i in tqdm(grid):
-            sdf = sample_df.select("*", F.lit(i).alias(feature_name))
+            sdf = sample_df.select("*", sf.lit(i).alias(feature_name))
             preds = model.transform(sdf)
             # TODO: SPARK-LAMA remove this line after passing the "prediction_col" parameter
             prediction_col = next(c for c in preds.columns if c.startswith("prediction"))
@@ -713,11 +627,11 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             unique_other_categories = [row[feature_name] for row in feature_cnt[n_top_cats:]]
 
             # get non-top categories, natural distributions is important here
-            w = Window().orderBy(F.lit("A"))  # window without sorting
+            w = Window().orderBy(sf.lit("A"))  # window without sorting
             other_categories_collection = (
                 df.select(feature_name)
-                .filter(F.col(feature_name).isin(unique_other_categories))
-                .select(F.row_number().over(w).alias("row_num"), feature_name)
+                .filter(sf.col(feature_name).isin(unique_other_categories))
+                .select(sf.row_number().over(w).alias("row_num"), feature_name)
                 .collect()
             )
 
@@ -733,13 +647,13 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                     key = remainder
                 return other_categories_dict[key]
 
-            get_category_udf = F.udf(get_category_by_row_num, SparkTypes.StringType())
+            get_category_udf = sf.udf(get_category_by_row_num, StringType())
 
             # add row number to main dataframe and exclude feature_name column
-            sdf = sample_df.select("*", F.row_number().over(w).alias("row_num"))
+            sdf = sample_df.select("*", sf.row_number().over(w).alias("row_num"))
 
             all_columns_except_row_num = [f for f in sdf.columns if f != "row_num"]
-            feature_col = get_category_udf(F.col("row_num")).alias(feature_name)
+            feature_col = get_category_udf(sf.col("row_num")).alias(feature_name)
             # exclude row number from dataframe
             # and add back feature_name column filled with other categories same distribution
             sdf = sdf.select(*all_columns_except_row_num, feature_col)
@@ -763,7 +677,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     def get_pdp_data_datetime_feature(
         df: SparkDataFrame,
         feature_name: str,
-        model: PipelineModel,
+        model: Transformer,
         prediction_col: str,
         datetime_level: str,
         reader,
@@ -779,7 +693,8 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             prediction_col (str): prediction column to be created by the `model`
             datetime_level (str): Unit of time that will be modified to calculate dependence: "year", "month" or "dayofweek"
             reader (_type_): Automl reader to transform input dataframe before `model` inferring.
-            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions. Useful for very large dataframe. Defaults to 1.0.
+            ice_fraction (float, optional): What fraction of the input dataframe will be used to make predictions.
+                Useful for very large dataframe. Defaults to 1.0.
             ice_fraction_seed (int, optional): Seed for `ice_fraction`. Defaults to 42.
 
         Returns:
@@ -790,32 +705,32 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         """
         df = reader.read(df).data
         if datetime_level == "year":
-            feature_cnt = df.groupBy(F.year(feature_name).alias("year")).count().orderBy(F.asc("year")).collect()
+            feature_cnt = df.groupBy(sf.year(feature_name).alias("year")).count().orderBy(sf.asc("year")).collect()
             grid = [x["year"] for x in feature_cnt]
             counts = [row["count"] for row in feature_cnt]
-            replace_date_element_udf = F.udf(replace_year_in_date, SparkTypes.DateType())
+            replace_date_element_udf = sf.udf(replace_year_in_date, DateType())
         elif datetime_level == "month":
-            feature_cnt = df.groupBy(F.month(feature_name).alias("month")).count().orderBy(F.asc("month")).collect()
+            feature_cnt = df.groupBy(sf.month(feature_name).alias("month")).count().orderBy(sf.asc("month")).collect()
             grid = np.arange(1, 13)
             grid = grid.tolist()
             counts = [0] * 12
             for row in feature_cnt:
                 counts[row["month"] - 1] = row["count"]
-            replace_date_element_udf = F.udf(replace_month_in_date, SparkTypes.DateType())
+            replace_date_element_udf = sf.udf(replace_month_in_date, DateType())
         else:
             feature_cnt = (
-                df.groupBy(F.dayofweek(feature_name).alias("dayofweek")).count().orderBy(F.asc("dayofweek")).collect()
+                df.groupBy(sf.dayofweek(feature_name).alias("dayofweek")).count().orderBy(sf.asc("dayofweek")).collect()
             )
             grid = np.arange(7)
             grid = grid.tolist()
             counts = [0] * 7
             for row in feature_cnt:
                 counts[row["dayofweek"] - 1] = row["count"]
-            replace_date_element_udf = F.udf(replace_dayofweek_in_date, SparkTypes.DateType())
+            replace_date_element_udf = sf.udf(replace_dayofweek_in_date, DateType())
         ys = []
         sample_df = df.sample(fraction=ice_fraction, seed=ice_fraction_seed).cache()
         for i in tqdm(grid):
-            feature_col = replace_date_element_udf(F.col(feature_name), F.lit(i)).alias(feature_name)
+            feature_col = replace_date_element_udf(sf.col(feature_name), sf.lit(i)).alias(feature_name)
             sdf = sample_df.select(*[c for c in sample_df.columns if c != feature_name], feature_col)
             preds = model.transform(sdf)
             # TODO: SPARK-LAMA remove this line after passing the "prediction_col" parameter
@@ -841,9 +756,9 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     ):
         assert feature_name in self.reader._roles
         assert datetime_level in ["year", "month", "dayofweek"]
-        assert ice_fraction > 0 and ice_fraction <= 1.0
+        assert 0 < ice_fraction <= 1.0
 
-        pipeline_model = self.make_transformer()
+        pipeline_model = self.transformer()
 
         # Numerical features
         if self.reader._roles[feature_name].name == "Numeric":
@@ -892,13 +807,13 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             ice_fraction_seed=ice_fraction_seed,
         )
 
-        HISTOGRAM_DATA_ROWS_LIMIT = 2000
+        histogram_data_rows_limit = 2000
         rows_count = test_data.count()
-        if rows_count > HISTOGRAM_DATA_ROWS_LIMIT:
-            fraction = HISTOGRAM_DATA_ROWS_LIMIT / rows_count
-            test_data = test_data.sample(fraction=fraction)
+        if rows_count > histogram_data_rows_limit:
+            fraction = histogram_data_rows_limit / rows_count
+            test_data = test_data.sample(frac=fraction)
         if self.reader._roles[feature_name].name == "Numeric":
-            test_data = test_data.select(F.col(feature_name).cast("double")).toPandas()
+            test_data = test_data.select(sf.col(feature_name).cast("double")).toPandas()
         else:
             test_data = test_data.select(feature_name).toPandas()
         plot_pdp_with_distribution(

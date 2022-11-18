@@ -4,6 +4,7 @@ import logging.config
 from pyspark.ml import PipelineModel
 from pyspark.sql import functions as F
 
+from examples_utils import get_persistence_manager
 from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
@@ -12,7 +13,7 @@ from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask as SparkTask
 from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT, log_exec_time
-from sparklightautoml.validation.iterators import SparkHoldoutIterator
+from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -30,6 +31,8 @@ if __name__ == "__main__":
     dataset_name = "lama_test_dataset"
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
+    persistence_manager = get_persistence_manager()
+
     ml_alg_kwargs = {
         'auto_unique_co': 10,
         'max_intersection_depth': 3,
@@ -37,7 +40,6 @@ if __name__ == "__main__":
         'output_categories': True,
         'top_intersections': 4
     }
-    cacher_key = "main_cache"
 
     with log_exec_time():
         train_df, test_df = prepare_test_and_train(spark, path, seed)
@@ -46,15 +48,14 @@ if __name__ == "__main__":
         score = task.get_dataset_metric()
 
         sreader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
-        sdataset = sreader.fit_read(train_df, roles=roles)
+        sdataset = sreader.fit_read(train_df, roles=roles, persistence_manager=persistence_manager)
 
-        iterator = SparkHoldoutIterator(sdataset)
+        iterator = SparkFoldsIterator(sdataset)#.convert_to_holdout_iterator()
 
-        spark_ml_algo = SparkBoostLGBM(cacher_key=cacher_key, freeze_defaults=False, use_single_dataset_mode=False)
-        spark_features_pipeline = SparkLGBSimpleFeatures(cacher_key=cacher_key)
+        spark_ml_algo = SparkBoostLGBM(freeze_defaults=False, use_single_dataset_mode=False)
+        spark_features_pipeline = SparkLGBSimpleFeatures()
 
         ml_pipe = SparkMLPipeline(
-            cacher_key=cacher_key,
             ml_algos=[spark_ml_algo],
             pre_selection=None,
             features_pipeline=spark_features_pipeline,
@@ -72,7 +73,7 @@ if __name__ == "__main__":
         logger.info(f"Test score (#1 way): {test_score}")
 
         # 2. second way (Spark ML API, save-load-predict)
-        transformer = PipelineModel(stages=[sreader.make_transformer(add_array_attrs=True), ml_pipe.transformer])
+        transformer = PipelineModel(stages=[sreader.transformer(add_array_attrs=True), ml_pipe.transformer()])
         transformer.write().overwrite().save("/tmp/reader_and_spark_ml_pipe_lgb")
 
         pipeline_model = PipelineModel.load("/tmp/reader_and_spark_ml_pipe_lgb")

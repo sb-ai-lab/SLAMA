@@ -1,17 +1,17 @@
 import logging
 import os
 import shutil
-from typing import Optional, Any, Sequence, Iterable
+from typing import Optional, Any, Sequence, Iterable, Union
 
 import torch
 import yaml
-
-from sparklightautoml.automl.base import SparkAutoML
-from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.tasks.base import SparkTask
 from lightautoml.utils.logging import verbosity_to_loglevel, set_stdout_level, add_filehandler
 from lightautoml.utils.timer import PipelineTimer
 
+from sparklightautoml.automl.base import SparkAutoML
+from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
+from sparklightautoml.tasks.base import SparkTask
+from sparklightautoml.utils import SparkDataFrame
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class SparkAutoMLPreset(SparkAutoML):
 
     Example:
 
-        >>> automl = SomePreset(SparkTask('binary'), timeout=3600)
+        >>> automl = SparkAutoMLPreset(SparkTask('binary'), timeout=3600)
         >>> automl.fit_predict(data, roles={'target': 'TARGET'})
 
     """
@@ -75,6 +75,8 @@ class SparkAutoMLPreset(SparkAutoML):
             **kwargs: Not used.
 
         """
+        super().__init__()
+
         self._set_config(config_path)
 
         for name, param in zip(["timing_params"], [timing_params]):
@@ -146,6 +148,7 @@ class SparkAutoMLPreset(SparkAutoML):
         valid_data: Optional[Any] = None,
         valid_features: Optional[Sequence[str]] = None,
         verbose: int = 0,
+        persistence_manager: Optional[PersistenceManager] = None
     ) -> SparkDataset:
         """Fit on input data and make prediction on validation part.
 
@@ -191,6 +194,7 @@ class SparkAutoMLPreset(SparkAutoML):
             valid_data,
             valid_features,
             verbose,
+            persistence_manager
         )
 
         logger.info("\x1b[1mAutoml preset training completed in {:.2f} seconds\x1b[0m\n".format(self.timer.time_spent))
@@ -246,7 +250,7 @@ class SparkAutoMLPreset(SparkAutoML):
         level = verbosity_to_loglevel(verbose)
         set_stdout_level(level)
 
-        logger.info(f"Stdout logging level is {logging._levelToName[level]}.")
+        logger.info(f"Stdout logging level is {logging.getLevelName(level)}.")
 
     @staticmethod
     def set_logfile(filename: str):

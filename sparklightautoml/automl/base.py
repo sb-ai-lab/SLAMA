@@ -1,31 +1,39 @@
 """Base AutoML class."""
 import logging
+import os
 from copy import copy
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, cast, Union
 from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Sequence
 
-from pyspark.ml import PipelineModel, Transformer
-from pyspark.sql import functions as F
-
-from .blend import SparkBlender, SparkBestModelSelector
-from ..dataset.base import SparkDataset
-from ..pipelines.ml.base import SparkMLPipeline
-from ..reader.base import SparkToSparkReader
-from ..transformers.base import ColumnsSelectorTransformer
-from ..validation.base import SparkBaseTrainValidIterator
-from ..validation.iterators import SparkFoldsIterator, SparkHoldoutIterator, SparkDummyIterator
+from lightautoml.dataset.base import RolesDict
 from lightautoml.reader.base import RolesDict
 from lightautoml.utils.logging import set_stdout_level, verbosity_to_loglevel
 from lightautoml.utils.timer import PipelineTimer
+from pyspark.ml import PipelineModel, Transformer
+from pyspark.sql.session import SparkSession
+
+from .blend import SparkBlender, SparkBestModelSelector
+from ..dataset.base import SparkDataset, PersistenceLevel, PersistenceManager
+from ..dataset.persistence import PlainCachePersistenceManager
+from ..pipelines.base import TransformerInputOutputRoles
+from ..pipelines.features.base import SparkPipelineModel
+from ..pipelines.ml.base import SparkMLPipeline
+from ..reader.base import SparkToSparkReader
+from ..utils import ColumnsSelectorTransformer, SparkDataFrame
+from ..validation.base import SparkBaseTrainValidIterator
+from ..validation.iterators import SparkFoldsIterator, SparkHoldoutIterator, SparkDummyIterator
 
 logger = logging.getLogger(__name__)
 
+# Either path/full url, or pyspark.sql.DataFrame
+ReadableIntoSparkDf = Union[str, SparkDataFrame]
 
-class SparkAutoML:
+
+class SparkAutoML(TransformerInputOutputRoles):
     """Class for compile full pipeline of AutoML task.
 
     AutoML steps:
@@ -63,11 +71,10 @@ class SparkAutoML:
         >>> automl.fit_predict(data, roles={'target': 'TARGET'})
 
     """
-
     def __init__(
         self,
-        reader: SparkToSparkReader,
-        levels: Sequence[Sequence[SparkMLPipeline]],
+        reader: Optional[SparkToSparkReader] = None,
+        levels: Optional[Sequence[Sequence[SparkMLPipeline]]] = None,
         timer: Optional[PipelineTimer] = None,
         blender: Optional[SparkBlender] = None,
         skip_conn: bool = False,
@@ -101,13 +108,48 @@ class SparkAutoML:
         super().__init__()
         self.levels: Optional[Sequence[Sequence[SparkMLPipeline]]] = None
         self._transformer = None
-        self._initialize(reader, levels, timer, blender, skip_conn, return_all_predictions)
+        self._input_roles: Optional[RolesDict] = None
+        self._output_roles: Optional[RolesDict] = None
+        self._service_columns: Optional[List[str]] = None
+        self._persistence_manager: Optional[PersistenceManager] = None
+        if reader and levels:
+            self._initialize(reader, levels, timer, blender, skip_conn, return_all_predictions)
 
-    def make_transformer(self, no_reader: bool = False, return_all_predictions: bool = False) -> Transformer:
+    @property
+    def input_roles(self) -> Optional[RolesDict]:
+        return self._input_roles
 
-        automl_transformer, _ = self._build_transformer(no_reader, return_all_predictions)
+    @property
+    def output_roles(self) -> Optional[RolesDict]:
+        return self._output_roles
 
-        return automl_transformer
+    @property
+    def persistence_manager(self) -> Optional[PersistenceManager]:
+        return self._persistence_manager
+
+    def transformer(self, return_all_predictions: bool = False, add_array_attrs: bool = True, **reader_args) \
+            -> SparkPipelineModel:
+        if not return_all_predictions:
+            blender = [self.blender.transformer()]
+            output_roles = self.blender.output_roles
+        else:
+            blender = []
+            output_roles = {**(ml_pipe.output_roles for ml_pipe in self.levels[-1])}
+
+        sel_tr = ColumnsSelectorTransformer(
+            name="SparkAutoML",
+            input_cols=[SparkDataset.ID_COLUMN] + list(output_roles.keys()),
+            optional_cols=[self.reader.target_col] if self.reader.target_col else [],
+        )
+
+        stages = [
+            self.reader.transformer(add_array_attrs=add_array_attrs, **reader_args),
+            *(ml_pipe.transformer() for level in self.levels for ml_pipe in level),
+            *blender,
+            sel_tr
+        ]
+
+        return SparkPipelineModel(stages, input_roles=self.input_roles, output_roles=output_roles)
 
     def _initialize(
         self,
@@ -167,6 +209,7 @@ class SparkAutoML:
         valid_data: Optional[Any] = None,
         valid_features: Optional[Sequence[str]] = None,
         verbose: int = 0,
+        persistence_manager: Optional[PersistenceManager] = None
     ) -> SparkDataset:
         """Fit on input data and make prediction on validation part.
 
@@ -189,7 +232,12 @@ class SparkAutoML:
         set_stdout_level(verbosity_to_loglevel(verbose))
         self.timer.start()
 
-        train_dataset = self.reader.fit_read(train_data, train_features, roles)
+        self._persistence_manager = persistence_manager or PlainCachePersistenceManager()
+
+        train_dataset = self.reader.fit_read(train_data, train_features, roles,
+                                             persistence_manager=self._persistence_manager)
+
+        train_dataset = train_dataset.persist(level=PersistenceLevel.REGULAR)
 
         assert (
             len(self._levels) <= 1 or train_dataset.folds is not None
@@ -199,83 +247,149 @@ class SparkAutoML:
             len(self._levels) <= 1 or valid_data is None
         ), "Not possible to fit more than 1 level with holdout validation"
 
-        valid_dataset = self.reader.read(valid_data, valid_features, add_array_attrs=True) if valid_data else None
+        if valid_data:
+            valid_dataset = self.reader.read(valid_data, valid_features, add_array_attrs=True)\
+                .persist(PersistenceLevel.READER)
+        else:
+            valid_dataset = None
 
         train_valid = self._create_validation_iterator(train_dataset, valid_dataset, None, cv_iter=cv_iter)
-        current_level_roles = train_valid.train.roles
+        # train_valid.train_frozen = True
+        # train_valid.val_frozen = True
+
         pipes: List[SparkMLPipeline] = []
         self.levels = []
+        level_ds: Optional[SparkDataset] = None
         for leven_number, level in enumerate(self._levels, 1):
             pipes = []
             flg_last_level = leven_number == len(self._levels)
-            initial_level_roles = current_level_roles
 
             logger.info(
                 f"Layer \x1b[1m{leven_number}\x1b[0m train process start. Time left {self.timer.time_left:.2f} secs"
             )
 
-            level_predictions: Optional[SparkDataset] = None
-            for k, ml_pipe in enumerate(level):
-                # train_valid = self._create_validation_iterator(level_predictions, None, None, cv_iter=cv_iter)
-                train_valid.input_roles = initial_level_roles
-                level_predictions = ml_pipe.fit_predict(train_valid)
-                # level_predictions = self._break_plan(level_predictions)
+            all_pipes_predictions: List[SparkDataset] = []
+            with train_valid.frozen() as frozen_train_valid:
+                for k, ml_pipe in enumerate(level):
+                    pipe_predictions = cast(SparkDataset, ml_pipe.fit_predict(frozen_train_valid))\
+                        .persist(level=PersistenceLevel.CHECKPOINT, force=True)
 
-                train_valid = self._create_validation_iterator(level_predictions, None, None, cv_iter=cv_iter)
-                current_level_roles = level_predictions.roles
+                    all_pipes_predictions.append(pipe_predictions)
+                    pipes.append(ml_pipe)
 
-                pipes.append(ml_pipe)
+                    logger.info("Time left {:.2f} secs\n".format(self.timer.time_left))
 
-                logger.info("Time left {:.2f} secs\n".format(self.timer.time_left))
-
-                if self.timer.time_limit_exceeded():
-                    logger.info(
-                        "Time limit exceeded. Last level models will be blended and unused pipelines will be pruned.\n"
-                    )
-
-                    flg_last_level = True
-                    break
-                else:
-                    if self.timer.child_out_of_time:
+                    if self.timer.time_limit_exceeded():
                         logger.info(
-                            "Time limit exceeded in one of the tasks. AutoML will blend level {0} models.\n".format(
-                                leven_number
-                            )
+                            "Time limit exceeded. Last level models will be blended "
+                            "and unused pipelines will be pruned.\n"
                         )
+
                         flg_last_level = True
+                        break
+                    else:
+                        if self.timer.child_out_of_time:
+                            logger.info(
+                                "Time limit exceeded in one of the tasks. AutoML will blend level {0} models.\n".format(
+                                    leven_number
+                                )
+                            )
+                            flg_last_level = True
 
             logger.info("\x1b[1mLayer {} training completed.\x1b[0m\n".format(leven_number))
 
-            if not flg_last_level:
-                self.levels.append(pipes)
+            level_ds_name = f"all_piped_predictions_level_{leven_number}"
 
-            # here is split on exit condition
-            if flg_last_level or not self.skip_conn:
-                # we leave only prediction columns in the dataframe with this roles
-                roles = dict()
-                for p in pipes:
-                    roles.update(p.output_roles)
+            if flg_last_level:
+                level_ds = SparkDataset.concatenate(all_pipes_predictions, name=level_ds_name)
+                train_valid.unpersist()
+                break
 
-                sdf = level_predictions.data.select(*level_predictions.service_columns, *list(roles.keys()))
-                level_predictions = level_predictions.empty()
-                level_predictions.set_data(sdf, sdf.columns, roles)
+            self.levels.append(pipes)
 
-        blended_prediction, last_pipes = self.blender.fit_predict(level_predictions, pipes)
+            level = [train_valid.get_validation_data(), *all_pipes_predictions] \
+                if self.skip_conn else all_pipes_predictions
+            name = f"{level_ds_name}_skip_conn" if self.skip_conn else level_ds_name
+            level_ds = SparkDataset.concatenate(level, name=name)
+
+            train_valid.unpersist(skip_val=self.skip_conn)
+            train_valid = self._create_validation_iterator(level_ds, None, n_folds=None, cv_iter=None)
+
+
+
+            # if flg_last_level:
+            #     # checkpointing
+            #     level_ds = SparkDataset.concatenate(all_pipes_predictions, name=level_ds_name)
+            #     level_ds = level_ds.persist(level=PersistenceLevel.CHECKPOINT)
+            #     train_valid.train_frozen = False
+            #     train_valid.val_frozen = False
+            #     train_valid.unpersist()
+            #     break
+            #
+            # self.levels.append(pipes)
+            #
+            # # checkpointing
+            # level_ds = (
+            #     SparkDataset
+            #     .concatenate(all_pipes_predictions, name=level_ds_name)
+            #     .persist(level=PersistenceLevel.CHECKPOINT)
+            # )
+            #
+            # if self.skip_conn:
+            #     level_ds = SparkDataset.concatenate(
+            #         [train_valid.get_validation_data(), level_ds],
+            #         name=f"{level_ds_name}_skip_conn"
+            #     )
+            #     train_valid.train_frozen = False
+            #     train_valid.unpersist()
+            #     train_valid.val_frozen = False
+            # else:
+            #     train_valid.val_frozen = False
+            #     train_valid.train_frozen = False
+            #     train_valid.unpersist()
+
+            # train_valid = self._create_validation_iterator(level_ds, None, n_folds=None, cv_iter=None)
+            # train_valid.train_frozen = True
+            # train_valid.val_frozen = True
+
+        blended_prediction, last_pipes = self.blender.fit_predict(level_ds, pipes)
         self.levels.append(last_pipes)
 
         del self._levels
 
-        oof_pred = level_predictions if self.return_all_predictions else blended_prediction
+        oof_pred = level_ds if self.return_all_predictions else blended_prediction
+
+        self._input_roles = copy(train_dataset.roles)
+        self._output_roles = copy(oof_pred.roles)
+        self._service_columns = train_dataset.service_columns
+
         return oof_pred
 
     def predict(
         self,
-        data: Any,
-        features_names: Optional[Sequence[str]] = None,
+        data: ReadableIntoSparkDf,
         return_all_predictions: Optional[bool] = None,
         add_reader_attrs: bool = False,
+        persistence_manager: Optional[PersistenceManager] = None
     ) -> SparkDataset:
-        """Predict with automl on new dataset.
+        """Get dataset with predictions.
+
+        Almost same as :meth:`lightautoml.automl.base.AutoML.predict`
+        on new dataset, with additional features.
+
+        Additional features - working with different data formats.
+        Supported now:
+
+            - Path to ``.csv``, ``.parquet``, ``.feather`` files.
+            - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`. For example,
+              ``{'data': X...}``. In this case roles are optional,
+              but `train_features` and `valid_features` required.
+            - :class:`pandas.DataFrame`.
+
+        Parallel inference - you can pass ``n_jobs`` to speedup
+        prediction (requires more RAM).
+        Batch_inference - you can pass ``batch_size``
+        to decrease RAM usage (may be longer).
 
         Args:
             data: Dataset to perform inference.
@@ -283,19 +397,26 @@ class SparkAutoML:
               if cannot be inferred from `train_data`.
             return_all_predictions: if True,
               returns all model predictions from last level
+            add_reader_attrs: if True,
+              the reader's attributes will be added to the SparkDataset
+
         Returns:
             Dataset with predictions.
 
         """
-        dataset = self.reader.read(data, features_names, add_array_attrs=add_reader_attrs)
-        logger.info(f"After Reader in {type(self)}. Columns: {sorted(dataset.data.columns)}")
-        automl_transformer, roles = self._build_transformer(
-            no_reader=True, return_all_predictions=return_all_predictions
-        )
-        predictions = automl_transformer.transform(dataset.data)
+        persistence_manager = persistence_manager or PlainCachePersistenceManager()
+        transformer = self.transformer(return_all_predictions=return_all_predictions, add_array_attrs=add_reader_attrs)
 
-        sds = dataset.empty()
-        sds.set_data(predictions, predictions.columns, roles)
+        data = self._read_data(data)
+        predictions = transformer.transform(data)
+
+        sds = SparkDataset(
+            data=predictions,
+            roles=copy(transformer.get_output_roles()),
+            task=self.reader.task,
+            persistence_manager=persistence_manager,
+            target=self.reader.target_col
+        )
 
         return sds
 
@@ -335,9 +456,13 @@ class SparkAutoML:
     def _create_validation_iterator(
         self, train: SparkDataset, valid: Optional[SparkDataset], n_folds: Optional[int], cv_iter: Optional[Callable]
     ) -> SparkBaseTrainValidIterator:
+        # TODO: SLAMA - set level
+        train = train.persist(level=PersistenceLevel.REGULAR)
         if valid:
-            dataset = self._merge_train_and_valid_datasets(train, valid)
-            iterator = SparkHoldoutIterator(dataset)
+            # TODO: SLAMA - set level
+            valid = valid.persist(level=PersistenceLevel.REGULAR)
+            # dataset = self._merge_train_and_valid_datasets(train, valid)
+            iterator = SparkHoldoutIterator(train, valid)
         elif cv_iter:
             raise NotImplementedError("Not supported now")
         elif train.folds:
@@ -349,18 +474,21 @@ class SparkAutoML:
 
         return iterator
 
+    def _get_service_columns(self) -> List[str]:
+        return self._service_columns
+
     def _build_transformer(
         self, no_reader: bool = False, return_all_predictions: bool = False
     ) -> Tuple[Transformer, RolesDict]:
         stages = []
         if not no_reader:
-            stages.append(self.reader.make_transformer(add_array_attrs=True))
+            stages.append(self.reader.transformer(add_array_attrs=True))
 
-        ml_pipes = [ml_pipe.transformer for level in self.levels for ml_pipe in level]
+        ml_pipes = [ml_pipe.transformer() for level in self.levels for ml_pipe in level]
         stages.extend(ml_pipes)
 
         if not return_all_predictions:
-            stages.append(self.blender.transformer)
+            stages.append(self.blender.transformer())
             output_roles = self.blender.output_roles
         else:
             output_roles = dict()
@@ -368,6 +496,7 @@ class SparkAutoML:
                 output_roles.update(ml_pipe.output_roles)
 
         sel_tr = ColumnsSelectorTransformer(
+            name="SparkAutoML",
             input_cols=[SparkDataset.ID_COLUMN] + list(output_roles.keys()),
             optional_cols=[self.reader.target_col] if self.reader.target_col else [],
         )
@@ -377,40 +506,49 @@ class SparkAutoML:
 
         return automl_transformer, output_roles
 
-    @staticmethod
-    def _merge_train_and_valid_datasets(train: SparkDataset, valid: Optional[SparkDataset]) -> SparkDataset:
-        if not valid:
-            return train
+    def _read_data(self, data: ReadableIntoSparkDf, features: Optional[List[str]] = None) -> SparkDataFrame:
+        """Get :class:`~pyspark.sql.DataFrame` from different data formats.
 
-        assert len(set(train.features).symmetric_difference(set(valid.features))) == 0
+        Note:
+            Supported now data formats:
 
-        tcols = copy(train.data.columns)
-        vcols = copy(valid.data.columns)
+                - Path to ``.csv``, ``.parquet``, ``.feather`` files.
+                - :class:`~numpy.ndarray`, or dict of :class:`~numpy.ndarray`.
+                  For example, ``{'data': X...}``. In this case,
+                  roles are optional, but `train_features`
+                  and `valid_features` required.
+                - :class:`pandas.DataFrame`.
 
-        if train.folds_column:
-            tcols.remove(train.folds_column)
-        if valid.folds_column:
-            vcols.remove(valid.folds_column)
+        Args:
+            data: Readable to DataFrame data.
+            features_names: Optional features names if ``numpy.ndarray``.
+            n_jobs: Number of processes to read file.
+            read_csv_params: Params to read csv file.
 
-        folds_col = train.folds_column if train.folds_column else SparkToSparkReader.DEFAULT_READER_FOLD_COL
+        Returns:
+            Tuple with read data and new roles mapping.
 
-        # fold #1
-        tdf = train.data.select(*tcols, F.lit(1).alias(folds_col))
-        # fold #0
-        # In SparkHoldoutIterator we always use fold #0 as validation
-        vdf = valid.data.select(*vcols, F.lit(0).alias(folds_col))
-        sdf = tdf.unionByName(vdf).coalesce(tdf.rdd.getNumPartitions())
+        """
+        spark = SparkSession.getActiveSession()
 
-        dataset = train.empty()
-        dataset.set_data(sdf, sdf.columns, train.roles)
+        if isinstance(data, SparkDataFrame):
+            out_sdf = data
+        elif isinstance(data, str):
+            path = cast(str, data)
+            if path.endswith(".parquet"):
+                out_sdf = spark.read.parquet(path)
+                # return pd.read_parquet(data, columns=read_csv_params["usecols"]), None
+            elif path.endswith(".csv"):
+                csv_params = self._get_read_csv_params()
+                out_sdf = spark.read.csv(path, **csv_params)
+            else:
+                raise ValueError(f"Unsupported data format: {os.path.splitext(path)[1]}")
+        else:
+            raise ValueError("Input data format is not supported")
 
-        return dataset
+        out_sdf = out_sdf.select(*features) if features is not None else out_sdf
 
-    @staticmethod
-    def _break_plan(train: SparkDataset) -> SparkDataset:
-        logger.info("Breaking the plan sequence to reduce wor for optimizer")
-        new_df = train.spark_session.createDataFrame(train.data.rdd, schema=train.data.schema, verifySchema=False)
+        return out_sdf
 
-        sds = train.empty()
-        sds.set_data(new_df, train.features, train.roles)
-        return sds
+    def _get_read_csv_params(self) -> Dict:
+        return {}

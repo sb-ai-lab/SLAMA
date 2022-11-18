@@ -1,16 +1,25 @@
 import logging
+import os
 import socket
 import time
 import warnings
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional, Tuple, Dict
+from logging import Logger
+from typing import Optional, Tuple, Dict, List, cast
 
 import pyspark
 from pyspark import RDD
 from pyspark.ml import Transformer, Estimator
-from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
+from pyspark.ml.common import inherit_doc
+from pyspark.ml.param import Param, Params, TypeConverters
+from pyspark.ml.param.shared import HasInputCols, HasOutputCols
+from pyspark.ml.pipeline import PipelineModel, PipelineSharedReadWrite, PipelineModelReader
+from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLReadable, MLWritable, MLWriter, \
+    DefaultParamsWriter, MLReader, DefaultParamsReader
 from pyspark.sql import SparkSession
+
+from sparklightautoml.mlwriters import CommonPickleMLWritable, CommonPickleMLReadable
 
 VERBOSE_LOGGING_FORMAT = "%(asctime)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
 
@@ -23,6 +32,7 @@ def spark_session(
 ) -> SparkSession:
     """
     Args:
+        session_args: additional arguments to be add to SparkSession using .config() method
         master: address of the master
             to run locally - "local[1]"
 
@@ -113,7 +123,7 @@ class log_exec_timer:
         self._start = datetime.now()
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, typ, value, traceback):
         self._duration = (datetime.now() - self._start).total_seconds()
         msg = f"Exec time of {self.name}: {self._duration}" if self.name else f"Exec time: {self._duration}"
         logger.info(msg)
@@ -183,24 +193,160 @@ def warn_if_not_cached(df: SparkDataFrame):
         )
 
 
+class ColumnsSelectorTransformer(
+    Transformer, HasInputCols, HasOutputCols, DefaultParamsWritable, DefaultParamsReadable
+):
+    """
+    Makes selection input columns from input dataframe.
+    """
+
+    optionalCols = Param(
+        Params._dummy(), "optionalCols", "optional column names.", typeConverter=TypeConverters.toListString
+    )
+
+    transformOnlyFirstTime = Param(
+        Params._dummy(), "transformOnlyFirstTime", "whatever to transform only once or each time",
+        typeConverter=TypeConverters.toBoolean
+    )
+
+    _alreadyTransformed = Param(
+        Params._dummy(), "_alreadyTransformed", "is it first time to transform or not",
+        typeConverter=TypeConverters.toBoolean
+    )
+
+    def __init__(self,
+                 name: Optional[str] = None,
+                 input_cols: Optional[List[str]] = None,
+                 optional_cols: Optional[List[str]] = None,
+                 transform_only_first_time: bool = False):
+        super().__init__()
+        input_cols = input_cols if input_cols else []
+        optional_cols = optional_cols if optional_cols else []
+        assert (
+            len(set(input_cols).intersection(set(optional_cols))) == 0
+        ), "Input columns and optional columns cannot intersect"
+
+        self._name = name
+        self.set(self.inputCols, input_cols)
+        self.set(self.optionalCols, optional_cols)
+        self.set(self.outputCols, input_cols)
+        self.set(self.transformOnlyFirstTime, transform_only_first_time)
+        self.set(self._alreadyTransformed, False)
+
+    def get_optional_cols(self) -> List[str]:
+        return self.getOrDefault(self.optionalCols)
+
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
+        logger.debug(f"In {type(self)}. Name: {self._name}. Columns: {sorted(dataset.columns)}")
+
+        if not self.getOrDefault(self.transformOnlyFirstTime) \
+                or not self.getOrDefault(self._alreadyTransformed):
+            ds_cols = set(dataset.columns)
+            present_opt_cols = [c for c in self.get_optional_cols() if c in ds_cols]
+            dataset = dataset.select(*self.getInputCols(), *present_opt_cols)
+            self.set(self._alreadyTransformed, True)
+
+        logger.debug(f"Out {type(self)}. Name: {self._name}. Columns: {sorted(dataset.columns)}")
+        return dataset
+
+
 class NoOpTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):
     def __init__(self, name: Optional[str] = None):
         super().__init__()
         self._name = name
 
-    def _transform(self, dataset):
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
+        logger.debug(f"In {type(self)}. Name: {self._name}. Columns: {sorted(dataset.columns)}")
         return dataset
 
 
-class DebugTransformer(Transformer):
-    def __init__(self, name: Optional[str] = None):
-        super().__init__()
-        self._name = name
+@inherit_doc
+class WrappingSelectingPipelineModelWriter(MLWriter):
+    """
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`PipelineModel` types
+    """
 
-    def _transform(self, dataset):
-        dataset = dataset.cache()
-        dataset.write.mode("overwrite").format("noop").save()
-        return dataset
+    def __init__(self, instance: 'WrappingSelectingPipelineModel'):
+        super(WrappingSelectingPipelineModelWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path: str):
+        stages = self.instance.stages
+        PipelineSharedReadWrite.validateStages(stages)
+
+        stageUids = [stage.uid for stage in stages]
+        jsonParams = {
+            'stageUids': stageUids,
+            'language': 'Python',
+            'instance_params': {param.name: value for param, value in self.instance.extractParamMap().items()}
+        }
+        DefaultParamsWriter.saveMetadata(self.instance, path, self.sc, paramMap=jsonParams)
+        stagesDir = os.path.join(path, "stages")
+        for index, stage in enumerate(stages):
+            stage.write().save(PipelineSharedReadWrite.getStagePath(stage.uid, index, len(stages), stagesDir))
+
+
+@inherit_doc
+class WrappingSelectionPipelineModelReader(MLReader):
+    """
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`PipelineModel` types
+    """
+
+    def __init__(self, cls):
+        super(WrappingSelectionPipelineModelReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+
+        uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
+        instance_params_map = cast(Dict, metadata['paramMap']['instance_params'])
+
+        wspm = WrappingSelectingPipelineModel(stages=stages)
+        wspm._resetUid(uid)
+        for param_name, value in instance_params_map.items():
+            param = wspm.getParam(param_name)
+            wspm.set(param, value)
+
+        return wspm
+
+
+class WrappingSelectingPipelineModel(PipelineModel, HasInputCols):
+    name = Param(
+        Params._dummy(), "name", "name.", typeConverter=TypeConverters.toString
+    )
+
+    optionalCols = Param(
+        Params._dummy(), "optionalCols", "optional column names.", typeConverter=TypeConverters.toListString
+    )
+
+    def __init__(self,
+                 stages: List[Transformer],
+                 input_columns: Optional[List[str]] = None,
+                 optional_columns: Optional[List[str]] = None,
+                 name: Optional[str] = None):
+        super().__init__(stages)
+        self.set(self.inputCols, input_columns or [])
+        self.set(self.optionalCols, optional_columns or [])
+        self.set(self.name, name or "")
+
+    def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
+        cstr = ColumnsSelectorTransformer(
+            name=f"{type(self).__name__}({self.getOrDefault(self.name)})",
+            input_cols=[*dataset.columns, *self.getInputCols()],
+            optional_cols=self.getOrDefault(self.optionalCols)
+        )
+        ds = super()._transform(dataset)
+        return cstr.transform(ds)
+
+    def write(self):
+        """Returns an MLWriter instance for this ML instance."""
+        return WrappingSelectingPipelineModelWriter(self)
+
+    @classmethod
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return WrappingSelectionPipelineModelReader(cls)
 
 
 class Cacher(Estimator):
@@ -231,13 +377,15 @@ class Cacher(Estimator):
         logger.info(f"Cacher {self._key} (RDD Id: {dataset.rdd.id()}). Starting to materialize data.")
 
         # using local checkpoints
-        ds = dataset.localCheckpoint(eager=True)
+        # ds = dataset.localCheckpoint(eager=True)
 
         # # using plain caching
         # ds = SparkSession.getActiveSession().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
-        # ds.write.mode('overwrite').format('noop').save()
+        ds = dataset.cache()
+        ds.write.mode('overwrite').format('noop').save()
 
-        logger.info(f"Cacher {self._key} (RDD Id: {ds.rdd.id()}). Finished data materialization.")
+        logger.info(f"Cacher {self._key} (RDD Id: {ds.rdd.id()}, Column nums: {len(ds.columns)}). "
+                    f"Finished data materialization.")
 
         previous_ds = self._cacher_dict.get(self._key, None)
         if previous_ds is not None and ds != previous_ds:
@@ -262,3 +410,24 @@ class EmptyCacher(Cacher):
     def _fit(self, dataset):
         self._dataset = dataset
         return NoOpTransformer(name=f"empty_cacher_{self._key}")
+
+
+def log_exception(logger: Logger):
+    def wrap(func):
+        def wrapped_f(*args, **kwargs):
+            try:
+                result = func(*args, **kwargs)
+            except Exception as ex:
+                logger.error("Error wrapper caught error", exc_info=True)
+                raise ex
+            return result
+        return wrapped_f
+    return wrap
+
+
+@contextmanager
+def JobGroup(group_id: str, description: str):
+    sc = SparkSession.getActiveSession().sparkContext
+    sc.setJobGroup(group_id, description)
+    yield
+    sc._jsc.clearJobGroup()

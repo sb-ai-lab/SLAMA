@@ -9,7 +9,7 @@ class NumericVectorOrArrayRole(NumericRole):
     Role that describe numeric vector or numeric array.
     """
 
-    _name = "NumericOrArrayVector"
+    _name = "NumericVectorOrArray"
 
     def __init__(
         self,
@@ -39,6 +39,10 @@ class NumericVectorOrArrayRole(NumericRole):
     @property
     def size(self):
         return self._size
+
+    @property
+    def element_col_name_template(self):
+        return self._element_col_name_template
 
     @property
     def is_vector(self):
