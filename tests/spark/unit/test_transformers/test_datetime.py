@@ -1,19 +1,20 @@
-from typing import List
+from typing import List, cast
 
 import numpy as np
 import pandas as pd
 import pytest
-from pyspark.sql import SparkSession
-
 from lightautoml.dataset.np_pd_dataset import PandasDataset
 from lightautoml.dataset.roles import DatetimeRole
-from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer, \
-    SparkTimeToNumTransformer
 from lightautoml.tasks import Task
 from lightautoml.transformers.datetime import TimeToNum, BaseDiff, DateSeasons
-from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess
+from pyspark.sql import SparkSession
+
+from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer, SparkTimeToNumTransformer, \
+    SparkDateSeasonsEstimator, SparkDateSeasonsTransformer
+from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, workdir as working_dir
 
 spark = spark_sess
+workdir = working_dir
 
 DATASETS = [
 
@@ -117,9 +118,17 @@ def test_base_diff(spark: SparkSession, dataset: DatasetForTest):
 
 # noinspection PyShadowingNames
 @pytest.mark.parametrize("dataset", [DATASETS[1]])
-def test_date_seasons(spark: SparkSession, dataset: DatasetForTest):
-
+def test_date_seasons(spark: SparkSession, workdir: str, dataset: DatasetForTest):
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
 
-    compare_sparkml_by_content(spark, ds, DateSeasons(),
-                               SparkDateSeasonsTransformer(input_cols=ds.features, input_roles=ds.roles))
+    transformer = compare_sparkml_by_content(spark, ds, DateSeasons(),
+                                             SparkDateSeasonsEstimator(input_cols=ds.features, input_roles=ds.roles))
+    transformer = cast(SparkDateSeasonsTransformer, transformer)
+
+    # checking saving / loading
+    path = f"{workdir}/date_seasons.transformer"
+    transformer.save(path)
+    loaded_transformer = SparkDateSeasonsTransformer.load(path)
+
+    # checking correctness of the loaded transformer
+    compare_sparkml_by_content(spark, ds, DateSeasons(), loaded_transformer)
