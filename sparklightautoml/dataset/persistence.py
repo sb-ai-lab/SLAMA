@@ -21,6 +21,10 @@ class _PersistablePair:
 
 
 class BasePersistenceManager(PersistenceManager):
+    """
+        Abstract implementation of base persistence functionality, including registering and de-registering
+        what have been requested to persist/un-persist
+    """
     def __init__(self, parent: Optional['PersistenceManager'] = None):
         self._uid = str(uuid.uuid4())
         self._persistence_registry: Dict[str, _PersistablePair] = dict()
@@ -147,6 +151,9 @@ class BasePersistenceManager(PersistenceManager):
 
 
 class PlainCachePersistenceManager(BasePersistenceManager):
+    """
+        Manager that uses Spark .cache() / .persist() methods
+    """
     def __init__(self, parent: Optional['PersistenceManager'] = None, prune_history: bool = False):
         super().__init__(parent)
         self._prune_history = prune_history
@@ -174,6 +181,9 @@ class PlainCachePersistenceManager(BasePersistenceManager):
 
 
 class LocalCheckpointPersistenceManager(BasePersistenceManager):
+    """
+        Manager that uses Spark .localCheckpoint() method
+    """
     def __init__(self, parent: Optional['PersistenceManager'] = None):
         super().__init__(parent)
 
@@ -196,6 +206,10 @@ class LocalCheckpointPersistenceManager(BasePersistenceManager):
 
 
 class BucketedPersistenceManager(BasePersistenceManager):
+    """
+        Manager that uses Spark Warehouse folder to store bucketed datasets (.bucketBy ... .sortBy ... .saveAsTable)
+        To make such storing reliable, one should set 'spark.sql.warehouse.dir' to HDFS or other reliable storage.
+    """
     def __init__(self,
                  bucketed_datasets_folder: str,
                  bucket_nums: int = 100,
@@ -268,6 +282,13 @@ class BucketedPersistenceManager(BasePersistenceManager):
 
 
 class CompositePersistenceManager(BasePersistenceManager):
+    """
+        Universal composite manager that can combine other manager to apply different
+        storing strategies on different levels.
+
+        For BucketedPersistenceManager all unpersisting operations are delayed until the end of automl processing,
+        due to possible loss of source for downstream persistence manager if they don't use external storage and files.
+    """
     def __init__(self,
                  level2manager: Dict[PersistenceLevel, PersistenceManager],
                  parent: Optional['PersistenceManager'] = None):
@@ -317,6 +338,9 @@ class CompositePersistenceManager(BasePersistenceManager):
 
 
 class CompositePlainCachePersistenceManager(CompositePersistenceManager):
+    """
+        Combines PlainCache on READER and REGULAR levels with bucketing on CHECKPOINT level.
+    """
     def __init__(self, bucketed_datasets_folder: str, bucket_nums: int):
         super(CompositePlainCachePersistenceManager, self).__init__({
             PersistenceLevel.READER: BucketedPersistenceManager(
@@ -328,6 +352,9 @@ class CompositePlainCachePersistenceManager(CompositePersistenceManager):
 
 
 class CompositeBucketedPersistenceManager(CompositePersistenceManager):
+    """
+    Combines bucketing on READER and CHECKPOINT levels with PlainCache on REGULAR level.
+    """
     def __init__(self, bucketed_datasets_folder: str, bucket_nums: int):
         super(CompositeBucketedPersistenceManager, self).__init__({
             PersistenceLevel.READER: BucketedPersistenceManager(

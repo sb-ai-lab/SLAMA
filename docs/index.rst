@@ -32,30 +32,32 @@ Known limitations:
     transformers
     validation
 
+.. toctree::
+    :maxdepth: 1
+    :caption: Running on YARN Cluster with spark-submit
+
+    yarn_cluster_spark_submit
 
 .. toctree::
     :maxdepth: 1
-    :caption: Deploy on Minikube
+    :caption: Running on YARN Cluster (from source)
 
-    slama_minikube_readme
-
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Running on Kubernetes Cluster
-
-    kubernetes_cluster
-
+    yarn_cluster
 
 .. toctree::
     :maxdepth: 1
-    :caption: Running on Spark Standalone Cluster
+    :caption: Running on Spark Standalone Cluster (from source)
 
     standalone_cluster
 
+.. toctree::
+    :maxdepth: 1
+    :caption: Deploy on Minikube (from source)
+
+    slama_minikube_readme
 
 .. toctree::
     :maxdepth: 1
-    :caption: Running on YARN Cluster
+    :caption: Running on Kubernetes Cluster (from source)
 
-    yarn_cluster
+    kubernetes_cluster

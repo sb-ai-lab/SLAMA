@@ -38,12 +38,19 @@ DepIdentifable = Union[str, 'SparkDataset']
 
 
 class PersistenceLevel(Enum):
+    """
+        Used for signaling types of persistence points encountered during AutoML process.
+    """
     READER = 0
     REGULAR = 1
     CHECKPOINT = 2
 
 
 class Unpersistable(ABC):
+    """
+        Interface to provide for external entities to unpersist dataframes and files stored
+        by the entity that implements this interface
+    """
     def unpersist(self):
         ...
 
@@ -548,6 +555,9 @@ class PersistableDataFrame:
 
 
 class PersistenceManager(ABC):
+    """
+        Base interface of an entity responsible for caching and storing intermediate results somewhere.
+    """
     @staticmethod
     def to_persistable_dataframe(dataset: SparkDataset) -> PersistableDataFrame:
         # we intentially create new uid to use to distinguish a persisted and unpersisted dataset

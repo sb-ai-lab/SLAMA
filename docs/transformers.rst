@@ -104,6 +104,7 @@ Datetime
     :nosignatures:
     :template: classtemplate.rst
 
+    SparkDateSeasonsEstimator
     SparkTimeToNumTransformer
     SparkBaseDiffTransformer
     SparkDateSeasonsTransformer
