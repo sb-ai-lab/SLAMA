@@ -165,6 +165,7 @@ dumps
 *.orig
 
 jars/*.jar
+!jars/spark-lightautoml_*.jar
 
 docs/generated
 docs/slama-docs/generated

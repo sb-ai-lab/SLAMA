@@ -29,7 +29,7 @@ from sparklightautoml.utils import log_exec_time, logging_config, VERBOSE_LOGGIN
 # NOTE!!!
 # All tests require PYSPARK_PYTHON env variable to be set
 # for example: PYSPARK_PYTHON=/home/nikolay/.conda/envs/LAMA/bin/python
-JAR_PATH = 'jars/spark-lightautoml_2.12-0.1.jar'
+JAR_PATH = 'jars/*'
 PARTITIONS_NUM = 8
 BUCKET_NUMS = PARTITIONS_NUM
 TMP_SLAMA_DIR = "/tmp/slama_test_dir"
@@ -123,21 +123,6 @@ def spark_hdfs() -> SparkSession:
     # delete work dir if it exists
     if client.status(HDFS_TMP_SLAMA_DIR, strict=False):
         client.delete(HDFS_TMP_SLAMA_DIR, recursive=True)
-
-
-@pytest.fixture(scope="session")
-def spark_with_deps() -> SparkSession:
-    spark = SparkSession.builder.appName("LAMA-test-app")\
-        .master("local[1]") \
-        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.4") \
-        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven") \
-        .getOrCreate()
-
-    print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
-
-    yield spark
-
-    spark.stop()
 
 
 @pytest.fixture(scope="session")

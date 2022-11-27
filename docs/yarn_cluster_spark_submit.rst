@@ -69,7 +69,7 @@ To launch example 'tabular-preset-automl.py' (the most comprehensive example) ru
     --conf "spark.driver.extraJavaOptions=-Dio.netty.tryReflectionSetAccessible=true" \
     --conf "spark.executor.extraJavaOptions=-Dio.netty.tryReflectionSetAccessible=true" \
     --conf "spark.jars.repositories=https://mmlspark.azureedge.net/maven"
-    --conf "spark.jars.packages=com.microsoft.azure:synapseml_2.12:0.9.5,io.github.fonhorst:spark-lightautoml_2.12:0.1"
+    --conf "spark.jars.packages=com.microsoft.azure:synapseml_2.12:0.9.5,io.github.fonhorst:spark-lightautoml_2.12:0.1.1"
     --conf "spark.sql.warehouse.dir=${WAREHOUSE_DIR}" \
     --py-files "examples-spark/*,tabular_config.yml" \
     --num-executors "${EXECUTOR_INSTANCES}" \
