@@ -22,11 +22,13 @@ from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import LAM
 from sparklightautoml.transformers.scala_wrappers.target_encoder_transformer import TargetEncoderTransformer, \
     SparkTargetEncodeTransformer
 from sparklightautoml.utils import SparkDataFrame, WrappingSelectingPipelineModel
-from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, compare_sparkml_by_metadata, workdir
+from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, compare_sparkml_by_metadata, \
+    workdir as working_dir
 from ..dataset_utils import get_test_datasets
 from ..test_auto_ml.utils import FakeOpTransformer
 
 spark = spark_sess
+workdir = working_dir
 
 CV = 5
 

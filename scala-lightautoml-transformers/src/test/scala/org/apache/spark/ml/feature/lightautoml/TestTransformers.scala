@@ -1,11 +1,13 @@
 package org.apache.spark.ml.feature.lightautoml
 
 import org.apache.spark.BaseFunSuite
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.functions.{col, to_date}
+import org.apache.spark.sql.types.{BooleanType, DateType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.scalatest.matchers.should.Matchers._
 
+import java.time.LocalDate
+import java.util.{Calendar, Date}
 import scala.collection.JavaConverters._
 
 class TestTransformers extends BaseFunSuite {
@@ -145,5 +147,63 @@ class TestTransformers extends BaseFunSuite {
     val loaded_te = TargetEncoderTransformer.load(path)
     checkResult(loaded_te.transform(df), df, result_enc)
     checkResult(loaded_te.transform(df), df, result_enc)
+  }
+
+  test("testing IsHolidayTransformer") {
+    val in_cols = Seq("a", "b", "c", "d").toArray
+    val out_cols = Seq("ish_a", "ish_b", "ish_c", "ish_d").toArray
+
+    val data = Seq(
+      Row(0, 1609420472, "2022-03-08"),
+      Row(1, 1609334072, "2022-03-07"),
+    ).toList.asJava
+    val result = Seq(
+      Row(0, true, true, true, true),
+      Row(1, false, false, false, false),
+    )
+
+    val holidays = Seq("2020-12-31", "2022-03-08").toSet
+    val holidays_dates = Map(
+      ("a", holidays),
+      ("b", holidays),
+      ("c", holidays),
+      ("d", holidays)
+    )
+
+    val schema = StructType(
+      Array(
+        StructField("id", IntegerType),
+        StructField("a", IntegerType),
+        StructField("b", StringType)
+      )
+    )
+
+    def checkResult(tdf: DataFrame, df: DataFrame, target_data: Seq[Row]): Unit = {
+      tdf.columns should contain allElementsOf df.columns
+      tdf.columns should contain allElementsOf out_cols
+      out_cols.foreach(col => tdf.schema(col).dataType shouldBe a [BooleanType])
+
+      val resul_rows = tdf.orderBy(col("id")).select("id", out_cols:_*).collect()
+      resul_rows.zip(target_data).foreach {
+        case (row, target) => row.toSeq should equal (target.toSeq)
+      }
+    }
+
+    val df = spark
+            .createDataFrame(data, schema)
+            .withColumn("c", to_date(col("b"), "yyyy-MM-dd"))
+            .withColumn("d", col("a").cast(TimestampType))
+
+    val transformer = new IsHolidayTransformer("ish_tr", holidays_dates)
+            .setInputCols(in_cols)
+            .setOutputCols(out_cols)
+
+    checkResult(transformer.transform(df), df, result)
+
+    val path = s"$workdir/target_encoder.transformer"
+    transformer.save(path)
+
+    val loaded_tr = IsHolidayTransformer.load(path)
+    checkResult(loaded_tr.transform(df), df, result)
   }
 }

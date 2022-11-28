@@ -41,7 +41,7 @@ from sparklightautoml.transformers.categorical import (
     SparkMulticlassTargetEncoderEstimator,
 )
 from sparklightautoml.transformers.categorical import SparkTargetEncoderEstimator
-from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsTransformer
+from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsEstimator
 from sparklightautoml.transformers.numeric import SparkQuantileBinningEstimator
 from sparklightautoml.utils import Cacher, warn_if_not_cached, SparkDataFrame, ColumnsSelectorTransformer
 
@@ -363,7 +363,7 @@ class SparkTabularDataFeatures:
 
     def get_datetime_seasons(
         self, train: SparkDataset, outp_role: Optional[ColumnRole] = None
-    ) -> Optional[SparkBaseTransformer]:
+    ) -> Optional[SparkBaseEstimator]:
         """Get season params from dates.
 
         Args:
@@ -388,7 +388,7 @@ class SparkTabularDataFeatures:
 
         roles = {f: train.roles[f] for f in datetimes}
 
-        date_as_cat = SparkDateSeasonsTransformer(input_cols=datetimes, input_roles=roles, output_role=outp_role)
+        date_as_cat = SparkDateSeasonsEstimator(input_cols=datetimes, input_roles=roles, output_role=outp_role)
 
         return date_as_cat
 
