@@ -92,11 +92,15 @@ def get_dataset_attrs(name: str):
     )
 
 
-def prepare_test_and_train(spark: SparkSession, path: str, seed: int) -> Tuple[SparkDataFrame, SparkDataFrame]:
+def prepare_test_and_train(spark: SparkSession, path: str, seed: int, is_csv: bool = True) -> Tuple[SparkDataFrame, SparkDataFrame]:
     execs = int(spark.conf.get('spark.executor.instances', '1'))
     cores = int(spark.conf.get('spark.executor.cores', '8'))
 
-    data = spark.read.csv(path, header=True, escape="\"")
+    if is_csv:
+        data = spark.read.csv(path, header=True, escape="\"")
+    else:
+        data = spark.read.parquet(path)
+
     data = data.repartition(execs * cores).cache()
     data.write.mode('overwrite').format('noop').save()
 

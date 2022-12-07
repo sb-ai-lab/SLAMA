@@ -65,6 +65,7 @@ stype2dtype = {
     "long": "long",
     "float": "float",
     "double": "float64",
+    "timestamp": "datetime64"
 }
 
 
@@ -490,7 +491,8 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
             self._n_classes = len(uniques)
 
             if isinstance(sdf.schema[target_col].dataType, NumericType):
-                uniques = sorted(uniques)
+                # TODO: SLAMA - hack
+                uniques = sorted(int(x) for x in uniques)
                 self.class_mapping = {x: i for i, x in enumerate(uniques)}
                 srtd = np.ndarray(uniques)
             elif isinstance(sdf.schema[target_col].dataType, StringType):
