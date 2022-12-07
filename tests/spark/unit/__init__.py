@@ -29,7 +29,7 @@ from sparklightautoml.utils import log_exec_time, logging_config, VERBOSE_LOGGIN
 # NOTE!!!
 # All tests require PYSPARK_PYTHON env variable to be set
 # for example: PYSPARK_PYTHON=/home/nikolay/.conda/envs/LAMA/bin/python
-JAR_PATH = 'jars/*'
+JAR_PATH = 'jars/spark-lightautoml_2.12-0.1.1.jar'
 PARTITIONS_NUM = 8
 BUCKET_NUMS = PARTITIONS_NUM
 TMP_SLAMA_DIR = "/tmp/slama_test_dir"

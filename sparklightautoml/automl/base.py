@@ -127,7 +127,11 @@ class SparkAutoML(TransformerInputOutputRoles):
     def persistence_manager(self) -> Optional[PersistenceManager]:
         return self._persistence_manager
 
-    def transformer(self, return_all_predictions: bool = False, add_array_attrs: bool = True, **reader_args) \
+    def transformer(self,
+                    return_all_predictions: bool = False,
+                    add_array_attrs: bool = True,
+                    leave_only_predict_cols: bool = False,
+                    **reader_args) \
             -> SparkPipelineModel:
         if not return_all_predictions:
             blender = [self.blender.transformer()]
@@ -146,7 +150,7 @@ class SparkAutoML(TransformerInputOutputRoles):
             self.reader.transformer(add_array_attrs=add_array_attrs, **reader_args),
             *(ml_pipe.transformer() for level in self.levels for ml_pipe in level),
             *blender,
-            sel_tr
+            *([sel_tr] if leave_only_predict_cols else [])
         ]
 
         return SparkPipelineModel(stages, input_roles=self.input_roles, output_roles=output_roles)
@@ -405,7 +409,11 @@ class SparkAutoML(TransformerInputOutputRoles):
 
         """
         persistence_manager = persistence_manager or PlainCachePersistenceManager()
-        transformer = self.transformer(return_all_predictions=return_all_predictions, add_array_attrs=add_reader_attrs)
+        transformer = self.transformer(
+            return_all_predictions=return_all_predictions,
+            add_array_attrs=add_reader_attrs,
+            leave_only_predict_cols=True
+        )
 
         data = self._read_data(data)
         predictions = transformer.transform(data)
