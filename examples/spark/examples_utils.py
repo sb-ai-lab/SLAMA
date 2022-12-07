@@ -124,7 +124,7 @@ def get_spark_session(partitions_num: Optional[int] = None):
             # .config("spark.jars.packages",
             #         "com.microsoft.azure:synapseml_2.12:0.9.5,io.github.fonhorst:spark-lightautoml_2.12:0.1.1")
             .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
-            .config("spark.jars", "jars/*")
+            .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.1.jar")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
             .config("spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
             .config("spark.executor.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
