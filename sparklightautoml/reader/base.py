@@ -799,11 +799,18 @@ class SparkToSparkReaderTransformer(Transformer, SparkReaderHelper, CommonPickle
 
         dataset = self._create_unique_ids(dataset)
 
-        dataset = dataset.select(
+        processed_cols = [
             SparkDataset.ID_COLUMN,
             *service_columns,
-            *[self._convert_column(feat, role) for feat, role in roles.items()],
-        )
+            *[self._convert_column(feat, role) for feat, role in roles.items()]
+        ]
+
+        processed_cols_names = {SparkDataset.ID_COLUMN, *service_columns, *roles.keys()}
+
+        dataset = dataset.select([
+            *processed_cols,
+            *[c for c in dataset.columns if c not in processed_cols_names]
+        ])
 
         logger.debug(f"Out {type(self)}. Columns: {sorted(dataset.columns)}")
         return dataset
