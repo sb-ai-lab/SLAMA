@@ -17,5 +17,5 @@ RUN pip install pyarrow
 
 COPY .. /code
 RUN poetry build
-RUN pip install dist/LightAutoML-0.3.0-py3-none-any.whl
+RUN pip install dist/LightAutoML-0.3.2-py3-none-any.whl
 #COPY ivy2_cache /root/.ivy2/cache
