@@ -21,3 +21,5 @@ ENV SPARK_HOME=/spark
 RUN pip install poetry && poetry config virtualenvs.create false
 WORKDIR /lama
 COPY . .
+RUN poetry build
+RUN pip install dist/sparklightautoml-0.3.2.2-py3-none-any.whl

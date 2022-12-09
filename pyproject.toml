@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "SparkLightAutoML"
-version = "0.3.2"
+version = "0.3.2.2"
 description = "Spark-based distribution version of fast and customizable framework for automatic ML model creation (AutoML)"
 authors = [
     "Alexander Ryzhkov <alexmryzhkov@gmail.com>",
@@ -41,7 +41,7 @@ poetry-core = "^1.0.0"
 lightautoml = "0.3.7.1"
 
 # PySpark
-pyspark = "3.2.1"
+pyspark = "3.2.3"
 pyarrow = ">=1.0.0"
 synapseml = "0.9.5"
 toposort = "1.7"
