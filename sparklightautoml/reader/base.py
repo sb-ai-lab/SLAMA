@@ -642,6 +642,17 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                 continue
 
             # TODO: this part may be optimized using sampling
+            # import functools
+            # fdf = functools.reduce(
+            #     lambda acc, y: acc.unionByName(y),
+            #     [(
+            #         train_data.groupby(feat)
+            #         .agg(sf.count("*").alias("count"))
+            #         .select(sf.lit(feat).alias("name"), sf.max("count").alias("count"))
+            #     ) for feat in features]
+            # )
+            # crows = {row['name']: row['count'] for row in fdf.collect()}
+
             crow = (
                 train_data.groupby(feat)
                 .agg(sf.count("*").alias("count"))
