@@ -1,9 +1,14 @@
 import os
 import inspect
-from typing import Tuple, Optional
+import pickle
+from dataclasses import dataclass
+from enum import Enum
+from typing import Tuple, Optional, cast
 
+from pyspark import SparkContext
 from pyspark.sql import SparkSession
 
+from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.utils import SparkDataFrame
 from sparklightautoml.dataset import persistence
 
@@ -173,3 +178,101 @@ def get_persistence_manager(name: Optional[str] = None):
                                     f"Values for the following arguments have not been found: {none_val_args}"
 
     return clazz(**ctr_arg_vals)
+
+
+class FSOps:
+    """
+        Set of typical fs operations independent of the fs implementation
+        see docs at: https://hadoop.apache.org/docs/current/api/org/apache/hadoop/fs/FileSystem.html
+    """
+    @staticmethod
+    def get_sc() -> SparkContext:
+        spark = SparkSession.getActiveSession()
+        sc = spark.sparkContext
+        return sc
+
+    @staticmethod
+    def get_default_fs() -> str:
+        spark = SparkSession.getActiveSession()
+        hadoop_conf = spark._jsc.hadoopConfiguration()
+        default_fs = hadoop_conf.get("fs.defaultFS")
+        return default_fs
+
+    @classmethod
+    def get_fs(cls, path: str):
+        sc = cls.get_sc()
+
+        URI = sc._jvm.java.net.URI
+        FileSystem = sc._jvm.org.apache.hadoop.fs.FileSystem
+        Configuration = sc._jvm.org.apache.hadoop.conf.Configuration
+
+        path_uri = URI(path)
+        scheme = path_uri.getScheme()
+        if scheme:
+            authority = path_uri.getAuthority() or ''
+            fs_uri = f'{scheme}:/{authority}'
+        else:
+            fs_uri = cls.get_default_fs()
+
+        fs = FileSystem.get(URI(fs_uri), Configuration())
+
+        return fs
+
+    @classmethod
+    def exists(cls, path: str) -> bool:
+        sc = cls.get_sc()
+        Path = sc._jvm.org.apache.hadoop.fs.Path
+        fs = cls.get_fs(path)
+        return fs.exists(Path(path))
+
+    @classmethod
+    def create_dir(cls, path: str):
+        sc = cls.get_sc()
+        Path = sc._jvm.org.apache.hadoop.fs.Path
+        fs = cls.get_fs(path)
+        fs.mkdirs(Path(path))
+
+    @classmethod
+    def delete_dir(cls, path: str) -> bool:
+        sc = cls.get_sc()
+        Path = sc._jvm.org.apache.hadoop.fs.Path
+        fs = cls.get_fs(path)
+        return fs.delete(Path('/tmp/just_a_test'))
+
+    # status = fs.listStatus(Path(path))
+    #
+    # for fileStatus in status:
+    #     print(fileStatus.getPath())
+
+
+def save_dataset(path: str, ds: SparkDataset, overwrite: bool = False):
+    dataset_internal_df_path = os.path.join(path, "dataset_internal_df.parquet")
+    dataset_metadata_path = os.path.join(path, "dataset_metadata.parquet")
+    spark = SparkSession.getActiveSession()
+    mode = 'overwrite' if overwrite else 'error'
+
+    if FSOps.exists(path):
+        if overwrite:
+            FSOps.delete_dir(path)
+        else:
+            raise Exception(f"The directory already exists: {path}")
+
+    ds._dependencies = []
+    # noinspection PyProtectedMember
+    internal_df = ds._data
+    ds._data = None
+
+    internal_df.write.parquet(dataset_internal_df_path, mode=mode)
+    spark.createDataFrame([{"data": pickle.dumps(ds)}]).write.parquet(dataset_metadata_path, mode=mode)
+
+
+def load_dataset(path: str) -> SparkDataset:
+    dataset_internal_df_path = os.path.join(path, "dataset_internal_df.parquet")
+    dataset_metadata_path = os.path.join(path, "dataset_metadata.parquet")
+    spark = SparkSession.getActiveSession()
+
+    internal_df = spark.read.parquet(dataset_internal_df_path)
+    data = spark.read.parquet(dataset_metadata_path).first().asDict()['data']
+    ds = cast(SparkDataset, pickle.loads(data))
+    ds._data = internal_df
+    return ds
