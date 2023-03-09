@@ -50,7 +50,7 @@ if __name__ == "__main__":
         sreader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
         sdataset = sreader.fit_read(train_df, roles=roles, persistence_manager=persistence_manager)
 
-        iterator = SparkFoldsIterator(sdataset).convert_to_holdout_iterator()
+        iterator = SparkFoldsIterator(sdataset)#.convert_to_holdout_iterator()
 
         spark_ml_algo = SparkBoostLGBM(freeze_defaults=False, use_single_dataset_mode=False)
         spark_features_pipeline = SparkLGBSimpleFeatures()
@@ -69,6 +69,7 @@ if __name__ == "__main__":
         # 1. first way (LAMA API)
         test_sds = sreader.read(test_df, add_array_attrs=True)
         test_preds_ds = ml_pipe.predict(test_sds)
+
         test_score = score(test_preds_ds[:, spark_ml_algo.prediction_feature])
         logger.info(f"Test score (#1 way): {test_score}")
 

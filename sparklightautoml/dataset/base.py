@@ -241,7 +241,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
 
         """
         if type(val) is dict:
-            self._roles = dict(((x, val[x]) for x in self.features))
+            # self._roles = dict(((x, val[x]) for x in self.features))
+            diff = set(val.keys()).difference(self.features)
+            assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
+            self._roles = copy(val)
         elif type(val) is list:
             self._roles = dict(zip(self.features, val))
         elif val:
