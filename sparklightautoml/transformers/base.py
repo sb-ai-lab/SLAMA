@@ -66,6 +66,8 @@ class SparkColumnsAndRoles(HasInputCols, HasOutputCols, HasInputRoles, HasOutput
     :class:`~sparklightautoml.transformers.base.SparkBaseEstimator`.
     """
 
+    _fname_prefix = ""
+
     doReplaceColumns = Param(Params._dummy(), "doReplaceColumns", "whatever it replaces columns or not")
     columnsToReplace = Param(Params._dummy(), "columnsToReplace", "which columns to replace")
 
@@ -84,6 +86,9 @@ class SparkColumnsAndRoles(HasInputCols, HasOutputCols, HasInputRoles, HasOutput
         new_ds = base_dataset.empty()
         new_ds.set_data(data, base_dataset.features + transformer.getOutputCols(), new_roles, name=base_dataset.name)
         return new_ds
+
+    def get_prefix(self):
+        return self._fname_prefix
 
 
 class SparkBaseEstimator(Estimator, SparkColumnsAndRoles, ABC):
@@ -177,7 +182,7 @@ class SparkBaseTransformer(Transformer, SparkColumnsAndRoles, ABC):
     def transform(self, dataset, params=None):
         logger.debug(f"Transforming {type(self)}. Columns: {sorted(dataset.columns)}")
         transformed_dataset = super().transform(dataset, params)
-        logger.debug(f"Out {type(self)}. Columns: {sorted(dataset.columns)}")
+        logger.debug(f"Out {type(self)}. Columns: {sorted(transformed_dataset.columns)}")
         return transformed_dataset
 
 
