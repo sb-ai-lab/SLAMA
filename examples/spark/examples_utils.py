@@ -276,3 +276,9 @@ def load_dataset(path: str) -> SparkDataset:
     ds = cast(SparkDataset, pickle.loads(data))
     ds._data = internal_df
     return ds
+
+
+def check_columns(original_df: SparkDataFrame, predicts_df: SparkDataFrame):
+    absent_columns = set(original_df.columns).difference(predicts_df.columns)
+    assert len(absent_columns) == 0, \
+        f"Some columns of the original dataframe is absent from the processed dataset: {absent_columns}"

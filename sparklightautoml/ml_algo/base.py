@@ -239,7 +239,7 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
         roles = {self.prediction_feature: dataset.roles[self.prediction_feature]}
 
         output: SparkDataset = dataset.empty()
-        output.set_data(preds, preds.columns, roles, name="single_prediction_dataset")
+        output.set_data(preds, list(roles.keys()), roles, name="single_prediction_dataset")
 
         return output
 

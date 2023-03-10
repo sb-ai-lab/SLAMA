@@ -359,7 +359,7 @@ class SparkMeanBlender(SparkBlender):
             self._single_prediction_col_name: output_role
         }
         pred_ds = predictions.empty()
-        pred_ds.set_data(df, df.columns, roles, name=type(self).__name__)
+        pred_ds.set_data(df, list(roles.keys()), roles, name=type(self).__name__)
 
         self._output_roles = copy(roles)
 

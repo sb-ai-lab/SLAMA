@@ -7,7 +7,7 @@ import pyspark.sql.functions as sf
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
-from examples_utils import get_persistence_manager, BUCKET_NUMS
+from examples_utils import get_persistence_manager, BUCKET_NUMS, check_columns
 from examples_utils import get_dataset_attrs, prepare_test_and_train, get_spark_session
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
@@ -30,8 +30,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
     # use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb"]]
-    cv = 2
+    use_algos = [["lgb", "linear_l2"]]
+    cv = 3
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
     persistence_manager = get_persistence_manager()
@@ -79,6 +79,9 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all
     automl.persistence_manager.unpersist_all()
 
+    test_column = "some_external_column"
+    test_data_dropped = test_data_dropped.withColumn(test_column, sf.lit(42.0))
+
     with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
         te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
 
@@ -89,6 +92,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
     with log_exec_timer("spark-lama predicting on test (#2 way)"):
         te_pred = automl.transformer().transform(test_data_dropped)
+
+        check_columns(test_data_dropped, te_pred)
 
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
         score = task.get_dataset_metric()
@@ -112,6 +117,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
     with log_exec_timer("spark-lama predicting on test (#3 way)"):
         te_pred = pipeline_model.transform(test_data_dropped)
+
+        check_columns(test_data_dropped, te_pred)
 
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
         score = task.get_dataset_metric()

@@ -243,11 +243,24 @@ class ColumnsSelectorTransformer(
                 or not self.getOrDefault(self._alreadyTransformed):
             ds_cols = set(dataset.columns)
             present_opt_cols = [c for c in self.get_optional_cols() if c in ds_cols]
-            dataset = dataset.select(*self.getInputCols(), *present_opt_cols)
+            input_cols = self._treat_columns_pattern(dataset, self.getInputCols())
+            opt_input_cols = self._treat_columns_pattern(dataset, present_opt_cols)
+            dataset = dataset.select([*input_cols, *opt_input_cols])
             self.set(self._alreadyTransformed, True)
+            self.set(self.outputCols, input_cols)
 
         logger.debug(f"Out {type(self)}. Name: {self._name}. Columns: {sorted(dataset.columns)}")
         return dataset
+
+    @staticmethod
+    def _treat_columns_pattern(df: SparkDataFrame, cols: List[str]) -> List[str]:
+        def treat(col: str):
+            if col.endswith('*'):
+                pattern = col[:-1]
+                return [c for c in df.columns if c.startswith(pattern)]
+            return [col]
+        cols = [cc for c in cols for cc in treat(c)]
+        return cols
 
 
 class NoOpTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):
@@ -333,7 +346,7 @@ class WrappingSelectingPipelineModel(PipelineModel, HasInputCols):
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
         cstr = ColumnsSelectorTransformer(
             name=f"{type(self).__name__}({self.getOrDefault(self.name)})",
-            input_cols=[*dataset.columns, *self.getInputCols()],
+            input_cols=list({*dataset.columns, *self.getInputCols()}),
             optional_cols=self.getOrDefault(self.optionalCols)
         )
         ds = super()._transform(dataset)
