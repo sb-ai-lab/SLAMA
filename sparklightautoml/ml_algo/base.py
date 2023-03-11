@@ -19,6 +19,7 @@ from pyspark.sql.types import IntegerType
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.pipelines.base import TransformerInputOutputRoles
+from sparklightautoml.spark_functions import vector_averaging, scalar_averaging
 from sparklightautoml.utils import SparkDataFrame, log_exception
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
 
@@ -339,36 +340,9 @@ class AveragingTransformer(Transformer, HasInputCols, HasOutputCol, DefaultParam
         non_null_count_col = sf.lit(len(pred_cols)) - sum(sf.isnull(c).astype(IntegerType()) for c in pred_cols)
 
         if self.get_task_name() in ["binary", "multiclass"]:
-
-            def convert_column(c):
-                return vector_to_array(c).alias(c) if self.get_convert_to_array_first() else sf.col(c)
-
-            normalized_cols = [
-                sf.when(sf.isnull(c), sf.array(*[sf.lit(0.0) for _ in range(self.get_dim_num())]))
-                .otherwise(convert_column(c))
-                .alias(c)
-                for c in pred_cols
-            ]
-            arr_fields_summ = sf.transform(
-                sf.arrays_zip(*normalized_cols),
-                lambda x: sf.aggregate(
-                    sf.array(*[x[c] * sf.lit(weights[c]) for c in pred_cols]), sf.lit(0.0), lambda acc, y: acc + y
-                )
-                / non_null_count_col,
-            )
-
-            out_col = array_to_vector(arr_fields_summ) if self.get_convert_to_array_first() else arr_fields_summ
+            out_col = vector_averaging(sf.array(*pred_cols), sf.lit(self.get_dim_num()))
         else:
-            scalar_fields_summ = (
-                sf.aggregate(
-                    sf.array(*[sf.col(c) * sf.lit(weights[c]) for c in pred_cols]),
-                    sf.lit(0.0),
-                    lambda acc, x: acc + sf.when(sf.isnull(x), sf.lit(0.0)).otherwise(x),
-                )
-                / non_null_count_col
-            )
-
-            out_col = scalar_fields_summ
+            out_col = scalar_averaging(sf.array(*pred_cols))
 
         cols_to_remove = set(self.get_remove_cols())
         cols_to_select = [c for c in dataset.columns if c not in cols_to_remove]
