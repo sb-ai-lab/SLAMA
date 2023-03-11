@@ -26,7 +26,7 @@ from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, Persis
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from sparklightautoml.reader.guess_roles import get_numeric_roles_stat, get_category_roles_stat, get_null_scores
-from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import SparkDataFrame, JobGroup
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
     def __init__(
         self,
         task: Task,
-        samples: Optional[int] = 100000,
+        samples: Optional[int] = None,#100000,
         max_nan_rate: float = 0.999,
         max_constant_rate: float = 0.999,
         cv: int = 5,
@@ -301,16 +301,19 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
 
         train_data = self._create_target(train_data, target_col=self.target_col)
 
-        # TODO: SLAMA - fix this sampling
         total_number = train_data.count()
-        # if self.samples is not None:
-        #     if self.samples > total_number:
-        #         fraction = 1.0
-        #     else:
-        #         fraction = self.samples/total_number
-        #     subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
-        # else:
-        subsample = train_data
+        if self.samples is not None:
+            if self.samples > total_number:
+                fraction = 1.0
+            else:
+                fraction = self.samples / total_number
+            subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
+            with JobGroup("Reader: Subsampling materailization", "Reader: Subsampling materailization"):
+                subsample.count()
+            unpersist_subsample = True
+        else:
+            subsample = train_data
+            unpersist_subsample = False
 
         logger.debug("SparkToSparkReader infer roles is started")
         # infer roles
@@ -362,9 +365,12 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
 
         logger.debug("SparkToSparkReader infer roles is finished")
 
-        ok_features = self._ok_features(train_data, feats_to_guess)
+        ok_features = self._ok_features(subsample, feats_to_guess)
         guessed_feats = self._guess_role(subsample, ok_features)
         inferred_feats.update(guessed_feats)
+
+        if unpersist_subsample:
+            subsample.unpersist()
 
         # # set back
         for feat, r in inferred_feats.items():
@@ -643,7 +649,6 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                 estimated_features.append((feat, False))
                 continue
 
-            # TODO: this part may be optimized using sampling
             crow = (
                 train_data.groupby(feat)
                 .agg(sf.count("*").alias("count"))
