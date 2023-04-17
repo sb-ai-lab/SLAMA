@@ -49,6 +49,8 @@ onnxmltools = "^1.11.0"
 weasyprint = {version = "52.5", optional = true}
 hdfs = "^2.7.0"
 
+numpy = "<=1.23.0"
+
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

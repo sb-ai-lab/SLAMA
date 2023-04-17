@@ -14,9 +14,9 @@ from pyspark.ml import Transformer, PipelineModel
 from ..base import TransformerInputOutputRoles
 from ..features.base import SparkFeaturesPipeline, SparkEmptyFeaturePipeline
 from ..selection.base import SparkSelectionPipelineWrapper
-from ...dataset.base import LAMLDataset, SparkDataset, PersistenceLevel, PersistenceManager
+from ...computations.manager import PoolType, ComputationsManager, default_computations_manager
+from ...dataset.base import SparkDataset
 from ...ml_algo.base import SparkTabularMLAlgo
-from ...utils import ColumnsSelectorTransformer
 from ...validation.base import SparkBaseTrainValidIterator
 
 
@@ -52,7 +52,8 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
         features_pipeline: Optional[SparkFeaturesPipeline] = None,
         post_selection: Optional[SparkSelectionPipelineWrapper] = None,
         name: Optional[str] = None,
-        persist_before_ml_algo: bool = False
+        persist_before_ml_algo: bool = False,
+        computations_manager: Optional[ComputationsManager] = None
     ):
         if features_pipeline is None:
             features_pipeline = SparkEmptyFeaturePipeline()
@@ -78,6 +79,7 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
         self._output_roles: Optional[RolesDict] = None
         self._persist_before_ml_algo = persist_before_ml_algo
         self._service_columns: Optional[List[str]] = None
+        self._computations_manager = computations_manager or default_computations_manager()
 
     @property
     def input_roles(self) -> Optional[RolesDict]:
@@ -118,20 +120,31 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
         # train and apply post selection
         train_valid = train_valid.apply_selector(self.post_selection)
 
-        preds: List[SparkDataset] = []
         with train_valid.frozen() as frozen_train_valid:
-            for ml_algo, param_tuner, force_calc in zip(self._ml_algos, self.params_tuners, self.force_calc):
-                ml_algo, curr_preds = tune_and_fit_predict(ml_algo, param_tuner, frozen_train_valid, force_calc)
-                ml_algo = cast(SparkTabularMLAlgo, ml_algo)
-                if ml_algo is not None:
-                    curr_preds = cast(SparkDataset, curr_preds)
-                    self.ml_algos.append(ml_algo)
-                    preds.append(curr_preds)
-                else:
-                    warnings.warn(
-                        "Current ml_algo has not been trained by some reason. " "Check logs for more details.",
-                        RuntimeWarning,
-                    )
+
+            def build_fit_func(ml_algo: SparkTabularMLAlgo, param_tuner: ParamsTuner, force_calc: bool):
+                def func():
+                    fitted_ml_algo, curr_preds = tune_and_fit_predict(ml_algo, param_tuner, frozen_train_valid, force_calc)
+                    fitted_ml_algo, curr_preds = cast(SparkTabularMLAlgo, fitted_ml_algo), cast(SparkDataset, curr_preds)
+
+                    if ml_algo is None:
+                        warnings.warn(
+                            "Current ml_algo has not been trained by some reason. " "Check logs for more details.",
+                            RuntimeWarning,
+                        )
+
+                    return fitted_ml_algo, curr_preds
+                return func
+
+            fit_tasks = [
+                build_fit_func(ml_algo, param_tuner, force_calc)
+                for ml_algo, param_tuner, force_calc in zip(self._ml_algos, self.params_tuners, self.force_calc)
+            ]
+
+            results = self._computations_manager.compute(fit_tasks, pool_type=PoolType.ml_algos)
+
+            self.ml_algos.extend([ml_algo for ml_algo, _ in results])
+            preds = [pred for _, pred in results]
 
             assert (
                 len(self.ml_algos) > 0

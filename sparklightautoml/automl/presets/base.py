@@ -8,7 +8,7 @@ import yaml
 from lightautoml.utils.logging import verbosity_to_loglevel, set_stdout_level, add_filehandler
 from lightautoml.utils.timer import PipelineTimer
 
-from sparklightautoml.automl.base import SparkAutoML
+from sparklightautoml.automl.base import SparkAutoML, ParallelismMode
 from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.utils import SparkDataFrame
@@ -45,6 +45,7 @@ class SparkAutoMLPreset(SparkAutoML):
         gpu_ids: Optional[str] = "all",
         timing_params: Optional[dict] = None,
         config_path: Optional[str] = None,
+        parallelism_mode: ParallelismMode = ("no_parallelism", -1),
         **kwargs: Any,
     ):
         """
@@ -75,7 +76,7 @@ class SparkAutoMLPreset(SparkAutoML):
             **kwargs: Not used.
 
         """
-        super().__init__()
+        super().__init__(parallelism_mode=parallelism_mode)
 
         self._set_config(config_path)
 

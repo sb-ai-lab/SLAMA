@@ -1,14 +1,13 @@
 import logging.config
 import os
 import uuid
-from typing import cast
 
 import pandas as pd
 import pyspark.sql.functions as sf
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
-from examples_utils import get_persistence_manager, BUCKET_NUMS, check_columns
+from examples_utils import get_persistence_manager, BUCKET_NUMS
 from examples_utils import get_dataset_attrs, prepare_test_and_train, get_spark_session
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
@@ -30,9 +29,15 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 2. use_algos = [["lgb_tuned"]]
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb", "linear_l2"], ["lgb"]]
+    # use_algos = [["lgb", "linear_l2"], ["lgb"]]
+    use_algos = [["lgb"]]
     cv = 3
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    # path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+
+    path = '/opt/experiments/test_exp/full_second_level_train.parquet'
+    task_type = 'binary'
+    roles = {"target": "target"}
+
 
     persistence_manager = get_persistence_manager()
     # Alternative ways to define persistence_manager
@@ -41,8 +46,9 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
     with log_exec_timer("spark-lama training") as train_timer:
         task = SparkTask(task_type)
-        train_data, test_data = prepare_test_and_train(spark, path, seed)
+        train_data, test_data = prepare_test_and_train(spark, path, seed, is_csv=False)
 
+        train_data = train_data.drop("user_idx", "item_idx")
         test_data_dropped = test_data
 
         # optionally: set 'convert_to_onnx': True to use onnx-based version of lgb's model transformer
@@ -56,9 +62,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
                 'mini_batch_size': 1000
             },
             linear_l2_params={'default_params': {'regParam': [1e-5]}},
-            reader_params={"cv": cv, "advanced_roles": False},
-            parallelism_mode=("no_parallelism", -1)
-            # parallelism_mode=("intra_mlpipe_parallelism", 3)
+            reader_params={"cv": cv, "advanced_roles": False}
         )
 
         oof_predictions = automl.fit_predict(
@@ -81,89 +85,18 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all
     automl.persistence_manager.unpersist_all()
 
-    test_column = "some_external_column"
-    test_data_dropped = test_data_dropped.withColumn(test_column, sf.lit(42.0))
-
-    with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
-        te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
+    with log_exec_timer("spark-lama predicting on test (#2 way)"):
+        te_pred = automl.transformer().transform(test_data_dropped)
 
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred)
 
         logger.info(f"score for test predictions: {test_metric_value}")
 
-    with log_exec_timer("spark-lama predicting on test (#2 way)"):
-        te_pred = automl.transformer().transform(test_data_dropped)
-
-        check_columns(test_data_dropped, te_pred)
-
-        pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
-        score = task.get_dataset_metric()
-        test_metric_value = score(te_pred.select(
-            SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
-            sf.col(pred_column).alias('prediction')
-        ))
-
-        logger.info(f"score for test predictions: {test_metric_value}")
-
-    base_path = "/tmp/spark_results"
-    automl_model_path = os.path.join(base_path, "automl_pipeline")
-    os.makedirs(base_path, exist_ok=True)
-
-    with log_exec_timer("saving model") as saving_timer:
-        transformer.write().overwrite().save(automl_model_path)
-
-    with log_exec_timer("Loading model time") as loading_timer:
-        pipeline_model = PipelineModel.load(automl_model_path)
-
-    with log_exec_timer("spark-lama predicting on test (#3 way)"):
-        te_pred = pipeline_model.transform(test_data_dropped)
-
-        check_columns(test_data_dropped, te_pred)
-
-        pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
-        score = task.get_dataset_metric()
-        test_metric_value = score(te_pred.select(
-            SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
-            sf.col(pred_column).alias('prediction')
-        ))
-
-    logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
-
     logger.info("Predicting is finished")
-
-    result = {
-        "seed": seed,
-        "dataset": dataset_name,
-        "used_algo": str(use_algos),
-        "metric_value": metric_value,
-        "test_metric_value": test_metric_value,
-        "train_duration_secs": train_timer.duration,
-        "predict_duration_secs": predict_timer.duration,
-        "saving_duration_secs": saving_timer.duration,
-        "loading_duration_secs": loading_timer.duration
-    }
-
-    print(f"EXP-RESULT: {result}")
 
     train_data.unpersist()
     test_data.unpersist()
-
-    return result
-
-
-def multirun(spark: SparkSession, dataset_name: str):
-    seeds = [1, 5, 42, 100, 777]
-    results = [main(spark, dataset_name, seed) for seed in seeds]
-
-    df = pd.DataFrame(results)
-
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-        print(df)
-
-    df.to_csv(f"spark-lama_results_{dataset_name}_{uuid.uuid4()}.csv")
 
 
 if __name__ == "__main__":

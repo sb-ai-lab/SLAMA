@@ -1,3 +1,5 @@
+import sbt.Keys.resolvers
+
 name := "spark-lightautoml"
 
 version := "0.1.1"

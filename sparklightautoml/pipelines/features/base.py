@@ -245,7 +245,6 @@ class SparkFeaturesPipeline(FeaturesPipeline, TransformerInputOutputRoles):
 
         def cum_outputs_layers(external_input: Set[str], layers):
             available_inputs = [external_input]
-
             for layer in layers:
                 outs = {col for est in layer for col in out_cols(est)}
                 available_inputs.append(available_inputs[-1].union(outs))

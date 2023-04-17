@@ -132,7 +132,7 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
     def __init__(
         self,
         task: Task,
-        samples: Optional[int] = None,#100000,
+        samples: Optional[int] = 100000,
         max_nan_rate: float = 0.999,
         max_constant_rate: float = 0.999,
         cv: int = 5,
@@ -308,7 +308,8 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
             else:
                 fraction = self.samples / total_number
             subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
-            with JobGroup("Reader: Subsampling materailization", "Reader: Subsampling materailization"):
+            with JobGroup("Reader: Subsampling materailization", "Reader: Subsampling materailization",
+                          train_data.sql_ctx.sparkSession):
                 subsample.count()
             unpersist_subsample = True
         else:

@@ -14,7 +14,8 @@ from pyspark.ml.regression import LinearRegression, LinearRegressionModel
 from pyspark.sql import functions as sf
 
 from sparklightautoml.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator, split_out_train, split_out_val
+from ..computations.manager import ComputationsManager
 from ..dataset.base import SparkDataset, PersistenceManager
 from ..transformers.base import DropColumnsTransformer
 from ..utils import SparkDataFrame, log_exception
@@ -86,9 +87,10 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         freeze_defaults: bool = True,
         timer: Optional[TaskTimer] = None,
         optimization_search_space: Optional[dict] = None,
+        computations_manager: Optional[ComputationsManager] = None
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
-        super().__init__(default_params, freeze_defaults, timer, optimization_search_space)
+        super().__init__(default_params, freeze_defaults, timer, optimization_search_space, computations_manager)
 
         self._prediction_col = f"prediction_{self._name}"
         self.task = None
@@ -147,27 +149,15 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
 
         return estimators, es
 
-    def fit_predict_single_fold(
-        self, fold_prediction_column: str, train: SparkDataset, valid: SparkDataset
-    ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
-        """Train on train dataset and predict on holdout dataset.
-
-        Args:
-            fold_prediction_column: column name for predictions made for this fold
-            train: Train Dataset.
-            valid: Validation Dataset.
-
-        Returns:
-            Target predictions for valid dataset.
-
-        """
+    def fit_predict_single_fold(self, fold_prediction_column: str, validation_column: str, train: SparkDataset) \
+            -> Tuple[SparkMLModel, SparkDataFrame, str]:
         logger.info(f"fit_predict single fold in LinearLBGFS. Num of features: {len(self.input_roles.keys())} ")
 
         if self.task is None:
             self.task = train.task
 
-        train_sdf = train.data
-        val_sdf = valid.data
+        train_sdf = split_out_train(train.data, validation_column)
+        val_sdf = split_out_val(train.data, validation_column)
 
         estimators, early_stopping = self._infer_params(train, fold_prediction_column)
 
@@ -184,7 +174,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             ml_model = pipeline.fit(train_sdf)
             val_pred = ml_model.transform(val_sdf)
             preds_to_score = val_pred.select(
-                sf.col(fold_prediction_column).alias("prediction"), sf.col(valid.target_column).alias("target")
+                sf.col(fold_prediction_column).alias("prediction"), sf.col(train.target_column).alias("target")
             )
             current_score = self.score(preds_to_score)
             if current_score > best_score:

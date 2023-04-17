@@ -16,7 +16,23 @@ from sparklightautoml.dataset.base import SparkDataset, Unpersistable
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
 from sparklightautoml.utils import SparkDataFrame
 
-TrainVal = Tuple[SparkDataset, SparkDataset]
+TrainVal = SparkDataset
+
+
+def mark_as_train(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.withColumn(is_val_col, sf.lit(0))
+
+
+def mark_as_val(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.withColumn(is_val_col, sf.lit(1))
+
+
+def split_out_train(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.where(sf.col(is_val_col) == 0).drop(is_val_col)
+
+
+def split_out_val(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.where(sf.col(is_val_col) == 1).drop(is_val_col)
 
 
 class SparkSelectionPipeline(SelectionPipeline, ABC):
@@ -124,8 +140,9 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
         )
 
         sdf = train.data.select("*", is_val_col)
-        train_part_sdf = sdf.where(sf.col(self.TRAIN_VAL_COLUMN) == 0).drop(self.TRAIN_VAL_COLUMN)
-        valid_part_sdf = sdf.where(sf.col(self.TRAIN_VAL_COLUMN) == 1).drop(self.TRAIN_VAL_COLUMN)
+
+        train_part_sdf = split_out_train(sdf, self.TRAIN_VAL_COLUMN)
+        valid_part_sdf = split_out_val(sdf, self.TRAIN_VAL_COLUMN)
 
         train_ds = cast(SparkDataset, self.train.empty())
         train_ds.set_data(sdf, self.train.features, self.train.roles, name=self.train.name)
@@ -148,7 +165,7 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
 
         return train_ds, train_part_ds, valid_part_ds
 
+    @abstractmethod
     def get_validation_data(self) -> SparkDataset:
         ...
-
 

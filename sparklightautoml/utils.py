@@ -439,8 +439,8 @@ def log_exception(logger: Logger):
 
 
 @contextmanager
-def JobGroup(group_id: str, description: str):
-    sc = SparkSession.getActiveSession().sparkContext
+def JobGroup(group_id: str, description: str, spark: SparkSession):
+    sc = spark.sparkContext
     sc.setJobGroup(group_id, description)
     yield
     sc._jsc.clearJobGroup()

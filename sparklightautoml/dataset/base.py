@@ -155,13 +155,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
         # columns that can be transferred intact across all transformations
         # in the pipeline
         base_service_columns = {self.ID_COLUMN, self.target_column, self.folds_column, VALIDATION_COLUMN}
-        # self._service_columns: Set[str] = {
-        #     *(c for c in data.columns if c not in roles and c not in base_service_columns),
-        #     *base_service_columns
-        # }
         self._service_columns: Set[str] = base_service_columns
-
-        # self._ignored_columns = {c for c in data.columns if c not in roles and c not in base_service_columns}
 
         roles = roles if roles else dict()
 
@@ -193,8 +187,8 @@ class SparkDataset(LAMLDataset, Unpersistable):
         return self._name
 
     @property
-    def spark_session(self):
-        return SparkSession.getActiveSession()
+    def spark_session(self) -> SparkSession:
+        return self.data.sql_ctx.sparkSession
 
     @property
     def data(self) -> SparkDataFrame:
@@ -289,6 +283,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
     @property
     def service_columns(self) -> List[str]:
         return [sc for sc in self._service_columns if sc in self.data.columns]
+
+    @property
+    def num_folds(self) -> int:
+        return self.data.select(self.folds_column).distinct().count()
 
     @property
     def persistence_manager(self) -> 'PersistenceManager':
@@ -412,7 +410,6 @@ class SparkDataset(LAMLDataset, Unpersistable):
             features: `ignored, always None. just for same interface.
             roles: Dict with roles.
         """
-
         self._validate_dataframe(data)
         super().set_data(data, features, roles)
         self._persistence_manager = persistence_manager or self._persistence_manager
