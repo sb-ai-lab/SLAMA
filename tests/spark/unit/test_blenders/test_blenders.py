@@ -24,7 +24,7 @@ def test_weighted_blender(spark: SparkSession):
     target_col = "some_target"
     folds_col = "folds"
     n_classes = 10
-    models_count = 1
+    models_count = 4
     persistence_manager = PlainCachePersistenceManager()
 
     data = [

@@ -46,7 +46,7 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
         train_ds = cast(SparkDataset, self.train.empty())
         train_ds.set_data(sdf, self.train.features, self.train.roles, name=self.train.name)
 
-        return train_ds, train_ds
+        return train_ds
 
     def freeze(self) -> 'SparkDummyIterator':
         return SparkDummyIterator(self.train.freeze())
@@ -61,15 +61,16 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
     def convert_to_holdout_iterator(self) -> "SparkHoldoutIterator":
         sds = cast(SparkDataset, self.train)
         assert sds.folds_column is not None, "Cannot convert to Holdout iterator when folds_column is not defined"
-        return SparkHoldoutIterator(self.train, self.train)
+        return SparkHoldoutIterator(self.train)
 
 
 class SparkHoldoutIterator(SparkBaseTrainValidIterator):
     """Simple one step iterator over one fold of SparkDataset"""
 
-    def __init__(self, train: SparkDataset, valid: SparkDataset):
+    def __init__(self, train: SparkDataset):
+        assert self.TRAIN_VAL_COLUMN in train.data.columns, \
+            f"Cannot accept dataset without explicit '{self.TRAIN_VAL_COLUMN}' column"
         super().__init__(train)
-        self._valid = valid
         self._curr_idx = 0
 
     def __iter__(self) -> Iterable:
@@ -92,32 +93,23 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
         # full_ds, train_part_ds, valid_part_ds = self._split_by_fold(self._curr_idx)
         self._curr_idx += 1
 
-        return self.train, self._valid
+        return self.train
 
     def freeze(self) -> 'SparkHoldoutIterator':
-        return SparkHoldoutIterator(self.train.freeze(), self._valid.freeze())
+        return SparkHoldoutIterator(self.train.freeze())
 
     def unpersist(self, skip_val: bool = False):
-        self.train.unpersist()
         if not skip_val:
-            self._valid.unpersist()
+            self.train.unpersist()
 
     def get_validation_data(self) -> SparkDataset:
-        # full_ds, train_part_ds, valid_part_ds = self._split_by_fold(fold=0)
-        return self._valid
+        valid_sdf = self.train.data.where(sf.col(self.TRAIN_VAL_COLUMN) == 0).drop(self.TRAIN_VAL_COLUMN)
+        valid = self.train.empty()
+        valid.set_data(valid_sdf, self.train.features, self.train.roles)
+        return valid
 
     def convert_to_holdout_iterator(self) -> "SparkHoldoutIterator":
         return self
-
-    def apply_selector(self, selector: SparkSelectionPipeline) -> "SparkBaseTrainValidIterator":
-        train_valid = super().apply_selector(selector)
-        train_valid._valid = selector.select(train_valid._valid)
-        return train_valid
-
-    def apply_feature_pipeline(self, features_pipeline: SparkFeaturesPipeline) -> "SparkBaseTrainValidIterator":
-        train_valid = super().apply_feature_pipeline(features_pipeline)
-        train_valid._valid = features_pipeline.transform(train_valid._valid)
-        return train_valid
 
 
 class SparkFoldsIterator(SparkBaseTrainValidIterator):
@@ -125,6 +117,10 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
     Folds should be defined in Reader, based on cross validation method.
     """
+
+    @property
+    def train_val_single_dataset(self) -> 'SparkDataset':
+        pass
 
     def __init__(self, train: SparkDataset, n_folds: Optional[int] = None):
         """Creates iterator.
@@ -180,31 +176,13 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             logger.debug("No more folds to continue, stopping iterations")
             raise StopIteration
 
-        full_ds, train_part_ds, valid_part_ds = self._split_by_fold(self._curr_idx)
+        full_ds_with_is_val_col, _, _ = self._split_by_fold(self._curr_idx)
         self._curr_idx += 1
 
-        return train_part_ds, valid_part_ds
+        return full_ds_with_is_val_col
 
     def freeze(self) -> 'SparkFoldsIterator':
         return SparkFoldsIterator(self.train.freeze(), n_folds=self.n_folds)
-
-    # @property
-    # def train_frozen(self) -> bool:
-    #     return self._train_frozen
-    #
-    # @property
-    # def val_frozen(self) -> bool:
-    #     return self._val_frozen
-    #
-    # @train_frozen.setter
-    # def train_frozen(self, val: bool):
-    #     self._base_train_frozen = val
-    #     self.train.frozen = self._base_train_frozen or self._base_train_frozen or self._val_frozen
-    #
-    # @val_frozen.setter
-    # def val_frozen(self, val: bool):
-    #     self._val_frozen = val
-    #     self.train.frozen = self._base_train_frozen or self._train_frozen or self._val_frozen
 
     def unpersist(self, skip_val: bool = False):
         if not skip_val:
@@ -222,5 +200,5 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
             new hold-out-iterator.
 
         """
-        _, train, valid = self._split_by_fold(0)
-        return SparkHoldoutIterator(train, valid)
+        full_with_is_val_column, _, _ = self._split_by_fold(0)
+        return SparkHoldoutIterator(full_with_is_val_column)

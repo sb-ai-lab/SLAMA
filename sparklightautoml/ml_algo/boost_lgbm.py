@@ -1,7 +1,7 @@
 import logging
 import multiprocessing
 import warnings
-from copy import copy
+from copy import copy, deepcopy
 from typing import Dict, Optional, Tuple, Union, cast, List
 
 import lightgbm as lgb
@@ -14,7 +14,7 @@ from lightautoml.utils.timer import TaskTimer
 from lightautoml.validation.base import TrainValidIterator
 from lightgbm import Booster
 from pandas import Series
-from pyspark.ml import Transformer, PipelineModel
+from pyspark.ml import Transformer, PipelineModel, Model
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.util import MLWritable, MLReadable, MLWriter
 from synapse.ml.lightgbm import (
@@ -25,6 +25,7 @@ from synapse.ml.lightgbm import (
 )
 from synapse.ml.onnx import ONNXModel
 
+from sparklightautoml.computations.manager import PoolType, SlotAllocator, ComputationsManager
 from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer
@@ -42,7 +43,7 @@ from sparklightautoml.transformers.base import (
 from sparklightautoml.transformers.scala_wrappers.balanced_union_partitions_coalescer import \
     BalancedUnionPartitionsCoalescerTransformer
 from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator, split_out_val
 
 logger = logging.getLogger(__name__)
 
@@ -154,9 +155,14 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         convert_to_onnx: bool = False,
         mini_batch_size: int = 5000,
         seed: int = 42,
+        parallelism: int = 1,
+        use_barrier_execution_mode: bool = False,
+        experimental_parallel_mode: bool = False,
+        computations_manager: Optional[ComputationsManager] = None
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
-        SparkTabularMLAlgo.__init__(self, default_params, freeze_defaults, timer, optimization_search_space)
+        SparkTabularMLAlgo.__init__(self, default_params, freeze_defaults,
+                                    timer, optimization_search_space, computations_manager)
         self._probability_col_name = "probability"
         self._prediction_col_name = "prediction"
         self._raw_prediction_col_name = "raw_prediction"
@@ -169,6 +175,9 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         self._chunk_size = chunk_size
         self._convert_to_onnx = convert_to_onnx
         self._mini_batch_size = mini_batch_size
+        self._parallelism = parallelism
+        self._use_barrier_execution_mode = use_barrier_execution_mode
+        self._experimental_parallel_mode = experimental_parallel_mode
 
     def _infer_params(self) -> Tuple[dict, int]:
         """Infer all parameters in lightgbm format.
@@ -209,7 +218,11 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
             if "lambdaL2" in params:
                 del params["lambdaL2"]
 
-        params = {**params}
+        slot_size = self.computations_manager.default_slot_size
+        perf_params = {"num_tasks": slot_size.num_tasks, "num_threads": slot_size.num_threads_per_executor} \
+            if slot_size else dict()
+
+        params = {**params, **perf_params}
 
         return params, verbose_eval
 
@@ -346,21 +359,38 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         return optimization_search_space
 
-    def predict_single_fold(
-        self, dataset: SparkDataset, model: Union[LightGBMRegressor, LightGBMClassifier]
-    ) -> SparkDataFrame:
+    def predict_single_fold(self, dataset: SparkDataset, model: PipelineModel) -> SparkDataFrame:
+        return model.transform(dataset.data)
 
-        temp_sdf = self._assembler.transform(dataset.data)
+    def _do_convert_to_onnx(self, train: SparkDataset, ml_model):
+        logger.info("Model convert is started")
+        booster_model_str = ml_model.getLightGBMBooster().modelStr().get()
+        booster = lgb.Booster(model_str=booster_model_str)
+        model_payload_ml = self._convert_model(booster, len(train.features))
 
-        pred = model.transform(temp_sdf)
+        onnx_ml = ONNXModel().setModelPayload(model_payload_ml)
 
-        return pred
+        if train.task.name == "reg":
+            onnx_ml = (
+                onnx_ml.setDeviceType("CPU")
+                    .setFeedDict({"input": f"{self._name}_vassembler_features"})
+                    .setFetchDict({ml_model.getPredictionCol(): "variable"})
+                    .setMiniBatchSize(self._mini_batch_size)
+            )
+        else:
+            onnx_ml = (
+                onnx_ml.setDeviceType("CPU")
+                    .setFeedDict({"input": f"{self._name}_vassembler_features"})
+                    .setFetchDict({ml_model.getProbabilityCol(): "probabilities", ml_model.getPredictionCol(): "label"})
+                    .setMiniBatchSize(self._mini_batch_size)
+            )
 
-    def fit_predict_single_fold(
-        self, fold_prediction_column: str, train: SparkDataset, valid: SparkDataset
-    ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
-        # assert self.validation_column in train.data.columns, "Train should contain validation column"
+        logger.info("Model convert is ended")
 
+        return onnx_ml
+
+    def fit_predict_single_fold(self, fold_prediction_column: str, validation_column: str, train: SparkDataset) \
+            -> Tuple[SparkMLModel, SparkDataFrame, str]:
         if self.task is None:
             self.task = train.task
 
@@ -368,15 +398,6 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         logger.info(f"Input cols for the vector assembler: {train.features}")
         logger.info(f"Running lgb with the following params: {params}")
-
-        if self._assembler is None:
-            self._assembler = VectorAssembler(
-                inputCols=train.features,
-                outputCol=f"{self._name}_vassembler_features",
-                handleInvalid="keep"
-            )
-
-        lgbm_booster = LightGBMRegressor if train.task.name == "reg" else LightGBMClassifier
 
         if train.task.name in ["binary", "multiclass"]:
             params["rawPredictionCol"] = self._raw_prediction_col_name
@@ -386,99 +407,52 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         else:
             params["predictionCol"] = fold_prediction_column
 
-        master_addr = train.spark_session.conf.get("spark.master")
-        if master_addr.startswith("local-cluster"):
-            # exec_str, cores_str, mem_mb_str
-            _, cores_str, _ = master_addr[len("local-cluster["): -1].split(",")
-            cores = int(cores_str)
-            params["numThreads"] = max(cores - 1, 1)
-        elif master_addr.startswith("local"):
-            cores_str = master_addr[len("local["): -1]
-            cores = int(cores_str) if cores_str != "*" else multiprocessing.cpu_count()
-            params["numThreads"] = max(cores - 1, 1)
-        else:
-            params["numThreads"] = max(int(train.spark_session.conf.get("spark.executor.cores", "1")) - 1, 1)
+        assert validation_column in train.data.columns, \
+            f"Validation column {validation_column} should be present in the data"
 
-        train_data = train.data
-        valid_data = valid.data
-        valid_size = valid.data.count()
-        max_val_size = self._max_validation_size
-        if valid_size > max_val_size:
-            warnings.warn(
-                f"Maximum validation size for SparkBoostLGBM is exceeded: {valid_size} > {max_val_size}. "
-                f"Reducing validation size down to maximum.",
-                category=RuntimeWarning,
+        full_data = train.data
+
+        # prepare assembler
+        if self._assembler is None:
+            self._assembler = VectorAssembler(
+                inputCols=train.features,
+                outputCol=f"{self._name}_vassembler_features",
+                handleInvalid="keep"
             )
 
-            valid_data = valid_data.sample(fraction=max_val_size / valid_size, seed=self._seed)
-
-        td = train_data.select('*', sf.lit(False).alias(self.validation_column))
-        vd = valid_data.select('*', sf.lit(True).alias(self.validation_column))
-        full_data = td.unionByName(vd)
-
-        if train_data.rdd.getNumPartitions() == valid_data.rdd.getNumPartitions():
-            full_data = BalancedUnionPartitionsCoalescerTransformer().transform(full_data)
-        else:
-            message = f"Cannot apply BalancedUnionPartitionsCoalescer " \
-                      f"due to train and val datasets doesn't have the same number of partitions. " \
-                      f"The train dataset has {train_data.rdd.getNumPartitions()} partitions " \
-                      f"while the val dataset has {valid_data.rdd.getNumPartitions()} partitions." \
-                      f"Continue with plain union." \
-                      f"In some situations it may negatively affect behavior of SynapseML LightGBM " \
-                      f"due to empty partitions"
-            warnings.warn(message, RuntimeWarning)
+        # build the booster
+        lgbm_booster = LightGBMRegressor if train.task.name == "reg" else LightGBMClassifier
 
         lgbm = lgbm_booster(
             **params,
             featuresCol=self._assembler.getOutputCol(),
             labelCol=train.target_column,
-            validationIndicatorCol=self.validation_column,
+            validationIndicatorCol=validation_column,
             verbosity=verbose_eval,
             useSingleDatasetMode=self._use_single_dataset_mode,
             isProvideTrainingMetric=True,
             chunkSize=self._chunk_size,
         )
 
-        logger.info(f"Use single dataset mode: {lgbm.getUseSingleDatasetMode()}. NumThreads: {lgbm.getNumThreads()}")
-
         if train.task.name == "reg":
             lgbm.setAlpha(0.5).setLambdaL1(0.0).setLambdaL2(0.0)
 
+        logger.info(f"Use single dataset mode: {lgbm.getUseSingleDatasetMode()}. NumThreads: {lgbm.getNumThreads()}")
+
+        # fitting the model
         ml_model = lgbm.fit(self._assembler.transform(full_data))
 
-        val_pred = ml_model.transform(self._assembler.transform(valid.data))
+        # handle the model
+        ml_model = self._do_convert_to_onnx(train, ml_model) if self._convert_to_onnx else ml_model
+        self._models_feature_importances.append(ml_model.getFeatureImportances(importance_type="gain"))
+
+        valid_data = split_out_val(full_data, validation_column)
+        # predict validation
+        val_pred = ml_model.transform(self._assembler.transform(valid_data))
         val_pred = DropColumnsTransformer(
             remove_cols=[],
             optional_remove_cols=[self._prediction_col_name, self._probability_col_name, self._raw_prediction_col_name],
         ).transform(val_pred)
-
-        self._models_feature_importances.append(ml_model.getFeatureImportances(importance_type="gain"))
-
-        if self._convert_to_onnx:
-            logger.info("Model convert is started")
-            booster_model_str = ml_model.getLightGBMBooster().modelStr().get()
-            booster = lgb.Booster(model_str=booster_model_str)
-            model_payload_ml = self._convert_model(booster, len(train.features))
-
-            onnx_ml = ONNXModel().setModelPayload(model_payload_ml)
-
-            if train.task.name == "reg":
-                onnx_ml = (
-                    onnx_ml.setDeviceType("CPU")
-                    .setFeedDict({"input": f"{self._name}_vassembler_features"})
-                    .setFetchDict({ml_model.getPredictionCol(): "variable"})
-                    .setMiniBatchSize(self._mini_batch_size)
-                )
-            else:
-                onnx_ml = (
-                    onnx_ml.setDeviceType("CPU")
-                    .setFeedDict({"input": f"{self._name}_vassembler_features"})
-                    .setFetchDict({ml_model.getProbabilityCol(): "probabilities", ml_model.getPredictionCol(): "label"})
-                    .setMiniBatchSize(self._mini_batch_size)
-                )
-
-            ml_model = onnx_ml
-            logger.info("Model convert is ended")
 
         return ml_model, val_pred, fold_prediction_column
 
@@ -490,9 +464,9 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
     def get_features_score(self) -> Series:
         imp = 0
         for model_feature_impotances in self._models_feature_importances:
-            imp = imp + pd.Series(model_feature_impotances)
+            imp += pd.Series(model_feature_impotances)
 
-        imp = imp / len(self._models_feature_importances)
+        imp /= len(self._models_feature_importances)
 
         def flatten_features(feat: str):
             role = self.input_roles[feat]
@@ -589,3 +563,62 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         logger.info("Finished LGBM fit")
         return res
+
+    def _parallel_fit(self, train_valid_iterator: SparkBaseTrainValidIterator) \
+            -> Tuple[List[Model], List[SparkDataFrame], List[str]]:
+        if self._experimental_parallel_mode and not self.computations_manager.can_support_slots:
+            warnings.warn("Experimental parallel mode is set, "
+                          "but computations manager doesn't support slots allocation")
+        elif self._experimental_parallel_mode:
+            with self.computations_manager.slots(train_valid_iterator.train,
+                                                 parallelism=self._parallelism, pool_type=PoolType.job) as allocator:
+                allocator: SlotAllocator = allocator
+
+                def build_fit_func(i: int, mdl_pred_col: str):
+                    def func() -> Optional[Tuple[int, Model, SparkDataFrame, str]]:
+                        # TODO: PARALLEL - no stopping of time_limit_exceeded
+
+                        with allocator.allocate() as slot:
+                            tviter = deepcopy(train_valid_iterator)
+                            tviter.train = slot.dataset
+                            for _ in range(i + 1):
+                                slot_train = next(tviter)
+
+                            mdl, vpred, _ = self.fit_predict_single_fold(
+                                mdl_pred_col, self.validation_column, slot_train
+                            )
+                            vpred = vpred.select(SparkDataset.ID_COLUMN, slot.dataset.target_column, mdl_pred_col)
+
+                        # The previous way also should be ok, because:
+                        # - fold based computations often happen in the end of MLPipeline
+                        # and thus are subjects for "checkpointing" before the next level (e.g. writing on disk)
+                        # - the dataset should not be too great in size to avoid shuffling at all
+                        # - PravdaML also refer to shuffling due to how they treat parallelism
+
+                        #  Alternative way of obtaining vpred
+                        # we predict on all executors instead only on part of them
+                        # probably it should be run as a separate set of tasks after finishing this part of computations
+                        # vpred = self.predict_single_fold(val, mdl)
+
+                        return i, mdl, vpred, mdl_pred_col
+                    return func
+
+                fit_tasks = [
+                    build_fit_func(i, f"{self.prediction_feature}_{i}")
+                    for i, _ in enumerate(train_valid_iterator)
+                ]
+
+                results = self.computations_manager.compute(fit_tasks, pool_type=PoolType.job)
+
+                # TODO: PARALLEL - incorrect handling of the sequential case
+                self.timer.write_run_info()
+
+            models = [model for _, model, _, _ in results]
+            val_preds = [val_pred for _, _, val_pred, _ in results]
+            model_prediction_cols = [model_prediction_col for _, _, _, model_prediction_col in results]
+
+            # unprepare dataset
+
+            return models, val_preds, model_prediction_cols
+
+        return super()._parallel_fit(train_valid_iterator)

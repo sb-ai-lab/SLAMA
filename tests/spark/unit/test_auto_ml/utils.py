@@ -23,7 +23,7 @@ from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator, split_out_val
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 logger = logging.getLogger(__name__)
@@ -99,12 +99,14 @@ class DummyMLAlgo(SparkTabularMLAlgo):
         super().__init__()
         self.n_classes = n_classes
 
-    def fit_predict_single_fold(self, fold_prediction_column: str, train: SparkDataset,
-                                valid: SparkDataset) -> Tuple[SparkMLModel, SparkDataFrame, str]:
+    def fit_predict_single_fold(self, fold_prediction_column: str, validation_column: str, train: SparkDataset) \
+            -> Tuple[SparkMLModel, SparkDataFrame, str]:
         fake_op = FakeOpTransformer(cols_to_generate=[fold_prediction_column], n_classes=self.n_classes)
         ml_model = PipelineModel(stages=[fake_op])
 
-        return ml_model, ml_model.transform(valid.data), fold_prediction_column
+        valid_data = split_out_val(train.data, validation_column)
+
+        return ml_model, ml_model.transform(valid_data), fold_prediction_column
 
     def predict_single_fold(self, model: SparkMLModel, dataset: SparkDataset) -> SparkDataFrame:
         raise NotImplementedError("")

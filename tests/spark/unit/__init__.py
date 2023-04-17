@@ -126,6 +126,21 @@ def spark_hdfs() -> SparkSession:
 
 
 @pytest.fixture(scope="session")
+def spark_with_deps() -> SparkSession:
+    spark = SparkSession.builder.appName("LAMA-test-app")\
+        .master("local[1]") \
+        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.4") \
+        .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven") \
+        .getOrCreate()
+
+    print(f"Spark WebUI url: {spark.sparkContext.uiWebUrl}")
+
+    yield spark
+
+    spark.stop()
+
+
+@pytest.fixture(scope="session")
 def workdir() -> str:
     """
     Creates temporary workdir for tests in the begging and cleans in the end.

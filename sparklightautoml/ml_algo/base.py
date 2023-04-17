@@ -1,5 +1,6 @@
 import functools
 import logging
+from abc import ABC
 from copy import copy
 from typing import Tuple, cast, List, Optional, Sequence, Union
 
@@ -8,7 +9,7 @@ from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.ml_algo.base import MLAlgo
 from lightautoml.utils.timer import TaskTimer
-from pyspark.ml import PipelineModel, Transformer
+from pyspark.ml import PipelineModel, Transformer, Model
 from pyspark.ml.functions import vector_to_array, array_to_vector
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
@@ -16,6 +17,7 @@ from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
 from pyspark.sql import functions as sf
 from pyspark.sql.types import IntegerType
 
+from sparklightautoml.computations.manager import ComputationsManager, default_computations_manager
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.pipelines.base import TransformerInputOutputRoles
@@ -28,7 +30,7 @@ logger = logging.getLogger(__name__)
 SparkMLModel = PipelineModel
 
 
-class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
+class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
     """Machine learning algorithms that accepts numpy arrays as input."""
 
     _name: str = "SparkTabularMLAlgo"
@@ -40,6 +42,7 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
         freeze_defaults: bool = True,
         timer: Optional[TaskTimer] = None,
         optimization_search_space: Optional[dict] = None,
+        computations_manager: Optional[ComputationsManager] = None
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
         super().__init__(default_params, freeze_defaults, timer, optimization_search_space)
@@ -50,6 +53,7 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
         self._prediction_role: Optional[Union[NumericRole, NumericVectorOrArrayRole]] = None
         self._input_roles: Optional[RolesDict] = None
         self._service_columns: Optional[List[str]] = None
+        self._computations_manager = computations_manager or default_computations_manager()
 
     @property
     def features(self) -> Optional[List[str]]:
@@ -81,6 +85,14 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
     @property
     def validation_column(self) -> str:
         return self._default_validation_col_name
+
+    @property
+    def computations_manager(self) -> Optional[ComputationsManager]:
+        return self._computations_manager
+
+    @computations_manager.setter
+    def computations_manager(self, value: ComputationsManager):
+        self._computations_manager = value
 
     @log_exception(logger=logger)
     def fit_predict(self, train_valid_iterator: SparkBaseTrainValidIterator) -> SparkDataset:
@@ -124,29 +136,8 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
         self._models_prediction_columns = []
 
         with train_valid_iterator.frozen() as frozen_train_valid_iterator:
-            for n, (train, valid) in enumerate(frozen_train_valid_iterator):
-                if iterator_len > 1:
-                    logger.info2(
-                        "===== Start working with \x1b[1mfold {}\x1b[0m for \x1b[1m{}\x1b[0m "
-                        "=====".format(n, self._name)
-                    )
-                self.timer.set_control_point()
-
-                model_prediction_col = f"{self.prediction_feature}_{n}"
-                model, val_pred, _ = self.fit_predict_single_fold(model_prediction_col, train, valid)
-                val_pred = val_pred.select(SparkDataset.ID_COLUMN, train.target_column, model_prediction_col)
-
-                self._models_prediction_columns.append(model_prediction_col)
-                self.models.append(model)
-                preds_dfs.append(val_pred)
-
-                self.timer.write_run_info()
-
-                if (n + 1) != len(frozen_train_valid_iterator):
-                    # split into separate cases because timeout checking affects parent pipeline timer
-                    if self.timer.time_limit_exceeded():
-                        logger.info("Time limit exceeded after calculating fold {0}\n".format(n))
-                        break
+            self.models, preds_dfs, self._models_prediction_columns = \
+                self._parallel_fit(train_valid_iterator=frozen_train_valid_iterator)
 
         full_preds_df = self._combine_val_preds(train_valid_iterator.get_validation_data(), preds_dfs)
         full_preds_df = self._build_averaging_transformer().transform(full_preds_df)
@@ -176,15 +167,14 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
 
         return pred_ds
 
-    def fit_predict_single_fold(
-        self, fold_prediction_column: str, train: SparkDataset, valid: SparkDataset
-    ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
+    def fit_predict_single_fold(self, fold_prediction_column: str, validation_column: str, train: SparkDataset) \
+            -> Tuple[SparkMLModel, SparkDataFrame, str]:
         """Train on train dataset and predict on holdout dataset.
 
         Args:
             fold_prediction_column: column name for predictions made for this fold
-            train: Train Dataset.
-            valid: Validation Dataset.
+            validation_column: name of the column that signals if this row is from train or val
+            train: dataset containing both train and val rows.
 
         Returns:
             Target predictions for valid dataset.
@@ -266,6 +256,46 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles):
         )
 
         return full_val_preds
+
+    def _parallel_fit(self, train_valid_iterator: SparkBaseTrainValidIterator) \
+            -> Tuple[List[Model], List[SparkDataFrame], List[str]]:
+        num_folds = len(train_valid_iterator)
+
+        def build_fit_func(i: int, mdl_pred_col: str, train: SparkDataset):
+            def func() -> Optional[Tuple[int, Model, SparkDataFrame, str]]:
+                if num_folds > 1:
+                    logger.info2(
+                        "===== Start working with \x1b[1mfold {}\x1b[0m for \x1b[1m{}\x1b[0m "
+                        "=====".format(i, self._name)
+                    )
+
+                if self.timer.time_limit_exceeded():
+                    logger.info(f"No time to calculate fold {i}/{num_folds} (Time limit is already exceeded)")
+                    return None
+
+                mdl, vpred, _ = self.fit_predict_single_fold(mdl_pred_col, self.validation_column, train)
+                vpred = vpred.select(SparkDataset.ID_COLUMN, train.target_column, mdl_pred_col)
+
+                return i, mdl, vpred, mdl_pred_col
+            return func
+
+        fit_tasks = [
+            build_fit_func(i, f"{self.prediction_feature}_{i}", train)
+            for i, train in enumerate(train_valid_iterator)
+        ]
+
+        results = self.computations_manager.compute(fit_tasks)
+
+        # TODO: PARALLEL - is it a correct place for running? incorrect functioning in the sequential case
+        self.timer.write_run_info()
+
+        # TODO: PARALLEL - no processing for None
+        # TODO: PARALLEL minor - refactoring
+        models = [model for _, model, _, _ in results]
+        val_preds = [val_pred for _, _, val_pred, _ in results]
+        model_prediction_cols = [model_prediction_col for _, _, _, model_prediction_col in results]
+
+        return models, val_preds, model_prediction_cols
 
 
 class AveragingTransformer(Transformer, HasInputCols, HasOutputCol, DefaultParamsWritable, DefaultParamsReadable):

@@ -17,7 +17,7 @@ from pyspark.sql import functions as sf, Window
 from pyspark.sql.types import DateType, StringType
 from tqdm import tqdm
 
-from sparklightautoml.automl.base import ReadableIntoSparkDf
+from sparklightautoml.automl.base import ReadableIntoSparkDf, ParallelismMode
 from sparklightautoml.automl.blend import SparkWeightedBlender
 from sparklightautoml.automl.presets.base import SparkAutoMLPreset
 from sparklightautoml.automl.presets.utils import (
@@ -30,6 +30,7 @@ from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
+from sparklightautoml.ml_algo.tuning.parallel_optuna import SlotBasedParallelOptunaTuner, ParallelOptunaTuner
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures, SparkLGBAdvancedPipeline
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline
@@ -97,11 +98,12 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         linear_l2_params: Optional[dict] = None,
         gbm_pipeline_params: Optional[dict] = None,
         linear_pipeline_params: Optional[dict] = None,
-        persistence_manager: Optional[PersistenceManager] = None
+        persistence_manager: Optional[PersistenceManager] = None,
+        parallelism_mode: ParallelismMode = ("no_parallelism", -1)
     ):
         if config_path is None:
             config_path = os.path.join(base_dir, self._default_config_path)
-        super().__init__(task, timeout, memory_limit, cpu_limit, gpu_ids, timing_params, config_path)
+        super().__init__(task, timeout, memory_limit, cpu_limit, gpu_ids, timing_params, config_path, parallelism_mode)
 
         self._persistence_manager = persistence_manager or PlainCachePersistenceManager()
 
@@ -232,7 +234,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                 selection_gbm = SparkBoostLGBM(timer=sel_timer_1, **lgb_params)
                 selection_gbm.set_prefix("Selector")
 
-                importance = SparkNpPermutationImportanceEstimator()
+                importance = SparkNpPermutationImportanceEstimator(computations_manager=self._computations_manager)
 
                 extra_selector = NpIterativeFeatureSelector(
                     selection_feats,
@@ -254,7 +256,15 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         # linear model with l2
         time_score = self.get_time_score(n_level, "linear_l2")
         linear_l2_timer = self.timer.get_task_timer("reg_l2", time_score)
-        linear_l2_model = SparkLinearLBFGS(timer=linear_l2_timer, **self.linear_l2_params)
+        linear_l2_params = {
+            **self.linear_l2_params,
+            **(self._parallelism_settings.get('linear_l2', dict()) if self._parallelism_settings else dict())
+        }
+        linear_l2_model = SparkLinearLBFGS(
+            timer=linear_l2_timer,
+            computations_manager=self._computations_manager,
+            **linear_l2_params
+        )
         linear_l2_feats = SparkLinearFeatures(
             output_categories=True, **self.linear_pipeline_params
         )
@@ -285,20 +295,42 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             time_score = self.get_time_score(n_level, key)
             gbm_timer = self.timer.get_task_timer(algo_key, time_score)
             if algo_key == "lgb":
-                gbm_model = SparkBoostLGBM(timer=gbm_timer, **self.lgb_params)
+                lgb_params = {
+                    **self.lgb_params,
+                    **(self._parallelism_settings.get("lgb", dict()) if self._parallelism_settings else dict())
+                }
+                gbm_model = SparkBoostLGBM(
+                    timer=gbm_timer,
+                    computations_manager=self._computations_manager,
+                    **lgb_params
+                )
             elif algo_key == "cb":
                 raise NotImplementedError("Not supported yet")
             else:
                 raise ValueError("Wrong algo key")
 
-            if tuned:
+            if tuned and lgb_params.get('experimental_parallel_mode', False):
                 gbm_model.set_prefix("Tuned")
-                gbm_tuner = OptunaTuner(
+
+                gbm_tuner = SlotBasedParallelOptunaTuner(
                     n_trials=self.tuning_params["max_tuning_iter"],
                     timeout=self.tuning_params["max_tuning_time"],
                     fit_on_holdout=self.tuning_params["fit_on_holdout"],
+                    parallelism=self._parallelism_settings["tuner"],
+                    computations_manager=self._computations_manager
                 )
                 gbm_model = (gbm_model, gbm_tuner)
+            elif tuned:
+                gbm_model.set_prefix("Tuned")
+
+                gbm_tuner = ParallelOptunaTuner(
+                    n_trials=self.tuning_params["max_tuning_iter"],
+                    timeout=self.tuning_params["max_tuning_time"],
+                    fit_on_holdout=self.tuning_params["fit_on_holdout"],
+                    parallelism=self._parallelism_settings["tuner"]
+                )
+                gbm_model = (gbm_model, gbm_tuner)
+
             ml_algos.append(gbm_model)
             force_calc.append(force)
 
