@@ -17,7 +17,7 @@ from sparklightautoml.pipelines.base import TransformerInputOutputRoles
 from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.tasks.base import DEFAULT_PREDICTION_COL_NAME, SparkTask
 from sparklightautoml.transformers.base import DropColumnsTransformer
-from sparklightautoml.utils import NoOpTransformer, ColumnsSelectorTransformer
+from sparklightautoml.utils import ColumnsSelectorTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +73,9 @@ class SparkBlender(TransformerInputOutputRoles, ABC):
         self._set_metadata(predictions, pipes)
 
         if len(pipes) == 1 and len(pipes[0].ml_algos) == 1:
-            # sel_stmnt = ', '.join([
-            #     *[c for c in predictions.service_columns if c in predictions.data.columns],
-            #     f'{pipes[0].ml_algos[0].prediction_feature} AS {self._single_prediction_col_name}'
-            # ])
             self._transformer = Pipeline(stages=[
-                SQLTransformer(statement=f"SELECT *, {pipes[0].ml_algos[0].prediction_feature} AS {self._single_prediction_col_name} FROM __THIS__"),
+                SQLTransformer(statement=f"SELECT *, {pipes[0].ml_algos[0].prediction_feature} "
+                                         f"AS {self._single_prediction_col_name} FROM __THIS__"),
                 DropColumnsTransformer(remove_cols=[pipes[0].ml_algos[0].prediction_feature])
             ]).fit(predictions.data)
 

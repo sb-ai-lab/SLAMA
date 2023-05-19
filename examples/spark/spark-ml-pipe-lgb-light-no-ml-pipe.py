@@ -1,9 +1,10 @@
 import logging.config
 import logging.config
 
-from examples.spark.examples_utils import load_dataset, FSOps
-from examples_utils import get_persistence_manager, save_dataset
+from examples.spark.examples_utils import FSOps
+from examples_utils import get_persistence_manager
 from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
+from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
@@ -64,8 +65,8 @@ if __name__ == "__main__":
         test_score = score(test_preds_ds[:, spark_ml_algo.prediction_feature])
         logger.info(f"Test score (before saving the intermediate dataset): {test_score}")
 
-        save_dataset("/tmp/base_path", test_sds, overwrite=True)
-        test_sds_2 = load_dataset("/tmp")
+        test_sds.save("/tmp/test_sds.dataset", save_mode='overwrite')
+        test_sds_2 = SparkDataset.load("/tmp/test_sds.dataset")
 
         test_preds_ds_2 = spark_ml_algo.predict(test_sds_2)
 

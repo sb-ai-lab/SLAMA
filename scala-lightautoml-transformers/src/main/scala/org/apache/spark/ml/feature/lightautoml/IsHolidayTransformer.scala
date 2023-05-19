@@ -8,9 +8,9 @@ import org.apache.spark.ml.feature.lightautoml.IsHolidayTransformer.IsHolidayTra
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.functions.{col, date_format, lit, to_timestamp, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, functions}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 import scala.collection.JavaConverters._
@@ -21,6 +21,9 @@ class IsHolidayTransformer(override val uid: String, private var holidays_dates:
                 with HasInputCols
                 with HasOutputCols
                 with MLWritable {
+
+  val dt_format = "yyyy-MM-dd"
+
   def this(uid: String, holidays_dates: java.util.Map[String, java.util.Set[String]]) =
     this(
       uid,
@@ -81,7 +84,6 @@ class IsHolidayTransformer(override val uid: String, private var holidays_dates:
       holidaysDatesBcst.value(col_name)(date)
     })
 
-    val dt_format = "yyyy-MM-dd"
     val outColumns = getInputCols.zip(getOutputCols).map {
       case (in_col, out_col) =>
         val dt_col = dataset.schema(in_col).dataType match {

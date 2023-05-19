@@ -43,10 +43,17 @@ params = {
 
 
 class ParallelExperiment:
-    def __init__(self, spark: SparkSession, dataset_name: str):
+    def __init__(self,
+                 spark: SparkSession,
+                 dataset_name: str,
+                 partitions_num: int = 4,
+                 seed: int = 42,
+                 cv: int = 5):
         self.spark = spark
         self.dataset_name = dataset_name
-        self.partitions_num = 4
+        self.partitions_num = partitions_num
+        self.seed = seed
+        self.cv = cv
         self.base_dataset_path = f"/opt/spark_data/parallel_slama_{dataset_name}"
         self.train_path = os.path.join(self.base_dataset_path, "train.parquet")
         self.test_path = os.path.join(self.base_dataset_path, "test.parquet")
@@ -64,15 +71,13 @@ class ParallelExperiment:
                         f"Removing existing files because force is set to True")
             shutil.rmtree(self.base_dataset_path)
 
-        seed = 42
-        cv = 5
         path, task_type, roles, dtype = get_dataset_attrs(self.dataset_name)
 
-        train_df, test_df = prepare_test_and_train(self.spark, path, seed)
+        train_df, test_df = prepare_test_and_train(self.spark, path, self.seed)
 
         task = SparkTask(task_type)
 
-        sreader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
+        sreader = SparkToSparkReader(task=task, cv=self.cv, advanced_roles=False)
         spark_features_pipeline = SparkLGBSimpleFeatures()
 
         # prepare train
@@ -121,7 +126,6 @@ class ParallelExperiment:
         task_type = md["task_type"]
 
         train_df.sql_ctx.sparkSession.sparkContext.setLocalProperty("spark.scheduler.mode", "FAIR")
-        # train_df.sql_ctx.sparkSession.sparkContext.setLocalProperty("spark.task.cpus", "6")
 
         prediction_col = 'LightGBM_prediction_0'
         if task_type in ["binary", "multiclass"]:
@@ -202,7 +206,7 @@ class ParallelExperiment:
 
         return fold, metric_value
 
-    def run(self) -> List[Tuple[int, float]]:
+    def run(self, parallelism: int = 3) -> List[Tuple[int, float]]:
         with log_exec_timer("Parallel experiment runtime"):
             logger.info("Starting to run the experiment")
 
@@ -211,10 +215,10 @@ class ParallelExperiment:
                     self.train_model,
                     fold
                 )
-                for fold in range(3)
+                for fold in range(parallelism)
             ]
 
-            pool = ThreadPool(processes=3)
+            pool = ThreadPool(processes=parallelism)
             tasks = map(inheritable_thread_target, tasks)
             results = (result for result in pool.imap_unordered(lambda f: f(), tasks) if result)
             results = sorted(results, key=lambda x: x[0])

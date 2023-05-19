@@ -3,7 +3,7 @@ import inspect
 import pickle
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple, Optional, cast
+from typing import Tuple, Optional, cast, Any, Dict
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
@@ -97,19 +97,27 @@ def get_dataset_attrs(name: str):
     )
 
 
-def prepare_test_and_train(spark: SparkSession, path: str, seed: int, is_csv: bool = True) -> Tuple[SparkDataFrame, SparkDataFrame]:
+def prepare_test_and_train(
+        spark: SparkSession,
+        path: str,
+        seed: int,
+        test_size: float = 0.2,
+        file_format: str = 'csv',
+        file_format_options: Optional[Dict[str, Any]] = None
+) -> Tuple[SparkDataFrame, SparkDataFrame]:
+    assert 0 <= test_size <= 1
+
     execs = int(spark.conf.get('spark.executor.instances', '1'))
     cores = int(spark.conf.get('spark.executor.cores', '8'))
 
-    if is_csv:
-        data = spark.read.csv(path, header=True, escape="\"")
-    else:
-        data = spark.read.parquet(path)
+    file_format_options = file_format_options \
+        or ({"header": True, "escape": "\""} if file_format == 'csv' else dict())
+    data = spark.read.format(file_format).options(**file_format_options).load(path)
 
     data = data.repartition(execs * cores).cache()
     data.write.mode('overwrite').format('noop').save()
 
-    train_data, test_data = data.randomSplit([0.8, 0.2], seed)
+    train_data, test_data = data.randomSplit([1 - test_size, test_size], seed)
     train_data = train_data.cache()
     test_data = test_data.cache()
     train_data.write.mode('overwrite').format('noop').save()
@@ -126,12 +134,16 @@ def get_spark_session(partitions_num: Optional[int] = None):
     if os.environ.get("SCRIPT_ENV", None) == "cluster":
         spark_sess = SparkSession.builder.getOrCreate()
     else:
+
+        # Be aware, this an alternative way to supply SLAMA with its jars using maven repository
+        # Example requesting both synapseml and SLAMA jar from Maven Central
+        # .config("spark.jars.packages",
+        #         "com.microsoft.azure:synapseml_2.12:0.9.5,io.github.fonhorst:spark-lightautoml_2.12:0.1.1")
+
         spark_sess = (
             SparkSession
             .builder
             .master(f"local[{partitions_num}]")
-            # .config("spark.jars.packages",
-            #         "com.microsoft.azure:synapseml_2.12:0.9.5,io.github.fonhorst:spark-lightautoml_2.12:0.1.1")
             .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
             .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.1.jar")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
@@ -238,44 +250,6 @@ class FSOps:
         Path = sc._jvm.org.apache.hadoop.fs.Path
         fs = cls.get_fs(path)
         return fs.delete(Path('/tmp/just_a_test'))
-
-    # status = fs.listStatus(Path(path))
-    #
-    # for fileStatus in status:
-    #     print(fileStatus.getPath())
-
-
-def save_dataset(path: str, ds: SparkDataset, overwrite: bool = False):
-    dataset_internal_df_path = os.path.join(path, "dataset_internal_df.parquet")
-    dataset_metadata_path = os.path.join(path, "dataset_metadata.parquet")
-    spark = SparkSession.getActiveSession()
-    mode = 'overwrite' if overwrite else 'error'
-
-    if FSOps.exists(path):
-        if overwrite:
-            FSOps.delete_dir(path)
-        else:
-            raise Exception(f"The directory already exists: {path}")
-
-    ds._dependencies = []
-    # noinspection PyProtectedMember
-    internal_df = ds._data
-    ds._data = None
-
-    internal_df.write.parquet(dataset_internal_df_path, mode=mode)
-    spark.createDataFrame([{"data": pickle.dumps(ds)}]).write.parquet(dataset_metadata_path, mode=mode)
-
-
-def load_dataset(path: str) -> SparkDataset:
-    dataset_internal_df_path = os.path.join(path, "dataset_internal_df.parquet")
-    dataset_metadata_path = os.path.join(path, "dataset_metadata.parquet")
-    spark = SparkSession.getActiveSession()
-
-    internal_df = spark.read.parquet(dataset_internal_df_path)
-    data = spark.read.parquet(dataset_metadata_path).first().asDict()['data']
-    ds = cast(SparkDataset, pickle.loads(data))
-    ds._data = internal_df
-    return ds
 
 
 def check_columns(original_df: SparkDataFrame, predicts_df: SparkDataFrame):

@@ -1,8 +1,7 @@
 package org.apache.spark.lightautoml.utils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.functions.{coalesce, col}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -35,8 +34,6 @@ class TestPrefferedLocsPartitionCoalescer extends AnyFunSuite with BeforeAndAfte
             .cache()
     df.write.mode("overwrite").format("noop").save()
 
-//    val prefLoc = spark.sparkContext.getExecutorMemoryStatus.keys.filter(!_.startsWith("fedora")).head
-
     val executor = spark.sparkContext.env.blockManager.master.getMemoryStatus
             .map { case (blockManagerId, _) => blockManagerId}
             .filter(_.executorId != "driver")
@@ -52,12 +49,7 @@ class TestPrefferedLocsPartitionCoalescer extends AnyFunSuite with BeforeAndAfte
 
     coalesced_df.count()
 
-    try{
-      coalesced_df.rdd.barrier().mapPartitions(SomeFunctions.func).count()
-    } catch {
-      case _: Throwable => println("Got some other kind of Throwable exception")
-    }
-
-    val k = 0
+    // should not produce any exception
+    coalesced_df.rdd.barrier().mapPartitions(SomeFunctions.func).count()
   }
 }

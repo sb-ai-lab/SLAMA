@@ -257,7 +257,7 @@ class SparkAutoML(TransformerInputOutputRoles):
         train_dataset = train_dataset.persist(level=PersistenceLevel.REGULAR)
 
         assert (
-            len(self._levels) <= 1 or train_dataset.folds is not None
+            len(self._levels) <= 1 or train_dataset.folds_column is not None
         ), "Not possible to fit more than 1 level without cv folds"
 
         assert (
@@ -363,18 +363,18 @@ class SparkAutoML(TransformerInputOutputRoles):
 
         """
         persistence_manager = persistence_manager or PlainCachePersistenceManager()
-        transformer = self.transformer(
+        automl_model = self.transformer(
             return_all_predictions=return_all_predictions,
             add_array_attrs=add_reader_attrs,
             leave_only_predict_cols=True
         )
 
         data = self._read_data(data)
-        predictions = transformer.transform(data)
+        predictions = automl_model.transform(data)
 
         sds = SparkDataset(
             data=predictions,
-            roles=copy(transformer.get_output_roles()),
+            roles=copy(automl_model.get_output_roles()),
             task=self.reader.task,
             persistence_manager=persistence_manager,
             target=self.reader.target_col
@@ -429,7 +429,7 @@ class SparkAutoML(TransformerInputOutputRoles):
             iterator = SparkHoldoutIterator(new_train)
         elif cv_iter:
             raise NotImplementedError("Not supported now")
-        elif train.folds:
+        elif train.folds_column:
             train = train.persist(level=PersistenceLevel.REGULAR)
             iterator = SparkFoldsIterator(train, n_folds)
         else:
