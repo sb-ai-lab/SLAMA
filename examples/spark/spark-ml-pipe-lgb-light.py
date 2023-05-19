@@ -30,7 +30,6 @@ if __name__ == "__main__":
     seed = 42
     cv = 5
     dataset_name = "lama_test_dataset"
-    # dataset_name = "used_cars_dataset_1x"
     path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
 
     persistence_manager = get_persistence_manager()

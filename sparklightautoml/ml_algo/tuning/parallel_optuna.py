@@ -43,9 +43,7 @@ class ParallelOptunaTuner(OptunaTuner):
 
                """
         assert not ml_algo.is_fitted, "Fitted algo cannot be tuned."
-        # optuna.logging.set_verbosity(logger.getEffectiveLevel())
-        # upd timeout according to ml_algo timer
-        # TODO: PARALLEL - incorrect timer handling in this case
+
         estimated_tuning_time = ml_algo.timer.estimate_tuner_time(len(train_valid_iterator))
         if estimated_tuning_time:
             estimated_tuning_time = max(estimated_tuning_time, 1)

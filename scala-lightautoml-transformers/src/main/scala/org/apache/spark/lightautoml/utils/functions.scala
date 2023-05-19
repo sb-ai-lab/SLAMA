@@ -30,19 +30,32 @@ object functions {
   }
 
   val scalarAveragingUdf: UserDefinedFunction = udf { (vecs: Seq[Option[Double]]) =>
-    val not_null_vecs = vecs.count(_.nonEmpty)
-    if (not_null_vecs == 0){
-//      null
-      0.0
+    vecs.aggregate((0.0, 0))(
+      (agg, optVal) => optVal match {
+        case Some(v) => (agg._1 + v, agg._2 + 1)
+        case _ => agg
+      },
+      (x, y) => (x._1 + y._1, x._2 + y._2)
+    ) match {
+      case (_, 0) => 0
+      case (sm, cnt) => sm / cnt
     }
-    else {
-      val result = vecs.map {
-        case None => 0.0
-        case Some(v) => v
-      }.sum
-      result / not_null_vecs
-    }
+
+
+//    val not_null_vecs = vecs.count(_.nonEmpty)
+//    if (not_null_vecs == 0){
+////      null
+//      0.0
+//    }
+//    else {
+//      val result = vecs.map {
+//        case None => 0.0
+//        case Some(v) => v
+//      }.sum
+//      result / not_null_vecs
+//    }
   }
+
 
   def vector_averaging(vecs_col: Column, dim_size: Column): Column = {
     vectorAveragingUdf(vecs_col, dim_size)

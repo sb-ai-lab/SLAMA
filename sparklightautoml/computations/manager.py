@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from multiprocessing.pool import ThreadPool
 from typing import Callable, Optional, Iterable, Any, Dict, Tuple, cast
-from typing import TypeVar, List, Iterator
+from typing import TypeVar, List
 
 from pyspark import inheritable_thread_target, SparkContext, keyword_only
 from pyspark.ml.common import inherit_doc
@@ -18,7 +18,6 @@ from pyspark.ml.wrapper import JavaTransformer
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.utils import SparkDataFrame
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator, TrainVal
 
 logger = logging.getLogger(__name__)
@@ -63,7 +62,6 @@ def get_executors() -> List[str]:
 def get_executors_cores() -> int:
     master_addr = SparkSession.getActiveSession().conf.get("spark.master")
     if master_addr.startswith("local-cluster"):
-        # exec_str, cores_str, mem_mb_str
         _, cores_str, _ = master_addr[len("local-cluster["): -1].split(",")
         cores = int(cores_str)
         num_threads = max(cores - 1, 1)
@@ -115,32 +113,7 @@ def build_named_parallelism_settings(config_name: str, parallelism: int):
             "tuner": 1,
             "linear_l2": {},
             "lgb": {}
-        },
-        # NOT SUPPORTED RIGHT NOW
-        # "all_levels_parallelism_with_experimental_features": {
-        #     PoolType.ml_pipelines.name: parallelism,
-        #     PoolType.ml_algos.name: parallelism,
-        #     PoolType.job.name: parallelism,
-        #     "tuner": parallelism,
-        #     "linear_l2": {},
-        #     "lgb": {
-        #         "parallelism": parallelism,
-        #         "use_barrier_execution_mode": True,
-        #         "experimental_parallel_mode": False
-        #     }
-        # },
-        # "all_levels_parallelism": {
-        #     PoolType.ml_pipelines.name: parallelism,
-        #     PoolType.ml_algos.name: parallelism,
-        #     PoolType.job.name: parallelism,
-        #     "tuner": parallelism,
-        #     "linear_l2": {},
-        #     "lgb": {
-        #         "parallelism": parallelism,
-        #         "use_barrier_execution_mode": True,
-        #         "experimental_parallel_mode": False
-        #     }
-        # }
+        }
     }
 
     assert config_name in parallelism_config, \
@@ -240,15 +213,6 @@ class ParallelComputationsManager(ComputationsManager):
                  job_pool_size: int = 1):
         # doing it, because ParallelComputations Manager should be deepcopy-able
         create_pools(ml_pipes_pool_size, ml_algos_pool_size, job_pool_size)
-
-        # execs_count = len(get_executors())
-        # exec_cores = get_executors_cores()
-        # num_tasks = int(min(1, int((execs_count * exec_cores) / job_pool_size)))
-        # num_threads = int(min(1, int(num_tasks / execs_count)))
-        # self._default_slot_size = SlotSize(
-        #     num_tasks=num_tasks,
-        #     num_threads_per_executor=num_threads
-        # )
         self._default_slot_size = None
 
     def _get_pool(self, pool_type: PoolType) -> Optional[ThreadPool]:

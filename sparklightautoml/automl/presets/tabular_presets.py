@@ -6,11 +6,11 @@ from typing import Optional, Sequence, Iterable, Tuple, List
 import numpy as np
 from lightautoml.automl.presets.base import upd_params
 from lightautoml.automl.presets.utils import plot_pdp_with_distribution
-from lightautoml.ml_algo.tuning.optuna import OptunaTuner
 from lightautoml.pipelines.selection.base import ComposedSelector
 from lightautoml.pipelines.selection.importance_based import ModelBasedImportanceEstimator, ImportanceCutoffSelector
 from lightautoml.pipelines.selection.permutation_importance_based import NpIterativeFeatureSelector
 from lightautoml.reader.tabular_batch_generator import ReadableToDf
+from lightautoml.utils.timer import TaskTimer
 from pyspark.ml import PipelineModel, Transformer
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as sf, Window
@@ -34,8 +34,8 @@ from sparklightautoml.ml_algo.tuning.parallel_optuna import SlotBasedParallelOpt
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures, SparkLGBAdvancedPipeline
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline
-from sparklightautoml.pipelines.selection.base import SparkSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
+from sparklightautoml.pipelines.selection.base import SparkSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
@@ -294,20 +294,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             algo_key = key.split("_")[0]
             time_score = self.get_time_score(n_level, key)
             gbm_timer = self.timer.get_task_timer(algo_key, time_score)
-            if algo_key == "lgb":
-                lgb_params = {
-                    **self.lgb_params,
-                    **(self._parallelism_settings.get("lgb", dict()) if self._parallelism_settings else dict())
-                }
-                gbm_model = SparkBoostLGBM(
-                    timer=gbm_timer,
-                    computations_manager=self._computations_manager,
-                    **lgb_params
-                )
-            elif algo_key == "cb":
-                raise NotImplementedError("Not supported yet")
-            else:
-                raise ValueError("Wrong algo key")
+            gbm_model, lgb_params = self._get_boosting_model(algo_key, gbm_timer)
 
             if tuned and lgb_params.get('experimental_parallel_mode', False):
                 gbm_model.set_prefix("Tuned")
@@ -343,6 +330,23 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         )
 
         return gbm_pipe
+
+    def _get_boosting_model(self, algo_key: str, gbm_timer: Optional[TaskTimer] = None):
+        if algo_key == "lgb":
+            lgb_params = {
+                **self.lgb_params,
+                **(self._parallelism_settings.get("lgb", dict()) if self._parallelism_settings else dict())
+            }
+            gbm_model = SparkBoostLGBM(
+                timer=gbm_timer,
+                computations_manager=self._computations_manager,
+                **lgb_params
+            )
+        elif algo_key == "cb":
+            raise NotImplementedError("Not supported yet")
+        else:
+            raise ValueError("Wrong algo key")
+        return gbm_model, lgb_params
 
     def create_automl(self, **fit_args):
         """Create basic automl instance.

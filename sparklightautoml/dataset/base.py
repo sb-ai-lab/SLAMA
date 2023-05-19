@@ -82,19 +82,19 @@ class SparkDataset(LAMLDataset, Unpersistable):
     def load(cls,
              path: str,
              file_format: str = 'parquet',
-             options: Optional[Dict[str, Any]] = None,
+             file_format_options: Optional[Dict[str, Any]] = None,
              persistence_manager: Optional['PersistenceManager'] = None) -> 'SparkDataset':
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
-        options = options or dict()
+        file_format_options = file_format_options or dict()
         spark = SparkSession.getActiveSession()
 
         # reading metadata
-        metadata_df = spark.read.format(file_format).options(**options).load(metadata_file_path)
+        metadata_df = spark.read.format(file_format).options(**file_format_options).load(metadata_file_path)
         metadata = pickle.loads(metadata_df.select('metadata').first().asDict()['metadata'])
 
         # reading data
-        data_df = spark.read.format(file_format).options(**options).load(file_path)
+        data_df = spark.read.format(file_format).options(**file_format_options).load(file_path)
         name_fixed_cols = (sf.col(c).alias(c.replace('[', '(').replace(']', ')')) for c in data_df.columns)
         data_df = data_df.select(*name_fixed_cols)
 
@@ -224,11 +224,12 @@ class SparkDataset(LAMLDataset, Unpersistable):
 
     @features.setter
     def features(self, val: List[str]):
-        """Ignore setting features.
+        """
+            Set features available in this dataset.
+            Columns won't be deleted from the dataframe but won't appear throught features property.
 
-        Args:
-            val: ignored.
-
+            Args:
+                val: list of feature names.
         """
         diff = set(val).difference(self.data.columns)
         assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
@@ -500,10 +501,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
         ds.set_data(self.data, self.features, self.roles, frozen=True)
         return ds
 
-    def save(self, path: str, save_mode: str = 'error', file_format: str = 'parquet', options: Optional[Dict[str, Any]] = None):
+    def save(self, path: str, save_mode: str = 'error', file_format: str = 'parquet', file_format_options: Optional[Dict[str, Any]] = None):
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
-        options = options or dict()
+        file_format_options = file_format_options or dict()
 
         # prepare metadata of the dataset
         metadata = {
@@ -520,10 +521,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
         create_directory(path, spark=self.spark_session, exists_ok=(save_mode in ['overwrite', 'append']))
 
         # writing dataframes
-        metadata_df.write.format(file_format).mode(save_mode).options(**options).save(metadata_file_path)
+        metadata_df.write.format(file_format).mode(save_mode).options(**file_format_options).save(metadata_file_path)
         # fix name of columns: parquet cannot have columns with '(' or ')' in the name
         name_fixed_cols = (sf.col(c).alias(c.replace('(', '[').replace(')', ']')) for c in self.data.columns)
-        self.data.select(*name_fixed_cols).write.format(file_format).mode(save_mode).options(**options).save(file_path)
+        self.data.select(*name_fixed_cols).write.format(file_format).mode(save_mode).options(**file_format_options).save(file_path)
 
     def to_pandas(self) -> PandasDataset:
         data, target_data, folds_data, roles = self._materialize_to_pandas()
