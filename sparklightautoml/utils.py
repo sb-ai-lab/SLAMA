@@ -9,17 +9,16 @@ from logging import Logger
 from typing import Optional, Tuple, Dict, List, cast
 
 import pyspark
+from py4j.java_gateway import java_import
 from pyspark import RDD
 from pyspark.ml import Transformer, Estimator
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCols, HasOutputCols
-from pyspark.ml.pipeline import PipelineModel, PipelineSharedReadWrite, PipelineModelReader
-from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLReadable, MLWritable, MLWriter, \
+from pyspark.ml.pipeline import PipelineModel, PipelineSharedReadWrite
+from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLWriter, \
     DefaultParamsWriter, MLReader, DefaultParamsReader
 from pyspark.sql import SparkSession
-
-from sparklightautoml.mlwriters import CommonPickleMLWritable, CommonPickleMLReadable
 
 VERBOSE_LOGGING_FORMAT = "%(asctime)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
 
@@ -444,3 +443,17 @@ def JobGroup(group_id: str, description: str, spark: SparkSession):
     sc.setJobGroup(group_id, description)
     yield
     sc._jsc.clearJobGroup()
+
+
+# noinspection PyProtectedMember,PyUnresolvedReferences
+def create_directory(path: str, spark: SparkSession, exists_ok: bool = False):
+    java_import(spark._jvm, 'org.apache.hadoop.fs.Path')
+    java_import(spark._jvm, 'org.apache.hadoop.fs.FileSystem')
+
+    jpath = spark._jvm.Path(path)
+    fs = spark._jvm.FileSystem.get(spark._jsc.hadoopConfiguration())
+
+    if not fs.exists(jpath):
+        fs.mkdirs(jpath)
+    elif not exists_ok:
+        raise FileExistsError(f"The path already exists: {path}")

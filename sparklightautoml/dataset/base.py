@@ -1,5 +1,7 @@
 import functools
 import logging
+import os
+import pickle
 import uuid
 import warnings
 from abc import ABC, abstractmethod
@@ -29,7 +31,7 @@ from pyspark.sql.session import SparkSession
 
 from sparklightautoml import VALIDATION_COLUMN
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import SparkDataFrame, create_directory
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,28 @@ class SparkDataset(LAMLDataset, Unpersistable):
     _dataset_type = "SparkDataset"
 
     ID_COLUMN = "_id"
+
+    @classmethod
+    def load(cls,
+             path: str,
+             file_format: str = 'parquet',
+             options: Optional[Dict[str, Any]] = None,
+             persistence_manager: Optional['PersistenceManager'] = None) -> 'SparkDataset':
+        metadata_file_path = os.path.join(path, f"metadata.{file_format}")
+        file_path = os.path.join(path, f"data.{file_format}")
+        options = options or dict()
+        spark = SparkSession.getActiveSession()
+
+        # reading metadata
+        metadata_df = spark.read.format(file_format).options(**options).load(metadata_file_path)
+        metadata = pickle.loads(metadata_df.select('metadata').first().asDict()['metadata'])
+
+        # reading data
+        data_df = spark.read.format(file_format).options(**options).load(file_path)
+        name_fixed_cols = (sf.col(c).alias(c.replace('[', '(').replace(']', ')')) for c in data_df.columns)
+        data_df = data_df.select(*name_fixed_cols)
+
+        return SparkDataset(data=data_df, persistence_manager=persistence_manager, **metadata)
 
     # TODO: SLAMA - implement filling dependencies
     @classmethod
@@ -133,29 +157,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
                  bucketized: bool = False,
                  dependencies: Optional[List[Dependency]] = None,
                  name: Optional[str] = None,
+                 target: Optional[str] = None,
+                 folds: Optional[str] = None,
                  **kwargs: Any):
-
-        if "target" in kwargs:
-            assert isinstance(kwargs["target"], str), "Target should be a str representing column name"
-            self._target_column: str = kwargs["target"]
-        else:
-            self._target_column = None
-
-        self._folds_column = None
-        if "folds" in kwargs and kwargs["folds"] is not None:
-            assert isinstance(kwargs["folds"], str), "Folds should be a str representing column name"
-            self._folds_column: str = kwargs["folds"]
-        else:
-            self._folds_column = None
-
         self._validate_dataframe(data)
-
-        self._data = None
-
-        # columns that can be transferred intact across all transformations
-        # in the pipeline
-        base_service_columns = {self.ID_COLUMN, self.target_column, self.folds_column, VALIDATION_COLUMN}
-        self._service_columns: Set[str] = base_service_columns
 
         roles = roles if roles else dict()
 
@@ -166,15 +171,20 @@ class SparkDataset(LAMLDataset, Unpersistable):
                 if roles[f].name == r:
                     roles[f] = DropRole()
 
+        self._data = None
         self._bucketized = bucketized
         self._roles = None
-
         self._uid = str(uuid.uuid4())
         self._persistence_manager = persistence_manager
         self._dependencies = dependencies
         self._frozen = False
         self._name = name
         self._is_persisted = False
+        self._target_column = target
+        self._folds_column = folds
+        # columns that can be transferred intact across all transformations
+        # in the pipeline
+        self._service_columns: Set[str] = {self.ID_COLUMN, target, folds, VALIDATION_COLUMN}
 
         super().__init__(data, list(roles.keys()), roles, task, **kwargs)
 
@@ -489,6 +499,31 @@ class SparkDataset(LAMLDataset, Unpersistable):
         ds = self.empty()
         ds.set_data(self.data, self.features, self.roles, frozen=True)
         return ds
+
+    def save(self, path: str, save_mode: str = 'error', file_format: str = 'parquet', options: Optional[Dict[str, Any]] = None):
+        metadata_file_path = os.path.join(path, f"metadata.{file_format}")
+        file_path = os.path.join(path, f"data.{file_format}")
+        options = options or dict()
+
+        # prepare metadata of the dataset
+        metadata = {
+            "name": self.name,
+            "roles": self.roles,
+            "task": self.task,
+            "target": self.target_column,
+            "folds": self.folds_column,
+        }
+        metadata_str = pickle.dumps(metadata)
+        metadata_df = self.spark_session.createDataFrame([{"metadata": metadata_str}])
+
+        # create directory that will store data and metadata as separate files of dataframes
+        create_directory(path, spark=self.spark_session, exists_ok=(save_mode in ['overwrite', 'append']))
+
+        # writing dataframes
+        metadata_df.write.format(file_format).mode(save_mode).options(**options).save(metadata_file_path)
+        # fix name of columns: parquet cannot have columns with '(' or ')' in the name
+        name_fixed_cols = (sf.col(c).alias(c.replace('(', '[').replace(')', ']')) for c in self.data.columns)
+        self.data.select(*name_fixed_cols).write.format(file_format).mode(save_mode).options(**options).save(file_path)
 
     def to_pandas(self) -> PandasDataset:
         data, target_data, folds_data, roles = self._materialize_to_pandas()
