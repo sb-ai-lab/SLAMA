@@ -1,11 +1,11 @@
 import logging.config
 
-from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
+from examples_utils import get_spark_session, prepare_test_and_train, get_dataset
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -20,11 +20,11 @@ if __name__ == "__main__":
     cv = 2
     use_algos = [["linear_l2"]]
     dataset_name = "used_cars_dataset"
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type)
-        train_data, test_data = prepare_test_and_train(spark, path, seed)
+        task = SparkTask(dataset.task_type)
+        train_data, test_data = prepare_test_and_train(dataset, seed)
 
         test_data_dropped = test_data
 
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
         oof_predictions = automl.fit_predict(
             train_data,
-            roles=roles
+            roles=dataset.roles
         ).persist()
 
     logger.info("Predicting on out of fold")
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     logger.info(f"score for out-of-fold predictions: {metric_value}")
 
-    feature_scores = automl.get_feature_scores(calc_method="fast", data=test_data_dropped, silent=False)
+    feature_scores = automl.get_feature_scores(data=test_data_dropped, silent=False)
 
     print(feature_scores)
 

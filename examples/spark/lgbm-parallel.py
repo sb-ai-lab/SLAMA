@@ -13,7 +13,7 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as sf
 from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
 
-from examples.spark.examples_utils import get_spark_session, get_dataset_attrs, prepare_test_and_train
+from examples.spark.examples_utils import get_spark_session, get_dataset, prepare_test_and_train
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
@@ -71,17 +71,17 @@ class ParallelExperiment:
                         f"Removing existing files because force is set to True")
             shutil.rmtree(self.base_dataset_path)
 
-        path, task_type, roles, dtype = get_dataset_attrs(self.dataset_name)
+        dataset = get_dataset(self.dataset_name)
 
-        train_df, test_df = prepare_test_and_train(self.spark, path, self.seed)
+        train_df, test_df = prepare_test_and_train(dataset, self.seed)
 
-        task = SparkTask(task_type)
+        task = SparkTask(dataset.task_type)
 
         sreader = SparkToSparkReader(task=task, cv=self.cv, advanced_roles=False)
         spark_features_pipeline = SparkLGBSimpleFeatures()
 
         # prepare train
-        train_sdataset = sreader.fit_read(train_df, roles=roles)
+        train_sdataset = sreader.fit_read(train_df, roles=dataset.roles)
         train_sdataset = spark_features_pipeline.fit_transform(train_sdataset)
 
         # prepare test
@@ -95,8 +95,8 @@ class ParallelExperiment:
 
         metadata = {
             "roles": train_sdataset.roles,
-            "task_type": task_type,
-            "target": roles["target"]
+            "task_type": dataset.task_type,
+            "target": dataset.roles["target"]
         }
 
         with open(self.metadata_path, "wb") as f:

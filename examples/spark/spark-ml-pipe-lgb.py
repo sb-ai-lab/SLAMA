@@ -5,7 +5,7 @@ import pyspark.sql.functions as sf
 from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector, ModelBasedImportanceEstimator
 from pyspark.ml import PipelineModel
 
-from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
+from examples_utils import get_spark_session, prepare_test_and_train, get_dataset
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import CompositePlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     seed = 42
     cv = 5
     dataset_name = "lama_test_dataset"
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     ml_alg_kwargs = {
         'auto_unique_co': 10,
@@ -49,23 +49,22 @@ if __name__ == "__main__":
     }
 
     with log_exec_time():
-        train_df, test_df = prepare_test_and_train(spark, path, seed)
+        train_df, test_df = prepare_test_and_train(dataset, seed)
 
-        task = SparkTask(task_type)
+        task = SparkTask(dataset.task_type)
         score = task.get_dataset_metric()
         sreader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
         spark_ml_algo = SparkBoostLGBM(freeze_defaults=False)
         spark_features_pipeline = SparkLGBAdvancedPipeline(**ml_alg_kwargs)
         spark_selector = SparkSelectionPipelineWrapper(
             BugFixSelectionPipelineWrapper(ImportanceCutoffSelector(
-                cutoff=0.0,
                 feature_pipeline=SparkLGBSimpleFeatures(),
                 ml_algo=SparkBoostLGBM(freeze_defaults=False),
                 imp_estimator=ModelBasedImportanceEstimator()
             ))
         )
 
-        sdataset = sreader.fit_read(train_df, roles=roles, persistence_manager=persistence_manager)
+        sdataset = sreader.fit_read(train_df, roles=dataset.roles, persistence_manager=persistence_manager)
 
         iterator = SparkFoldsIterator(sdataset, n_folds=cv)
 
@@ -91,7 +90,7 @@ if __name__ == "__main__":
         test_pred_df = transformer.transform(test_df)
         test_pred_df = test_pred_df.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(spark_ml_algo.prediction_feature).alias('prediction')
         )
         test_score = score(test_pred_df)
@@ -104,7 +103,7 @@ if __name__ == "__main__":
         test_pred_df = pipeline_model.transform(test_df)
         test_pred_df = test_pred_df.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(spark_ml_algo.prediction_feature).alias('prediction')
         )
         test_score = score(test_pred_df)
