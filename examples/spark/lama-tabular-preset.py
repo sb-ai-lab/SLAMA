@@ -2,12 +2,12 @@ import logging.config
 import uuid
 
 import pandas as pd
+from lightautoml.automl.presets.tabular_presets import TabularAutoML
+from lightautoml.tasks import Task
 from sklearn.model_selection import train_test_split
 
-from examples_utils import get_dataset_attrs
-from lightautoml.automl.presets.tabular_presets import TabularAutoML
+from examples_utils import get_dataset
 from sparklightautoml.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
-from lightautoml.tasks import Task
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -27,13 +27,13 @@ def main(dataset_name: str, seed: int):
     # 3. use_algos = [["lgb", "linear_l2"], ["lgb"]]
     use_algos = [["lgb", "linear_l2"], ["lgb"]]
 
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     with log_exec_timer("LAMA") as train_timer:
-        data = pd.read_csv(path, dtype=dtype)
+        data = pd.read_csv(dataset.path, dtype=dataset.dtype)
         train_data, test_data = train_test_split(data, test_size=0.2, random_state=seed)
 
-        task = Task(task_type)
+        task = Task(dataset.task_type)
 
         num_threads = 8
         automl = TabularAutoML(
@@ -49,7 +49,7 @@ def main(dataset_name: str, seed: int):
 
         oof_predictions = automl.fit_predict(
             train_data,
-            roles=roles
+            roles=dataset.roles
         )
 
     logger.info("Predicting on out of fold")
@@ -61,7 +61,7 @@ def main(dataset_name: str, seed: int):
 
     with log_exec_timer() as predict_timer:
         te_pred = automl.predict(test_data)
-        te_pred.target = test_data[roles['target']]
+        te_pred.target = test_data[dataset.roles['target']]
 
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred)

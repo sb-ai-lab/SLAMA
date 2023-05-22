@@ -1,15 +1,14 @@
 import logging.config
 import os
 import uuid
-from typing import cast
 
 import pandas as pd
 import pyspark.sql.functions as sf
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
+from examples_utils import get_dataset, prepare_test_and_train, get_spark_session
 from examples_utils import get_persistence_manager, BUCKET_NUMS, check_columns
-from examples_utils import get_dataset_attrs, prepare_test_and_train, get_spark_session
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.tasks.base import SparkTask
@@ -32,7 +31,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
     use_algos = [["lgb", "linear_l2"], ["lgb"]]
     cv = 3
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     persistence_manager = get_persistence_manager()
     # Alternative ways to define persistence_manager
@@ -40,8 +39,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # persistence_manager = CompositePlainCachePersistenceManager(bucket_nums=BUCKET_NUMS)
 
     with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type)
-        train_data, test_data = prepare_test_and_train(spark, path, seed)
+        task = SparkTask(dataset.task_type)
+        train_data, test_data = prepare_test_and_train(dataset, seed)
 
         test_data_dropped = test_data
 
@@ -62,7 +61,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         oof_predictions = automl.fit_predict(
             train_data,
-            roles=roles,
+            roles=dataset.roles,
             persistence_manager=persistence_manager
         )
 
@@ -100,7 +99,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(pred_column).alias('prediction')
         ))
 
@@ -125,7 +124,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(pred_column).alias('prediction')
         ))
 

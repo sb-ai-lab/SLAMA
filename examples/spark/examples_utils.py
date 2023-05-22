@@ -1,20 +1,35 @@
-import os
 import inspect
-import pickle
-from dataclasses import dataclass
-from enum import Enum
-from typing import Tuple, Optional, cast, Any, Dict
+import os
+from dataclasses import dataclass, field
+from typing import Tuple, Optional, Any, Dict
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 
-from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.utils import SparkDataFrame
 from sparklightautoml.dataset import persistence
-
+from sparklightautoml.utils import SparkDataFrame
 
 BUCKET_NUMS = 16
 PERSISTENCE_MANAGER_ENV_VAR = "PERSISTENCE_MANAGER"
+BASE_DATASETS_PATH = "file:///opt/spark_data/"
+
+
+@dataclass(frozen=True)
+class Dataset:
+    path: str
+    task_type: str
+    roles: Dict[str, Any]
+    dtype: Dict[str, str] = field(default_factory=dict)
+    file_format: str = 'csv'
+    file_format_options: Dict[str, Any] = field(default_factory=lambda: {"header": True, "escape": "\""})
+
+    def load(self) -> SparkDataFrame:
+        spark = SparkSession.getActiveSession()
+        return spark.read.format(self.file_format).options(**self.file_format_options).load(self.path)
+
+
+def ds_path(rel_path: str) -> str:
+    return os.path.join(BASE_DATASETS_PATH, rel_path)
 
 
 used_cars_params = {
@@ -37,82 +52,68 @@ used_cars_params = {
 }
 
 DATASETS = {
-    "used_cars_dataset": {
-            "path": "file:///opt/spark_data/small_used_cars_data.csv",
-            **used_cars_params
-    },
-
-    "used_cars_dataset_1x": {
-        "path": "file:///opt/spark_data/derivative_datasets/1x_dataset.csv",
+    "used_cars_dataset": Dataset(
+        path=ds_path("small_used_cars_data.csv"),
         **used_cars_params
-    },
-
-    "used_cars_dataset_4x": {
-        "path": "file:///opt/spark_data/derivative_datasets/4x_dataset.csv",
+    ),
+    "used_cars_dataset_1x": Dataset(
+        path=ds_path("derivative_datasets/1x_dataset.csv"),
         **used_cars_params
-    },
-
+    ),
+    "used_cars_dataset_4x": Dataset(
+        path=ds_path("derivative_datasets/4x_dataset.csv"),
+        **used_cars_params
+    ),
+    "lama_test_dataset": Dataset(
+        path=ds_path("sampled_app_train.csv"),
+        task_type="binary",
+        roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
+    ),
     # https://www.openml.org/d/4549
-    "buzz_dataset": {
-        "path": "file:///opt/spark_data/Buzzinsocialmedia_Twitter_25k.csv",
-        "task_type": "reg",
-        "roles": {"target": "Annotation"},
-    },
-
-    "lama_test_dataset": {
-        "path": "file:///opt/spark_data/sampled_app_train.csv",
-        "task_type": "binary",
-        "roles": {"target": "TARGET", "drop": ["SK_ID_CURR"]},
-    },
-
+    "buzz_dataset": Dataset(
+        path=ds_path("Buzzinsocialmedia_Twitter_25k.csv"),
+        task_type="binary",
+        roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
+    ),
     # https://www.openml.org/d/734
-    "ailerons_dataset": {
-        "path": "file:///opt/spark_data/ailerons.csv",
-        "task_type": "binary",
-        "roles": {"target": "binaryClass"},
-    },
-
+    "ailerons_dataset": Dataset(
+        path=ds_path("ailerons.csv"),
+        task_type="binary",
+        roles={"target": "binaryClass"}
+    ),
     # https://www.openml.org/d/382
-    "ipums_97": {
-        "path": "file:///opt/spark_data/ipums_97.csv",
-        "task_type": "multiclass",
-        "roles": {"target": "movedin"},
-    },
+    "ipums_97": Dataset(
+        path=ds_path("ipums_97.csv"),
+        task_type="multiclass",
+        roles={"target": "movedin"}
+    ),
 
-    "company_bankruptcy_dataset": {
-        "path": "file:///opt/spark_data/company_bankruptcy_prediction_data.csv",
-        "task_type": "binary",
-        "roles": {"target": "Bankrupt?"},
-    }
+    "company_bankruptcy_dataset": Dataset(
+        path=ds_path("company_bankruptcy_prediction_data.csv"),
+        task_type="binary",
+        roles={"target": "Bankrupt?"}
+    )
 }
 
 
-def get_dataset_attrs(name: str):
-    return (
-        DATASETS[name]['path'],
-        DATASETS[name]['task_type'],
-        DATASETS[name]['roles'],
-        # to assure that LAMA correctly interprets certain columns as categorical
-        DATASETS[name].get('dtype', dict()),
-    )
+def get_dataset(name: str) -> Dataset:
+    assert name in DATASETS, f"Unknown dataset: {name}. Known datasets: {list(DATASETS.keys())}"
+    return DATASETS[name]
 
 
 def prepare_test_and_train(
-        spark: SparkSession,
-        path: str,
+        dataset: Dataset,
         seed: int,
-        test_size: float = 0.2,
-        file_format: str = 'csv',
-        file_format_options: Optional[Dict[str, Any]] = None
+        test_size: float = 0.2
 ) -> Tuple[SparkDataFrame, SparkDataFrame]:
     assert 0 <= test_size <= 1
+
+    spark = SparkSession.getActiveSession()
 
     execs = int(spark.conf.get('spark.executor.instances', '1'))
     cores = int(spark.conf.get('spark.executor.cores', '8'))
 
-    file_format_options = file_format_options \
-        or ({"header": True, "escape": "\""} if file_format == 'csv' else dict())
-    data = spark.read.format(file_format).options(**file_format_options).load(path)
+    data = dataset.load()
 
     data = data.repartition(execs * cores).cache()
     data.write.mode('overwrite').format('noop').save()

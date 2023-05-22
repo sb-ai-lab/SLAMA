@@ -2,7 +2,7 @@ import logging.config
 import logging.config
 
 from examples_utils import get_persistence_manager
-from examples_utils import get_spark_session, get_dataset_attrs, prepare_test_and_train
+from examples_utils import get_spark_session, get_dataset, prepare_test_and_train
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     seed = 42
     cv = 3
     dataset_name = "lama_test_dataset"
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
     ml_alg_kwargs = {
         'auto_unique_co': 10,
@@ -36,9 +36,9 @@ if __name__ == "__main__":
     }
 
     with log_exec_time():
-        train_df, test_df = prepare_test_and_train(spark, path, seed)
+        train_df, test_df = prepare_test_and_train(dataset, seed)
 
-        task = SparkTask(task_type)
+        task = SparkTask(dataset.task_type)
         score = task.get_dataset_metric()
 
         sreader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         spark_features_pipeline = SparkLinearFeatures(**ml_alg_kwargs)
         spark_ml_algo = SparkLinearLBFGS(default_params={'regParam': [1e-5]})
 
-        sdataset = sreader.fit_read(train_df, roles=roles, persistence_manager=persistence_manager)
+        sdataset = sreader.fit_read(train_df, roles=dataset.roles, persistence_manager=persistence_manager)
         sdataset = spark_features_pipeline.fit_transform(sdataset)
         iterator = SparkFoldsIterator(sdataset, n_folds=cv)
         oof_preds_ds = spark_ml_algo.fit_predict(iterator)

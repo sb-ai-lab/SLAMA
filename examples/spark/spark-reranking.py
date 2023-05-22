@@ -2,7 +2,7 @@ import logging.config
 
 from pyspark.sql import SparkSession
 
-from examples_utils import get_persistence_manager, BUCKET_NUMS
+from examples_utils import get_persistence_manager, BUCKET_NUMS, Dataset
 from examples_utils import prepare_test_and_train, get_spark_session
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.tasks.base import SparkTask
@@ -38,15 +38,19 @@ def main(spark: SparkSession, seed: int):
 
     use_algos = [["lgb"]]
     cv = 3
-    path = '/opt/experiments/test_exp/full_second_level_train.parquet'
-    task_type = 'binary'
-    roles = {"target": "target"}
+    dataset = Dataset(
+        path='/opt/experiments/test_exp/full_second_level_train.parquet',
+        task_type='binary',
+        roles={"target": "target"},
+        file_format='parquet',
+        file_format_options={}
+    )
 
     persistence_manager = get_persistence_manager()
 
-    with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type)
-        train_data, test_data = prepare_test_and_train(spark, path, seed, file_format='parquet')
+    with log_exec_timer("spark-lama training"):
+        task = SparkTask(dataset.task_type)
+        train_data, test_data = prepare_test_and_train(dataset, seed)
 
         train_data = train_data.drop("user_idx", "item_idx")
         test_data_dropped = test_data
@@ -66,7 +70,7 @@ def main(spark: SparkSession, seed: int):
 
         oof_predictions = automl.fit_predict(
             train_data,
-            roles=roles,
+            roles=dataset.roles,
             persistence_manager=persistence_manager
         )
 
