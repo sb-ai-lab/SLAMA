@@ -448,10 +448,15 @@ def JobGroup(group_id: str, description: str, spark: SparkSession):
 # noinspection PyProtectedMember,PyUnresolvedReferences
 def create_directory(path: str, spark: SparkSession, exists_ok: bool = False):
     java_import(spark._jvm, 'org.apache.hadoop.fs.Path')
+    java_import(spark._jvm, 'java.net.URI')
     java_import(spark._jvm, 'org.apache.hadoop.fs.FileSystem')
 
-    jpath = spark._jvm.Path(path)
-    fs = spark._jvm.FileSystem.get(spark._jsc.hadoopConfiguration())
+    juri = spark._jvm.Path(path).toUri()
+    jpath = spark._jvm.Path(juri.getPath())
+    jscheme = spark._jvm.URI(f"{juri.getScheme()}://{juri.getAuthority() or ''}/") \
+        if juri.getScheme() else None
+    fs = spark._jvm.FileSystem.get(jscheme, spark._jsc.hadoopConfiguration()) \
+        if jscheme else spark._jvm.FileSystem.get(spark._jsc.hadoopConfiguration())
 
     if not fs.exists(jpath):
         fs.mkdirs(jpath)
