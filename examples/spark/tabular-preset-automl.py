@@ -49,10 +49,13 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
+            # execution mode only available for synapseml 0.11.1
             lgb_params={
                 'use_single_dataset_mode': True,
+                'execution_mode': 'streaming',
                 'convert_to_onnx': False,
-                'mini_batch_size': 1000
+                'mini_batch_size': 1000,
+
             },
             linear_l2_params={'default_params': {'regParam': [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False},

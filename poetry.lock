@@ -2637,14 +2637,14 @@ files = [
 
 [[package]]
 name = "py4j"
-version = "0.10.9.2"
+version = "0.10.9.5"
 description = "Enables Python programs to dynamically access arbitrary Java objects"
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "py4j-0.10.9.2-py2.py3-none-any.whl", hash = "sha256:bf0485388e415ff26710d2dc719cb0ede16cf1164b1ee757e0ebb2e98c471521"},
-    {file = "py4j-0.10.9.2.tar.gz", hash = "sha256:624f97c363b8dd84822bc666b12fa7f7d97824632b2ff3d852cc491359ce7615"},
+    {file = "py4j-0.10.9.5-py2.py3-none-any.whl", hash = "sha256:52d171a6a2b031d8a5d1de6efe451cf4f5baff1a2819aabc3741c8406539ba04"},
+    {file = "py4j-0.10.9.5.tar.gz", hash = "sha256:276a4a3c5a2154df1860ef3303a927460e02e97b047dc0a47c1c3fb8cce34db6"},
 ]
 
 [[package]]
@@ -2808,23 +2808,23 @@ files = [
 
 [[package]]
 name = "pyspark"
-version = "3.2.0"
+version = "3.3.1"
 description = "Apache Spark Python API"
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 files = [
-    {file = "pyspark-3.2.0.tar.gz", hash = "sha256:bfea06179edbfb4bc76a0f470bd3c38e12f00e1023e3ad0373558d07cff102ab"},
+    {file = "pyspark-3.3.1.tar.gz", hash = "sha256:e99fa7de92be406884bfd831c32b9306a3a99de44cfc39a2eefb6ed07445d5fa"},
 ]
 
 [package.dependencies]
-py4j = "0.10.9.2"
+py4j = "0.10.9.5"
 
 [package.extras]
-ml = ["numpy (>=1.7)"]
-mllib = ["numpy (>=1.7)"]
-pandas-on-spark = ["numpy (>=1.14)", "pandas (>=0.23.2)", "pyarrow (>=1.0.0)"]
-sql = ["pandas (>=0.23.2)", "pyarrow (>=1.0.0)"]
+ml = ["numpy (>=1.15)"]
+mllib = ["numpy (>=1.15)"]
+pandas-on-spark = ["numpy (>=1.15)", "pandas (>=1.0.5)", "pyarrow (>=1.0.0)"]
+sql = ["pandas (>=1.0.5)", "pyarrow (>=1.0.0)"]
 
 [[package]]
 name = "pytest"
@@ -3582,13 +3582,13 @@ test = ["pylint", "pytest", "pytest-black", "pytest-cov", "pytest-pylint"]
 
 [[package]]
 name = "synapseml"
-version = "0.9.5"
+version = "0.11.1"
 description = "Synapse Machine Learning"
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "synapseml-0.9.5-py2.py3-none-any.whl", hash = "sha256:b377278908e4448ac02d51ecebeaf2420afb91d1efd939fee181989028ba9516"},
+    {file = "synapseml-0.11.1-py2.py3-none-any.whl", hash = "sha256:ec40e24cc85e6f0be6bc2649f912b5959f598132738f0562dfdf5c340c60dd39"},
 ]
 
 [[package]]
@@ -3960,4 +3960,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8, <3.10"
-content-hash = "5cea47f9f0f054d4d420fab691b8c9241943c3447629dbe62ff02c840c8452ce"
+content-hash = "085db7191b91ec386df68793b2a855d048bc36b1b5d2264acb95402f2da6d886"

@@ -41,9 +41,9 @@ poetry-core = "^1.0.0"
 lightautoml = "0.3.7.1"
 
 # PySpark
-pyspark = "3.2.0"
+pyspark = "3.3.1"
 pyarrow = ">=1.0.0"
-synapseml = "0.9.5"
+synapseml = "0.11.1"
 toposort = "1.7"
 onnxmltools = "^1.11.0"
 weasyprint = {version = "52.5", optional = true}

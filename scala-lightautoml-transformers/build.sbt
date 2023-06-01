@@ -15,9 +15,9 @@ resolvers ++= Seq(
 
 libraryDependencies ++= Seq(
     "com.microsoft.azure" % "synapseml_2.12" % "0.9.5",
-    "org.apache.spark" %% "spark-core" % "3.2.0" % "provided",
-    "org.apache.spark" %% "spark-sql" % "3.2.0" % "provided",
-    "org.apache.spark" %% "spark-mllib" % "3.2.0" % "provided",
+    "org.apache.spark" %% "spark-core" % "3.3.1" % "provided",
+    "org.apache.spark" %% "spark-sql" % "3.3.1" % "provided",
+    "org.apache.spark" %% "spark-mllib" % "3.3.1" % "provided",
     "org.scalatest" %% "scalatest" % "3.2.14" % Test
 )
 
