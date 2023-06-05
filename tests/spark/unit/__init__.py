@@ -1,6 +1,7 @@
 import logging.config
 import logging.config
 import os
+import random
 import shutil
 from copy import copy
 from typing import Tuple, get_args, cast, List, Optional, Dict, Union
@@ -11,7 +12,7 @@ import pytest
 from hdfs import InsecureClient
 from lightautoml.dataset.base import LAMLDataset
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset
-from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import ColumnRole, NumericRole
 from lightautoml.transformers.base import LAMLTransformer
 from lightautoml.transformers.numeric import NumpyTransformable
 from lightautoml.utils.logging import set_stdout_level, verbosity_to_loglevel
@@ -20,6 +21,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as sf
 
 from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.tasks.base import SparkTask as SparkTask
 from sparklightautoml.transformers.base import ObsoleteSparkTransformer, SparkBaseEstimator, SparkBaseTransformer, \
@@ -52,7 +54,8 @@ def create_spark_session(warehouse_path: str):
         SparkSession
         .builder
         .appName("LAMA-test-app")
-        .master("local-cluster[2,2,2048]")
+        # .master("local-cluster[2,2,2048]")
+        .master("local[4]")
         .config("spark.driver.memory", "8g")
         .config("spark.jars", JAR_PATH)
         .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
@@ -156,6 +159,30 @@ def workdir() -> str:
     yield workdir_path
 
     shutil.rmtree(workdir_path)
+
+
+@pytest.fixture(scope="function")
+def dataset(spark: SparkSession) -> SparkDataset:
+    num_folds = 5
+    data = [{
+        SparkDataset.ID_COLUMN: i,
+        "a": i + 1,
+        "b": i * 10,
+        "c": i / 2,
+        "target": 0 if random.random() < 0.6 else 1,
+        "fold": i % num_folds
+    } for i in range(10000)]
+    df = spark.createDataFrame(data).cache()
+    df.write.mode('overwrite').format('noop').save()
+    ds = SparkDataset(
+        data=df,
+        roles={"a": NumericRole(), "b": NumericRole(), "c": NumericRole()},
+        target="target",
+        folds="fold",
+        persistence_manager=PlainCachePersistenceManager(),
+        task=SparkTask("binary")
+    )
+    return ds
 
 
 def compare_feature_distrs_in_datasets(lama_df, spark_df, diff_proc=0.05):

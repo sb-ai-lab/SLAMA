@@ -223,7 +223,7 @@ class BucketedPersistenceManager(BasePersistenceManager):
         self._no_unpersisting = no_unpersisting
 
     def _persist(self, pdf: PersistableDataFrame, level: PersistenceLevel) -> PersistableDataFrame:
-        spark = pdf.sdf.sql_ctx.sparkSession
+        spark = SparkSession.getActiveSession()
         name = self._build_name(pdf)
         # TODO: SLAMA join - need to identify correct setting  for bucket_nums if it is not provided
         path = self._build_path(name)

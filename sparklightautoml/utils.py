@@ -20,7 +20,7 @@ from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLWrit
     DefaultParamsWriter, MLReader, DefaultParamsReader
 from pyspark.sql import SparkSession
 
-VERBOSE_LOGGING_FORMAT = "%(asctime)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
+VERBOSE_LOGGING_FORMAT = "%(asctime)s %(threadName)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
 
 logger = logging.getLogger(__name__)
 

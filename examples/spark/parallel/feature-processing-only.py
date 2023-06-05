@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     # settings and data
     cv = 5
-    feat_pipe = "lgb_adv"  # linear, lgb_simple or lgb_adv
+    feat_pipe = "linear"  # linear, lgb_simple or lgb_adv
     dataset_name = "lama_test_dataset"
     dataset = get_dataset(dataset_name)
     df = spark.read.csv(dataset.path, header=True)
@@ -32,4 +32,4 @@ if __name__ == "__main__":
     ds = feature_pipe.fit_transform(ds)
 
     # save processed data
-    ds.save(f"/tmp/{dataset_name}__{feat_pipe}__features.dataset")
+    ds.save(f"/tmp/{dataset_name}__{feat_pipe}__features.dataset", save_mode='overwrite')

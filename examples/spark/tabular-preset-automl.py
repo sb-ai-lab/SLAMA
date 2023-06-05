@@ -56,7 +56,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             },
             linear_l2_params={'default_params': {'regParam': [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False},
-            parallelism_mode=("no_parallelism", -1)
+            computation_settings=("no_parallelism", -1)
         )
 
         oof_predictions = automl.fit_predict(

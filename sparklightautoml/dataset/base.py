@@ -83,7 +83,8 @@ class SparkDataset(LAMLDataset, Unpersistable):
              path: str,
              file_format: str = 'parquet',
              file_format_options: Optional[Dict[str, Any]] = None,
-             persistence_manager: Optional['PersistenceManager'] = None) -> 'SparkDataset':
+             persistence_manager: Optional['PersistenceManager'] = None,
+             partitions_num: Optional[int] = None) -> 'SparkDataset':
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
         file_format_options = file_format_options or dict()
@@ -97,6 +98,9 @@ class SparkDataset(LAMLDataset, Unpersistable):
         data_df = spark.read.format(file_format).options(**file_format_options).load(file_path)
         name_fixed_cols = (sf.col(c).alias(c.replace('[', '(').replace(']', ')')) for c in data_df.columns)
         data_df = data_df.select(*name_fixed_cols)
+
+        if partitions_num:
+            data_df = data_df.repartition(partitions_num)
 
         return SparkDataset(data=data_df, persistence_manager=persistence_manager, **metadata)
 

@@ -5,15 +5,15 @@ from typing import Optional, cast, Iterator
 
 import numpy as np
 import pandas as pd
-from lightautoml.validation.base import TrainValidIterator
 from pandas import Series
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import StructField
 
 from sparklightautoml.pipelines.selection.base import SparkImportanceEstimator
-from ...computations.manager import ComputationsManager, default_computations_manager
-from ...dataset.base import LAMLDataset, SparkDataset
-from ...ml_algo.base import MLAlgo, SparkTabularMLAlgo
+from ...computations.builder import build_computations_manager
+from ...computations.base import ComputationsSettings
+from ...dataset.base import SparkDataset
+from ...ml_algo.base import SparkTabularMLAlgo
 from ...validation.base import SparkBaseTrainValidIterator
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
 
     """
 
-    def __init__(self, random_state: int = 42, computations_manager: Optional[ComputationsManager] = None):
+    def __init__(self, random_state: int = 42, computations_settings: Optional[ComputationsSettings] = None):
         """
         Args:
             random_state: seed for random generation of features permutation.
@@ -35,7 +35,7 @@ class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
         """
         super().__init__()
         self.random_state = random_state
-        self._computations_manager = computations_manager or default_computations_manager()
+        self._computations_manager = build_computations_manager(computations_settings)
 
     def fit(
         self,
@@ -93,8 +93,9 @@ class SparkNpPermutationImportanceEstimator(SparkImportanceEstimator):
                 return feat, (normal_score - shuffled_score)
             return func
 
-        results = self._computations_manager.compute([build_score_func(it, feat)
-                                                      for it, feat in enumerate(valid_data.features)])
+        results = self._computations_manager.compute([
+            build_score_func(it, feat) for it, feat in enumerate(valid_data.features)
+        ])
 
         permutation_importance = {feat: diff_score for feat, diff_score in results}
 
