@@ -33,6 +33,7 @@ def compare_dfs(dataset_a: SparkDataset, dataset_b: SparkDataset):
 
 def test_spark_dataset_save_load(spark: SparkSession):
     path = "/tmp/test_slama_ds.dataset"
+    partitions_num = 37
 
     # cleanup
     if os.path.exists(path):
@@ -61,7 +62,7 @@ def test_spark_dataset_save_load(spark: SparkSession):
     )
 
     ds.save(path=path)
-    loaded_ds = SparkDataset.load(path=path)
+    loaded_ds = SparkDataset.load(path=path, partitions_num=partitions_num)
 
     # checking metadata
     assert loaded_ds.uid
@@ -72,6 +73,7 @@ def test_spark_dataset_save_load(spark: SparkSession):
     assert loaded_ds.service_columns == ds.service_columns
     assert loaded_ds.features == ds.features
     assert loaded_ds.roles == ds.roles
+    assert loaded_ds.data.rdd.getNumPartitions() == partitions_num
     compare_tasks(loaded_ds.task, ds.task)
     compare_dfs(loaded_ds, ds)
 

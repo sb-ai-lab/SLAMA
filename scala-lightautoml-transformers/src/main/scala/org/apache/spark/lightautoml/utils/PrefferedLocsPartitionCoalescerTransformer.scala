@@ -55,10 +55,17 @@ object SomeFunctions {
 
   def executors(): java.util.List[java.lang.String] = {
     import scala.collection.JavaConverters._
-    SparkSession.active.sparkContext.env.blockManager.master.getMemoryStatus
-            .map { case (blockManagerId, _) => blockManagerId}
-            .filter(_.executorId != "driver")
-            .map { executor => s"executor_${executor.host}_${executor.executorId}"}
-            .toList.asJava
+    if (SparkSession.active.sparkContext.master.startsWith("local[")) {
+      SparkSession.active.sparkContext.env.blockManager.master.getMemoryStatus
+              .map { case (blockManagerId, _) => blockManagerId }
+              .map { executor => s"executor_${executor.host}_${executor.executorId}" }
+              .toList.asJava
+    } else {
+      SparkSession.active.sparkContext.env.blockManager.master.getMemoryStatus
+              .map { case (blockManagerId, _) => blockManagerId }
+              .filter(_.executorId != "driver")
+              .map { executor => s"executor_${executor.host}_${executor.executorId}" }
+              .toList.asJava
+    }
   }
 }

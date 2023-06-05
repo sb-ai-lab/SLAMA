@@ -1,13 +1,11 @@
-import functools
 import logging
-from typing import Optional, cast, Iterable, Sequence
+from typing import Optional, cast, Iterable
 
 from pyspark.sql import functions as sf
 
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
 from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator, TrainVal, SparkSelectionPipeline
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator, TrainVal
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +25,10 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
 
     def __len__(self) -> Optional[int]:
         return 1
+
+    def __getitem__(self, fold_id: int) -> SparkDataset:
+        self._validate_fold_id(fold_id)
+        return super().__getitem__(fold_id)
 
     def __next__(self) -> TrainVal:
         """Define how to get next object.
@@ -80,6 +82,10 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
     def __len__(self) -> Optional[int]:
         return 1
 
+    def __getitem__(self, fold_id: int) -> SparkDataset:
+        self._validate_fold_id(fold_id)
+        return self.train
+
     def __next__(self) -> TrainVal:
         """Define how to get next object.
 
@@ -103,7 +109,7 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
             self.train.unpersist()
 
     def get_validation_data(self) -> SparkDataset:
-        valid_sdf = self.train.data.where(sf.col(self.TRAIN_VAL_COLUMN) == 0).drop(self.TRAIN_VAL_COLUMN)
+        valid_sdf = self.train.data.where(sf.col(self.TRAIN_VAL_COLUMN) == 1).drop(self.TRAIN_VAL_COLUMN)
         valid = self.train.empty()
         valid.set_data(valid_sdf, self.train.features, self.train.roles)
         return valid
@@ -117,11 +123,6 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
     Folds should be defined in Reader, based on cross validation method.
     """
-
-    @property
-    def train_val_single_dataset(self) -> 'SparkDataset':
-        pass
-
     def __init__(self, train: SparkDataset, n_folds: Optional[int] = None):
         """Creates iterator.
 
@@ -132,6 +133,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
         """
         super().__init__(train)
 
+        # TODO: PARALLEL - potential bug here
         num_folds = train.data.select(sf.max(train.folds_column).alias("max")).first()["max"]
         self.n_folds = num_folds + 1
         if n_folds is not None:
@@ -149,6 +151,11 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
         """
         return self.n_folds
+
+    def __getitem__(self, fold_id: int) -> SparkDataset:
+        self._validate_fold_id(fold_id)
+        full_ds_with_is_val_col, _, _ = self._split_by_fold(fold_id)
+        return full_ds_with_is_val_col
 
     def __iter__(self) -> "SparkFoldsIterator":
         """Set counter to 0 and return self.
