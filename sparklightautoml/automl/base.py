@@ -26,7 +26,7 @@ from ..pipelines.base import TransformerInputOutputRoles
 from ..pipelines.features.base import SparkPipelineModel
 from ..pipelines.ml.base import SparkMLPipeline
 from ..reader.base import SparkToSparkReader
-from ..utils import ColumnsSelectorTransformer, SparkDataFrame
+from ..utils import ColumnsSelectorTransformer, SparkDataFrame, get_current_session
 from ..validation.base import SparkBaseTrainValidIterator, mark_as_train, mark_as_val
 from ..validation.iterators import SparkFoldsIterator, SparkHoldoutIterator, SparkDummyIterator
 
@@ -490,7 +490,7 @@ class SparkAutoML(TransformerInputOutputRoles):
             Tuple with read data and new roles mapping.
 
         """
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
 
         if isinstance(data, SparkDataFrame):
             out_sdf = data

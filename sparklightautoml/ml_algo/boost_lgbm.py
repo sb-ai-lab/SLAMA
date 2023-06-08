@@ -153,11 +153,12 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         parallelism: int = 1,
         use_barrier_execution_mode: bool = False,
         experimental_parallel_mode: bool = False,
+        persist_output_dataset: bool = True,
         computations_settings: Optional[ComputationalParameters] = None
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
         SparkTabularMLAlgo.__init__(self, default_params, freeze_defaults,
-                                    timer, optimization_search_space, computations_settings)
+                                    timer, optimization_search_space, persist_output_dataset, computations_settings)
         self._probability_col_name = "probability"
         self._prediction_col_name = "prediction"
         self._raw_prediction_col_name = "raw_prediction"

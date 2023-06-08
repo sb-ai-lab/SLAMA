@@ -87,10 +87,12 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         freeze_defaults: bool = True,
         timer: Optional[TaskTimer] = None,
         optimization_search_space: Optional[dict] = None,
+        persist_output_dataset: bool = True,
         computations_settings: Optional[ComputationalParameters] = None
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
-        super().__init__(default_params, freeze_defaults, timer, optimization_search_space, computations_settings)
+        super().__init__(default_params, freeze_defaults, timer,
+                         optimization_search_space, persist_output_dataset, computations_settings)
 
         self._prediction_col = f"prediction_{self._name}"
         self.task = None

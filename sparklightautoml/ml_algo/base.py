@@ -43,11 +43,13 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
         freeze_defaults: bool = True,
         timer: Optional[TaskTimer] = None,
         optimization_search_space: Optional[dict] = None,
+        persist_output_dataset: bool = True,
         computations_settings: Optional[ComputationsSettings] = None
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
         super().__init__(default_params, freeze_defaults, timer, optimization_search_space)
         self.n_classes: Optional[int] = None
+        self.persist_output_dataset = persist_output_dataset
         # names of columns that should contain predictions of individual models
         self._models_prediction_columns: Optional[List[str]] = None
 
@@ -153,7 +155,8 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
             dependencies=[train_valid_iterator],
             name=f"{self._name}"
         )
-        pred_ds = pred_ds.persist(level=PersistenceLevel.REGULAR)
+        if self.persist_output_dataset:
+            pred_ds = pred_ds.persist(level=PersistenceLevel.REGULAR)
 
         self._service_columns = train_valid_iterator.train.service_columns
 

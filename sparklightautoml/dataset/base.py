@@ -31,7 +31,7 @@ from pyspark.sql.session import SparkSession
 
 from sparklightautoml import VALIDATION_COLUMN
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.utils import SparkDataFrame, create_directory
+from sparklightautoml.utils import SparkDataFrame, create_directory, get_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
         file_format_options = file_format_options or dict()
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
 
         # reading metadata
         metadata_df = spark.read.format(file_format).options(**file_format_options).load(metadata_file_path)
