@@ -119,6 +119,7 @@ class ParallelOptunaTuner(OptunaTuner):
         cm = ml_algo.computations_manager
         trial_ml_algo = deepcopy(ml_algo)
         ml_algo.computations_manager = cm
+        trial_ml_algo.persist_output_dataset = False
         trial_ml_algo.computations_manager = SequentialComputationsManager()
 
         with self._computations_manager.session(train_valid_iterator.train) as self._session:
@@ -176,55 +177,3 @@ class ParallelOptunaTuner(OptunaTuner):
                 return _ml_algo.score(output_dataset)
 
         return objective
-
-
-# class _SlotInitiatedTVIter(SparkBaseTrainValidIterator):
-#     def __init__(self, computations_session: ComputationsSession, tviter: SparkBaseTrainValidIterator):
-#         super().__init__(tviter.train)
-#         self._computations_session = computations_session
-#         self._tviter = deecopy_tviter_without_dataset(tviter)
-#
-#     def __iter__(self) -> Iterable:
-#         def _iter():
-#             with self._computations_session.allocate() as slot:
-#                 tviter = deepcopy(self._tviter)
-#                 tviter.train = slot.dataset
-#                 for elt in self._tviter:
-#                     yield elt
-#
-#         return _iter()
-#
-#     def __len__(self) -> Optional[int]:
-#         return len(self._tviter)
-#
-#     def __getitem__(self, fold_id: int) -> SparkDataset:
-#         raise NotImplementedError("NotSupportedMethod")
-#         # with self._computations_session.allocate() as slot:
-#         #     tviter = deepcopy(self._tviter)
-#         #     tviter.train = slot.dataset
-#         #     dataset = tviter[fold_id]
-#         #
-#         # return dataset
-#
-#     def __next__(self):
-#         raise NotImplementedError("NotSupportedMethod")
-#
-#     # @property
-#     # def train(self) -> SparkDataset:
-#     #     raise NotImplementedError("NotSupportedMethod")
-#     #
-#     # @train.setter
-#     # def train(self, value: SparkDataset):
-#     #     raise NotImplementedError("NotSupportedMethod")
-#
-#     def freeze(self) -> 'SparkBaseTrainValidIterator':
-#         raise NotImplementedError("NotSupportedMethod")
-#
-#     def unpersist(self, skip_val: bool = False):
-#         raise NotImplementedError("NotSupportedMethod")
-#
-#     def get_validation_data(self) -> SparkDataset:
-#         return self._tviter.get_validation_data()
-#
-#     def convert_to_holdout_iterator(self):
-#         return _SlotInitiatedTVIter(self._computations_session, self._tviter.convert_to_holdout_iterator())

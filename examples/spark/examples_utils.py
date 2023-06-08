@@ -7,9 +7,9 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset import persistence
-from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import SparkDataFrame, get_current_session
 
-BUCKET_NUMS = 16
+BUCKET_NUMS = 6
 PERSISTENCE_MANAGER_ENV_VAR = "PERSISTENCE_MANAGER"
 BASE_DATASETS_PATH = "file:///opt/spark_data/"
 
@@ -24,7 +24,7 @@ class Dataset:
     file_format_options: Dict[str, Any] = field(default_factory=lambda: {"header": True, "escape": "\""})
 
     def load(self) -> SparkDataFrame:
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
         return spark.read.format(self.file_format).options(**self.file_format_options).load(self.path)
 
 
@@ -108,7 +108,7 @@ def prepare_test_and_train(
 ) -> Tuple[SparkDataFrame, SparkDataFrame]:
     assert 0 <= test_size <= 1
 
-    spark = SparkSession.getActiveSession()
+    spark = get_current_session()
 
     execs = int(spark.conf.get('spark.executor.instances', '1'))
     cores = int(spark.conf.get('spark.executor.cores', '8'))
@@ -200,13 +200,13 @@ class FSOps:
     """
     @staticmethod
     def get_sc() -> SparkContext:
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
         sc = spark.sparkContext
         return sc
 
     @staticmethod
     def get_default_fs() -> str:
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
         hadoop_conf = spark._jsc.hadoopConfiguration()
         default_fs = hadoop_conf.get("fs.defaultFS")
         return default_fs

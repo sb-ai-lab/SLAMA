@@ -46,20 +46,23 @@ class ComputationsManagerFactory:
 
 
 def build_named_parallelism_settings(config_name: str, parallelism: int):
+    intra_mlpipe_parallelim = {
+        "ml_pipelines": {"parallelism": 1},
+        "ml_algos": {"parallelism": 1},
+        "selector": {"parallelism": parallelism},
+        "tuner": {"parallelism": parallelism},
+        "linear_l2": {"parallelism": parallelism},
+        "lgb": {
+            "parallelism": parallelism,
+            "use_location_prefs_mode": False
+        }
+    }
+
     parallelism_config = {
         "no_parallelism": {},
-        "intra_mlpipe_parallelism": {
-            "ml_pipelines": {"parallelism": 1},
-            "ml_algos": {"parallelism": 1},
-            "selector": {"parallelism": parallelism},
-            "tuner": {"parallelism": parallelism},
-            "linear_l2": {"parallelism": parallelism},
-            "lgb": {
-                "parallelism": parallelism,
-                "use_location_prefs_mode": False
-            }
-        },
-        "intra_mlpipe_parallelism_with_location_pres_mode": {
+        "parallelism": intra_mlpipe_parallelim,
+        "intra_mlpipe_parallelism": intra_mlpipe_parallelim,
+        "intra_mlpipe_parallelism_with_location_prefs_mode": {
             "ml_pipelines": {"parallelism": 1},
             "ml_algos": {"parallelism": 1},
             "selector": {"parallelism": parallelism},

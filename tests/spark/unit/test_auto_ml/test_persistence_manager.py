@@ -9,7 +9,7 @@ from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import BucketedPersistenceManager
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT, get_current_session
 from .. import BUCKET_NUMS, spark_for_function, spark_hdfs as spark_hdfs_sess, HDFS_TMP_SLAMA_DIR
 
 spark = spark_for_function
@@ -46,7 +46,7 @@ def do_test_bucketed_persistence_manager(spark_session: SparkSession):
     def existing_tables() -> List[str]:
         return [
             table.name.split("_")[0]
-            for table in SparkSession.getActiveSession().catalog.listTables()
+            for table in get_current_session().catalog.listTables()
         ]
 
     pmanager = BucketedPersistenceManager(

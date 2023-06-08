@@ -9,7 +9,7 @@ from typing import Optional, Dict, List, Union, cast
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, PersistableDataFrame, PersistenceManager
-from sparklightautoml.utils import JobGroup
+from sparklightautoml.utils import JobGroup, get_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +223,7 @@ class BucketedPersistenceManager(BasePersistenceManager):
         self._no_unpersisting = no_unpersisting
 
     def _persist(self, pdf: PersistableDataFrame, level: PersistenceLevel) -> PersistableDataFrame:
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
         name = self._build_name(pdf)
         # TODO: SLAMA join - need to identify correct setting  for bucket_nums if it is not provided
         path = self._build_path(name)
@@ -266,7 +266,7 @@ class BucketedPersistenceManager(BasePersistenceManager):
             f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name} on path {path}."
         )
 
-        SparkSession.getActiveSession().sql(f"DROP TABLE {name}")
+        get_current_session().sql(f"DROP TABLE {name}")
 
         logger.debug(
             f"Manager {self._uid}: the bucketed table has been removed"

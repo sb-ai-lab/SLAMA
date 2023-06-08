@@ -135,6 +135,10 @@ class log_exec_timer:
 SparkDataFrame = pyspark.sql.DataFrame
 
 
+def get_current_session() -> SparkSession:
+    return SparkSession.builder.getOrCreate()
+
+
 def get_cached_df_through_rdd(df: SparkDataFrame, name: Optional[str] = None) -> Tuple[SparkDataFrame, RDD]:
     rdd = df.rdd
     cached_rdd = rdd.setName(name).cache() if name else rdd.cache()
@@ -392,7 +396,7 @@ class Cacher(Estimator):
         # ds = dataset.localCheckpoint(eager=True)
 
         # # using plain caching
-        # ds = SparkSession.getActiveSession().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
+        # ds = get_current_session().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
         ds = dataset.cache()
         ds.write.mode('overwrite').format('noop').save()
 

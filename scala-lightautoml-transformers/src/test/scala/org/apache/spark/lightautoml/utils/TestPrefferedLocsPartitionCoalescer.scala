@@ -15,7 +15,8 @@ class TestPrefferedLocsPartitionCoalescer extends AnyFunSuite with BeforeAndAfte
   val spark: SparkSession = SparkSession
           .builder()
           .master(s"local-cluster[$num_workers, $num_cores, 1024]")
-          .config("spark.jars", "target/scala-2.12/spark-lightautoml_2.12-0.1.jar")
+//          .config("spark.jars", "target/scala-2.12/spark-lightautoml_2.12-0.1.1.jar,target/scala-2.12/spark-lightautoml_2.12-0.1.1-tests.jar")
+          .config("spark.jars", "target/scala-2.12/spark-lightautoml_2.12-0.1.1.jar")
           .config("spark.default.parallelism", "6")
           .config("spark.sql.shuffle.partitions", "6")
           .config("spark.locality.wait", "15s")
@@ -50,6 +51,7 @@ class TestPrefferedLocsPartitionCoalescer extends AnyFunSuite with BeforeAndAfte
     coalesced_df.count()
 
     // should not produce any exception
-    coalesced_df.rdd.barrier().mapPartitions(SomeFunctions.func).count()
+//    coalesced_df.rdd.barrier().mapPartitions(SomeFunctions.func).count()
+    SomeFunctions.test_func(coalesced_df)
   }
 }
