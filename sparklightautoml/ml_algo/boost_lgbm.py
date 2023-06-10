@@ -1,4 +1,5 @@
 import logging
+import warnings
 from copy import copy
 from typing import Dict, Optional, Tuple, Union, cast, List, Any
 
@@ -432,6 +433,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
             validationIndicatorCol=validation_column,
             verbosity=verbose_eval,
             useSingleDatasetMode=self._use_single_dataset_mode,
+            useBarrierExecutionMode=self._use_barrier_execution_mode,
             isProvideTrainingMetric=True,
             chunkSize=self._chunk_size,
         )
@@ -502,8 +504,29 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
                            f"Reducing its size down according to max_validation_size setting:"
                            f" {self._max_validation_size}")
             full_data = full_data.where(
-                ~sf.col(validation_column) or sf.rand(seed=self._seed) < self._max_validation_size / val_data_size
+                (sf.col(validation_column) != sf.lit(1)) |
+                (sf.rand(seed=self._seed) < sf.lit(self._max_validation_size / val_data_size))
             )
+
+        # checking if there are no empty partitions that may lead to hanging
+        rows = (
+            full_data
+            .withColumn("__partition_id__", sf.spark_partition_id())
+            .groupby("__partition_id__").agg(
+                sf.sum(validation_column).alias("val_values"),
+                sf.count("*").alias("all_values")
+            )
+            .collect()
+        )
+        for row in rows:
+            if row["val_values"] == row["all_values"] or row["all_values"] == 0:
+                warnings.warn(f"Empty partition encountered: partition id - {row['__partition_id_']},"
+                              f"validation values count in the partition - {row['val_values']}, "
+                              f"all values count in the partition  - {row['all_values']}")
+                raise ValueError(f"Empty partition encountered: partition id - {row['__partition_id_']},"
+                                 f"validation values count in the partition - {row['val_values']}, "
+                                 f"all values count in the partition  - {row['all_values']}")
+
         return full_data
 
     def _build_transformer(self) -> Transformer:

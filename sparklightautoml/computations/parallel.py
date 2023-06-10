@@ -131,11 +131,14 @@ class ParallelComputationsSession(ComputationsSession):
         logger.info(f"Coalescing dataset into multiple copies (num copies: {self._parallelism}) "
                     f"with specified preffered locations")
 
-        dfs, self._base_pref_locs_df = duplicate_on_num_slots_with_locations_preferences(
-            df=dataset.data,
-            num_slots=self._parallelism,
-            enforce_division_without_reminder=False
-        )
+        if self._parallelism > 1:
+            dfs, self._base_pref_locs_df = duplicate_on_num_slots_with_locations_preferences(
+                df=dataset.data,
+                num_slots=self._parallelism,
+                enforce_division_without_reminder=False
+            )
+        else:
+            dfs, self._base_pref_locs_df = [dataset.data], None
 
         assert len(dfs) > 0, "Not dataframe slots are prepared, cannot continue"
 
