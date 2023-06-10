@@ -29,7 +29,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 2. use_algos = [["lgb_tuned"]]
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb", "linear_l2"], ["lgb"]]
+    # use_algos = [["lgb", "linear_l2"], ["lgb"]]
+    use_algos = [["lgb"]]
     cv = 3
     dataset = get_dataset(dataset_name)
 

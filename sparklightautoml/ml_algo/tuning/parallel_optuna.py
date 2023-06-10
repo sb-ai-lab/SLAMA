@@ -1,14 +1,14 @@
 import logging
 from copy import deepcopy
-from typing import Optional, Tuple, Callable, Iterable, Union
+from typing import Optional, Tuple, Callable, Union
 
 import optuna
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner, TunableAlgo
-from lightautoml.validation.base import HoldoutIterator, TrainValidIterator
+from lightautoml.validation.base import HoldoutIterator
 
-from sparklightautoml.computations.builder import build_computations_manager
 from sparklightautoml.computations.base import ComputationsSettings, \
-    ComputationsManager, ComputationsSession
+    ComputationsSession
+from sparklightautoml.computations.builder import build_computations_manager
 from sparklightautoml.computations.sequential import SequentialComputationsManager
 from sparklightautoml.computations.utils import deecopy_tviter_without_dataset
 from sparklightautoml.dataset.base import SparkDataset
@@ -171,6 +171,8 @@ class ParallelOptunaTuner(OptunaTuner):
                         optimization_search_space=optimization_search_space,
                         suggested_params=_ml_algo.init_params_on_input(tv_iter),
                     )
+
+                logger.debug(f"Sampled ml_algo params: {_ml_algo.params}")
 
                 output_dataset = _ml_algo.fit_predict(train_valid_iterator=tv_iter)
 

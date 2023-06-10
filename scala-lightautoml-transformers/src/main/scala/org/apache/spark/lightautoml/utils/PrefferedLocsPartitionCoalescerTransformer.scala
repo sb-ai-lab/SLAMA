@@ -8,6 +8,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
+import java.util
 import scala.collection.JavaConverters._
 
 class PrefferedLocsPartitionCoalescerTransformer(override val uid: String,
@@ -158,7 +159,7 @@ object SomeFunctions {
       numPartitions,
       shuffle = false,
       partitionCoalescer = Some(new PrefferedLocsPartitionCoalescer(prefLocsForAllPartitions))
-    ), duplicated_df.schema).cache()
+    ), duplicated_df.schema)
 
     // not sure if it is needed or not to perform all operation in parallel
     val copies_rdd_df = if (materialize_base_rdd) {
@@ -171,11 +172,41 @@ object SomeFunctions {
 
     // select subsets of partitions that contains independent copies of the initial dataset
     // assign it preferred locations and convert the resulting rdds into DataFrames
-    val prefLocsDfs = (0 until realNumSlots)
+    // We need to localCheckpoint these datasets because downstream SynapseML lightGBM
+    // cannot work with PrunningPartitionRDD. Precise error:
+    //    org.apache.spark.scheduler.BarrierJobUnsupportedRDDChainException: [SPARK-24820][SPARK-24821]:
+    //    Barrier execution mode does not allow the following pattern of RDD chain within a barrier stage:
+    //    1. Ancestor RDDs that have different number of partitions from the resulting RDD
+    //      (e.g. union()/coalesce()/first()/take()/PartitionPruningRDD).
+    //      A workaround for first()/take() can be barrierRdd.collect().head (scala) or barrierRdd.collect()[0] (python)
+    //    2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2)).
+    //      at org.apache.spark.scheduler.DAGScheduler.checkBarrierStageWithRDDChainPattern(DAGScheduler.scala:447)
+    //      at org.apache.spark.scheduler.DAGScheduler.createResultStage(DAGScheduler.scala:590)
+    // In the same time, we cannot skip barrier stage in SynapseML LightGBM,
+    // because it would lead to applying coalesce inside the lightgbm and will lead to breaking
+    // of preffered locations set earlier
+    val prefLocsDfs = new util.ArrayList[DataFrame]()
+    val threads = (0 until realNumSlots)
             .map (slotId => new PartitionPruningRDD(copies_rdd_df.rdd, x => x / partitionsPerSlot == slotId))
-            .map(rdd => spark.createDataFrame(rdd, schema = duplicated_df.schema).drop(partition_id_col))
+            .map {
+              rdd =>
+                val thread = new Thread {
+                  override def run(): Unit = {
+                    val df = spark.createDataFrame(
+                      rdd,
+                      schema = duplicated_df.schema
+                    ).drop(partition_id_col).localCheckpoint(true)
+                    prefLocsDfs.add(df)
+                  }
+                }
+                thread.start()
+                thread
+            }
             .toList
-            .asJava
+
+    threads.foreach(_.join())
+
+    copies_rdd_df.unpersist()
 
     (prefLocsDfs, copies_rdd_df)
   }
