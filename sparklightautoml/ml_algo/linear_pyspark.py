@@ -6,6 +6,7 @@ from typing import Tuple, Optional, List, Dict, Any
 from typing import Union
 
 import numpy as np
+from lightautoml.ml_algo.tuning.base import SearchSpace, Distribution
 from lightautoml.utils.timer import TaskTimer
 from pyspark.ml import Pipeline, Transformer, PipelineModel, Estimator
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
@@ -104,6 +105,26 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         self._probability_col_name = "probability"
         self._prediction_col_name = "prediction"
 
+    def _get_default_search_spaces(self, suggested_params: Dict, estimated_n_trials: int) -> Dict:
+        """Train on train dataset and predict on holdout dataset.
+
+        Args:.
+            suggested_params: suggested params
+            estimated_n_trials: Number of trials.
+
+        Returns:
+            Target predictions for valid dataset.
+
+        """
+        optimization_search_space = dict()
+        optimization_search_space["regParam"] = SearchSpace(
+            Distribution.UNIFORM,
+            low=1e-5,
+            high=100000,
+        )
+
+        return optimization_search_space
+
     def _infer_params(
         self, train: SparkDataset, fold_prediction_column: str
     ) -> Tuple[List[Tuple[float, Estimator]], int]:
@@ -111,7 +132,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         params = copy(self.params)
 
         if "regParam" in params:
-            reg_params = params["regParam"]
+            reg_params = params["regParam"] if isinstance(params["regParam"], list) else [params["regParam"]]
             del params["regParam"]
         else:
             reg_params = [1.0]
