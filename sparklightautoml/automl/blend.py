@@ -73,9 +73,13 @@ class SparkBlender(TransformerInputOutputRoles, ABC):
         self._set_metadata(predictions, pipes)
 
         if len(pipes) == 1 and len(pipes[0].ml_algos) == 1:
+            statement = f"SELECT *, {pipes[0].ml_algos[0].prediction_feature} " \
+                        f"AS {self._single_prediction_col_name} FROM __THIS__"
+
+            logger.info(f"Select prediction columns with query: {statement}")
+
             self._transformer = Pipeline(stages=[
-                SQLTransformer(statement=f"SELECT *, {pipes[0].ml_algos[0].prediction_feature} "
-                                         f"AS {self._single_prediction_col_name} FROM __THIS__"),
+                SQLTransformer(statement=statement),
                 DropColumnsTransformer(remove_cols=[pipes[0].ml_algos[0].prediction_feature])
             ]).fit(predictions.data)
 

@@ -145,9 +145,8 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
             ]
 
             results = self._computations_manager.compute(fit_tasks)
-
-            self.ml_algos.extend([ml_algo for ml_algo, _ in results])
-            preds = [pred for _, pred in results]
+            ml_algos, preds = [list(el) for el in zip(*results)]
+            self.ml_algos.extend(ml_algos)
 
             assert (
                 len(self.ml_algos) > 0

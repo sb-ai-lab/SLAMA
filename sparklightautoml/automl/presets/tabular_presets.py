@@ -344,11 +344,11 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                 computations_settings=self._computation_managers_factory.get_lgb_manager(),
                 **lgb_params
             )
+            return gbm_model, lgb_params
         elif algo_key == "cb":
             raise NotImplementedError("Not supported yet")
         else:
             raise ValueError("Wrong algo key")
-        return gbm_model, lgb_params
 
     def create_automl(self, **fit_args):
         """Create basic automl instance.

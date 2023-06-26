@@ -263,7 +263,7 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
             self.task.name,
             input_cols=self._models_prediction_columns,
             output_col=self.prediction_feature,
-            remove_cols=[self._assembler.getOutputCol()] + self._models_prediction_columns,
+            remove_cols=[self._assembler.getOutputCol(), *self._models_prediction_columns],
             convert_to_array_first=not (self.task.name == "reg"),
             dim_num=self.n_classes,
         )

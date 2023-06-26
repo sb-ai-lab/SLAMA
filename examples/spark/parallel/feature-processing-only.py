@@ -26,7 +26,7 @@ if __name__ == "__main__":
     reader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
     feature_pipe = feature_pipelines.get(feat_pipe, None)
 
-    assert feature_pipe, f"Unsupported feat pipe {feat_pipe}"
+    assert feature_pipe is not None, f"Unsupported feat pipe {feat_pipe}"
 
     ds = reader.fit_read(train_data=df, roles=dataset.roles)
     ds = feature_pipe.fit_transform(ds)

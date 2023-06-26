@@ -526,8 +526,7 @@ class SparkAutoML(TransformerInputOutputRoles):
 
         results = self._computations_manager.compute(fit_tasks)
 
-        ml_pipes = [ml_pipe for ml_pipe, _ in results]
-        ml_pipes_preds = [pipe_preds for _, pipe_preds in results]
+        ml_pipes, ml_pipes_preds = [list(el) for el in zip(*results)]
 
         if len(results) < len(level):
             flg_last_level = True

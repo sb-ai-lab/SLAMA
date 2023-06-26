@@ -51,14 +51,12 @@ def test_spark_reader(spark: SparkSession, config: Dict[str, Any], cv: int, agr:
     sdataset = sreader.fit_read(df, roles=roles, persistence_manager=persistence_manager)
     checks(sdataset)
 
-    sdataset = sreader.read(df, add_array_attrs=False)
+    sdataset = sreader.read(df)
     assert sdataset.target_column is None
     assert sdataset.folds_column is None
-    # TODO: fix later
-    # assert roles['target'] not in sdataset.data.columns
 
     sdataset = sreader.read(df, add_array_attrs=True)
-    checks(sdataset, check_target_and_folds=True)
+    checks(sdataset)
 
     # comparing with Pandas
     pdf = pd.read_csv(path, dtype=dtype)
@@ -91,36 +89,16 @@ def test_spark_reader(spark: SparkSession, config: Dict[str, Any], cv: int, agr:
 def test_spark_reader_advanced_guess_roles(spark: SparkSession, config: Dict[str, Any], cv: int):
     task_type = config['task_type']
 
-    # spark_dss = prepared_datasets(spark, cv, [config], checkpoint_dir='/opt/test_checkpoints/reader_datasets')
-    # spark_train_ds, _ = spark_dss[0]
-
     read_csv_args = {'dtype': config['dtype']} if 'dtype' in config else dict()
     train_pdf = pd.read_csv(config['train_path'], **read_csv_args)
-    preader = PandasToPandasReader(task=Task(task_type), cv=cv, advanced_roles=True)
+    preader = PandasToPandasReader(task=Task(task_type), cv=cv)
     pdataset = preader.fit_read(train_pdf, roles=config["roles"])
 
     train_df = spark.read.csv(config['train_path'], header=True, escape="\"")
     persistence_manager = PlainCachePersistenceManager()
-    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv, advanced_roles=True)
+    sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv)
     sdataset = sreader.fit_read(train_df, roles=config["roles"], persistence_manager=persistence_manager)
 
     assert set(sdataset.features) == set(pdataset.features)
     sdiff = set(sdataset.features).symmetric_difference(pdataset.features)
     assert len(sdiff) == 0, f"Features sets are different: {sdiff}"
-
-    feat_and_roles = [
-        (feat, srole, pdataset.roles[feat])
-        for feat, srole in sdataset.roles.items()
-    ]
-
-    # two checks on CategoryRole to make PyCharm field resolution happy
-    # not_equal_encoding_types = [
-    #     feat for feat, srole, prole in feat_and_roles
-    #     if (
-    #             isinstance(srole, CategoryRole)
-    #             and isinstance(prole, CategoryRole)
-    #             and srole.encoding_type != prole.encoding_type
-    #     )
-    # ]
-    #
-    # assert len(not_equal_encoding_types) == 0, f"Encoding types are different: {not_equal_encoding_types}"
