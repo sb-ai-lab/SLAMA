@@ -71,7 +71,7 @@ if __name__ == "__main__":
     score = ds.task.get_dataset_metric()
 
     # fit and predict
-    model, oof_preds = tune_and_fit_predict(ml_algo, tuner, iterator)
+    _, oof_preds = tune_and_fit_predict(ml_algo, tuner, iterator)
     test_preds = ml_algo.predict(test_ds)
 
     # reporting trials

@@ -294,14 +294,9 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
 
         results = self.computations_manager.compute_folds(train_valid_iterator, _fit_and_val_on_fold)
 
-        # TODO: PARALLEL - is it a correct place for running? incorrect functioning in the sequential case
         self.timer.write_run_info()
 
-        # TODO: PARALLEL - no processing for None
-        # TODO: PARALLEL minor - refactoring
-        models = [model for _, model, _, _ in results]
-        val_preds = [val_pred for _, _, val_pred, _ in results]
-        model_prediction_cols = [model_prediction_col for _, _, _, model_prediction_col in results]
+        _, models, val_preds, model_prediction_cols = [list(el) for el in zip(*results)]
 
         return models, val_preds, model_prediction_cols
 

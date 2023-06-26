@@ -42,9 +42,11 @@ def train_test_split(dataset: SparkDataset, test_slice_or_fold_num: Union[float,
 if __name__ == "__main__":
     spark = get_spark_session()
 
-    # available feat_pipe: linear, lgb_simple or lgb_adv
-    # available ml_algo: linear_l2, lgb
-    # feat_pipe, ml_algo_name = "linear", "linear_l2"
+    """
+    available feat_pipe: linear, lgb_simple or lgb_adv
+    available ml_algo: linear_l2, lgb
+    feat_pipe, ml_algo_name = "linear", "linear_l2"
+    """
     feat_pipe, ml_algo_name = "lgb_adv", "lgb"
     parallelism = 1
     dataset_name = os.environ.get("DATASET", "lama_test_dataset")
@@ -70,21 +72,24 @@ if __name__ == "__main__":
     # fit and predict
     with log_exec_timer("Model fitting"):
         model, oof_preds = tune_and_fit_predict(ml_algo, DefaultTuner(), iterator)
-    with log_exec_timer("Model inference"):
+
+    assert model is not None and oof_preds is not None
+
+    with log_exec_timer("Model inference (oof)"):
+        # estimate oof and test metrics
+        oof_metric_value = score(oof_preds.data.select(
+            SparkDataset.ID_COLUMN,
+            sf.col(ds.target_column).alias('target'),
+            sf.col(ml_algo.prediction_feature).alias('prediction')
+        ))
+
+    with log_exec_timer("Model inference (test)"):
         test_preds = ml_algo.predict(test_ds)
+        test_metric_value = score(test_preds.data.select(
+            SparkDataset.ID_COLUMN,
+            sf.col(ds.target_column).alias('target'),
+            sf.col(ml_algo.prediction_feature).alias('prediction')
+        ))
 
-    # estimate oof and test metrics
-    oof_metric_value = score(oof_preds.data.select(
-        SparkDataset.ID_COLUMN,
-        sf.col(ds.target_column).alias('target'),
-        sf.col(ml_algo.prediction_feature).alias('prediction')
-    ))
-
-    test_metric_value = score(test_preds.data.select(
-        SparkDataset.ID_COLUMN,
-        sf.col(ds.target_column).alias('target'),
-        sf.col(ml_algo.prediction_feature).alias('prediction')
-    ))
-
-    print(f"OOF metric: {oof_metric_value}")
-    print(f"Test metric: {test_metric_value}")
+    logger.info(f"OOF metric: {oof_metric_value}")
+    logger.info(f"Test metric: {test_metric_value}")

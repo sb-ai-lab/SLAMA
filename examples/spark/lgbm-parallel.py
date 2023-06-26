@@ -191,7 +191,8 @@ class ParallelExperiment:
         transformer = lgbm.fit(assembler.transform(full_data))
         preds_df = transformer.transform(assembler.transform(test_df))
 
-        print(f"Props #{fold}: {full_data.sql_ctx.sparkSession.sparkContext.getLocalProperty('spark.task.cpus')}")
+        logger.info(f"Props #{fold}:"
+                    f" {full_data.sql_ctx.sparkSession.sparkContext.getLocalProperty('spark.task.cpus')}")
 
         score = SparkTask(task_type).get_dataset_metric()
         metric_value = score(
@@ -236,7 +237,7 @@ def main():
     results = exp.run()
 
     for fold, metric_value in results:
-        print(f"Metric value (fold = {fold}): {metric_value}")
+        logger.info(f"Metric value (fold = {fold}): {metric_value}")
 
     spark.stop()
 

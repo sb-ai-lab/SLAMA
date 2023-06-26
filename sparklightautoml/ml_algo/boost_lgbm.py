@@ -1,3 +1,4 @@
+import functools
 import logging
 import warnings
 from copy import copy
@@ -466,9 +467,11 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         logger.info("Finished LGBM fit")
 
     def get_features_score(self) -> Series:
-        imp = 0
-        for model_feature_impotances in self._models_feature_importances:
-            imp += pd.Series(model_feature_impotances)
+        imp = functools.reduce(lambda acc, x: acc + pd.Series(x), self._models_feature_importances, 0)
+
+        # imp = 0
+        # for model_feature_impotances in self._models_feature_importances:
+        #     imp += pd.Series(model_feature_impotances)
 
         imp /= len(self._models_feature_importances)
 
@@ -572,7 +575,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
             self.task.name,
             input_cols=self._models_prediction_columns,
             output_col=self.prediction_feature,
-            remove_cols=[self._assembler.getOutputCol()] + self._models_prediction_columns,
+            remove_cols=[self._assembler.getOutputCol(), *self._models_prediction_columns],
             convert_to_array_first=not (self.task.name == "reg"),
             dim_num=self.n_classes,
         )
@@ -600,66 +603,3 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         logger.info("Finished LGBM fit")
         return res
-
-    # def _parallel_fit(self, train_valid_iterator: SparkBaseTrainValidIterator) \
-    #         -> Tuple[List[Model], List[SparkDataFrame], List[str]]:
-    #     if self._experimental_parallel_mode and not self.computations_manager.can_support_slots:
-    #         warnings.warn("Experimental parallel mode is set, "
-    #                       "but computations manager doesn't support slots allocation")
-    #     elif self._experimental_parallel_mode:
-    #         with self.computations_manager.slots(train_valid_iterator.train,
-    #                                              parallelism=self._parallelism, pool_type=WorkloadType.job) as allocator:
-    #             allocator: ComputingSession = allocator
-    #
-    #             def build_fit_func(i: int, mdl_pred_col: str):
-    #                 def func() -> Optional[Tuple[int, Model, SparkDataFrame, str]]:
-    #                     # TODO: PARALLEL - no stopping of time_limit_exceeded
-    #
-    #                     with allocator.allocate() as slot:
-    #                         prev_train = train_valid_iterator.train
-    #                         train_valid_iterator.train = None
-    #                         tviter = deepcopy(train_valid_iterator)
-    #                         train_valid_iterator.train = prev_train
-    #
-    #                         tviter.train = slot.dataset
-    #                         for _ in range(i + 1):
-    #                             slot_train = next(tviter)
-    #
-    #                         mdl, vpred, _ = self.fit_predict_single_fold(
-    #                             mdl_pred_col, self.validation_column, slot_train
-    #                         )
-    #                         vpred = vpred.select(SparkDataset.ID_COLUMN, slot.dataset.target_column, mdl_pred_col)
-    #
-    #                     # The previous way also should be ok, because:
-    #                     # - fold based computations often happen in the end of MLPipeline
-    #                     # and thus are subjects for "checkpointing" before the next level (e.g. writing on disk)
-    #                     # - the dataset should not be too great in size to avoid shuffling at all
-    #                     # - PravdaML also refer to shuffling due to how they treat parallelism
-    #
-    #                     #  Alternative way of obtaining vpred
-    #                     # we predict on all executors instead only on part of them
-    #                     # probably it should be run as a separate set of tasks after finishing this part of computations
-    #                     # vpred = self.predict_single_fold(val, mdl)
-    #
-    #                     return i, mdl, vpred, mdl_pred_col
-    #                 return func
-    #
-    #             fit_tasks = [
-    #                 build_fit_func(i, f"{self.prediction_feature}_{i}")
-    #                 for i, _ in enumerate(train_valid_iterator)
-    #             ]
-    #
-    #             results = self.computations_manager.session(fit_tasks)
-    #
-    #             # TODO: PARALLEL - incorrect handling of the sequential case
-    #             self.timer.write_run_info()
-    #
-    #         models = [model for _, model, _, _ in results]
-    #         val_preds = [val_pred for _, _, val_pred, _ in results]
-    #         model_prediction_cols = [model_prediction_col for _, _, _, model_prediction_col in results]
-    #
-    #         # unprepare dataset
-    #
-    #         return models, val_preds, model_prediction_cols
-    #
-    #     return super()._parallel_fit(train_valid_iterator)
