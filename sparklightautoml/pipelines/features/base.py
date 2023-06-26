@@ -558,7 +558,7 @@ class SparkTabularDataFeatures:
 
         """
         target_encoder = None
-        if train.folds is not None:
+        if train.folds_column is not None:
             if train.task.name in ["binary", "reg"]:
                 target_encoder = SparkTargetEncoderEstimator
             else:

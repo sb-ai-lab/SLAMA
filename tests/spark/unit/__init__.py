@@ -158,7 +158,7 @@ def workdir() -> str:
 
     yield workdir_path
 
-    shutil.rmtree(workdir_path)
+    shutil.rmtree(workdir_path, ignore_errors=True)
 
 
 @pytest.fixture(scope="function")
