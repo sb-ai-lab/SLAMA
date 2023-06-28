@@ -10,7 +10,6 @@ object functions {
   val vectorAveragingUdf: UserDefinedFunction = udf { (vecs: Seq[DenseVector], vec_size: Int) =>
     val not_null_vecs = vecs.count(_ != null)
     if (not_null_vecs == 0){
-      //      null
       new DenseVector(linalg.DenseVector.fill(vec_size)(0.0).toArray)
     }
     else {
@@ -40,20 +39,6 @@ object functions {
       case (_, 0) => 0
       case (sm, cnt) => sm / cnt
     }
-
-
-//    val not_null_vecs = vecs.count(_.nonEmpty)
-//    if (not_null_vecs == 0){
-////      null
-//      0.0
-//    }
-//    else {
-//      val result = vecs.map {
-//        case None => 0.0
-//        case Some(v) => v
-//      }.sum
-//      result / not_null_vecs
-//    }
   }
 
 
