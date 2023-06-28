@@ -32,21 +32,9 @@ class NumericVectorOrArrayRole(NumericRole):
             prob: If input number is probability.
         """
         super().__init__(dtype, force_input, prob, discretization)
-        self._size = size
-        self._element_col_name_template = element_col_name_template
-        self._is_vector = is_vector
-
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def element_col_name_template(self):
-        return self._element_col_name_template
-
-    @property
-    def is_vector(self):
-        return self._is_vector
+        self.size = size
+        self.element_col_name_template = element_col_name_template
+        self.is_vector = is_vector
 
     def feature_name_at(self, position: int) -> str:
         """
@@ -61,7 +49,7 @@ class NumericVectorOrArrayRole(NumericRole):
         """
         assert 0 <= position < self.size
 
-        if isinstance(self._element_col_name_template, str):
-            return self._element_col_name_template.format(position)
+        if isinstance(self.element_col_name_template, str):
+            return self.element_col_name_template.format(position)
 
-        return self._element_col_name_template[position]
+        return self.element_col_name_template[position]

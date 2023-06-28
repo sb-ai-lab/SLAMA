@@ -1,14 +1,18 @@
+import json
 import os
 import shutil
+from datetime import datetime
 from typing import Optional
 
 import numpy as np
-from lightautoml.dataset.roles import NumericRole
+from lightautoml.dataset.roles import NumericRole, CategoryRole, DatetimeRole, DropRole, TextRole, DateRole, IdRole, \
+    TargetRole, GroupRole, WeightsRole, FoldsRole, PathRole, TreatmentRole
 from lightautoml.tasks import Task
 from pandas.testing import assert_frame_equal
 from pyspark.sql import SparkSession
 
-from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.base import SparkDataset, SparkDatasetMetadataJsonEncoder, SparkDatasetMetadataJsonDecoder
+from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.tasks.base import SparkTask
 from . import spark as spark_sess
 
@@ -29,6 +33,43 @@ def compare_dfs(dataset_a: SparkDataset, dataset_b: SparkDataset):
     df_a = dataset_a.data.orderBy(SparkDataset.ID_COLUMN).toPandas()
     df_b = dataset_b.data.orderBy(SparkDataset.ID_COLUMN).toPandas()
     assert_frame_equal(df_a, df_b)
+
+
+def test_column_roles_json_encoder_and_decoder():
+    roles = {
+        "num_role": NumericRole(),
+        "num_vect_role": NumericVectorOrArrayRole(size=20, element_col_name_template="some_template"),
+        "cat_role": CategoryRole(),
+        "id_role": IdRole(),
+        "dt_role": DatetimeRole(origin=datetime.now()),
+        "d_role": DateRole(),
+        "text_role": TextRole(),
+        "target_role": TargetRole(),
+        "group_role": GroupRole(),
+        "drop_role": DropRole(),
+        "weights_role": WeightsRole(),
+        "folds_role": FoldsRole(),
+        "path_role": PathRole(),
+        "treatment_role": TreatmentRole()
+    }
+
+    js_roles = json.dumps(roles, cls=SparkDatasetMetadataJsonEncoder)
+    deser_roles = json.loads(js_roles, cls=SparkDatasetMetadataJsonDecoder)
+
+    assert deser_roles == roles
+
+
+def test_spark_task_json_encoder_decoder():
+    stask = SparkTask("binary")
+
+    js_stask = json.dumps(stask, cls=SparkDatasetMetadataJsonEncoder)
+    deser_stask = json.loads(js_stask, cls=SparkDatasetMetadataJsonDecoder)
+
+    stask_internals = [stask.name, stask.loss_name, stask.metric_name, stask.greater_is_better]
+    deser_stask_internals = [deser_stask.name, deser_stask.loss_name,
+                             deser_stask.metric_name, deser_stask.greater_is_better]
+
+    assert deser_stask_internals == stask_internals
 
 
 def test_spark_dataset_save_load(spark: SparkSession):

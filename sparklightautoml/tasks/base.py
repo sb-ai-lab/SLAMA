@@ -3,7 +3,7 @@ from typing import Optional, Union, cast
 import numpy as np
 import pandas as pd
 from lightautoml.tasks import Task as LAMATask
-from lightautoml.tasks.base import LAMLMetric, _default_losses
+from lightautoml.tasks.base import LAMLMetric
 from pyspark.ml.evaluation import (
     BinaryClassificationEvaluator,
     RegressionEvaluator,
@@ -144,6 +144,7 @@ class SparkTask(LAMATask):
             f"The following metrics are supported: {list(self._supported_metrics[self.name].keys())}"
         )
 
+        self.loss_name = loss
         self.metric_name = metric
 
     def get_dataset_metric(self) -> LAMLMetric:
