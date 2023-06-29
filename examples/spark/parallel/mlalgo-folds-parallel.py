@@ -40,7 +40,8 @@ def train_test_split(dataset: SparkDataset, test_slice_or_fold_num: Union[float,
 
 
 if __name__ == "__main__":
-    spark = get_spark_session()
+    partitions_num = 4
+    spark = get_spark_session(partitions_num=partitions_num)
 
     """
     available feat_pipe: linear, lgb_simple or lgb_adv
@@ -54,7 +55,8 @@ if __name__ == "__main__":
     # load and prepare data
     ds = SparkDataset.load(
         path=f"/tmp/{dataset_name}__{feat_pipe}__features.dataset",
-        persistence_manager=PlainCachePersistenceManager()
+        persistence_manager=PlainCachePersistenceManager(),
+        partitions_num=partitions_num
     )
     train_ds, test_ds = train_test_split(ds, test_slice_or_fold_num=4)
     train_ds, test_ds = train_ds.persist(), test_ds.persist()
