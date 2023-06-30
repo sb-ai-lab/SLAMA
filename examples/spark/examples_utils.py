@@ -144,8 +144,7 @@ def get_spark_session(partitions_num: Optional[int] = None):
         spark_sess = (
             SparkSession
             .builder
-            # .master(f"local[{partitions_num}]")
-            .master(f"local-cluster[2, 2, 4096]")
+            .master(f"local[{partitions_num}]")
             .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
             .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.1.jar")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")

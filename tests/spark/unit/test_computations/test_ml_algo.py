@@ -27,7 +27,7 @@ parallel_manager_configs = [
 manager_configs = [None, SequentialComputationsManager(), *parallel_manager_configs]
 
 ml_algo_configs = [
-    # lambda: SparkBoostLGBM(use_barrier_execution_mode=True),
+    lambda: SparkBoostLGBM(use_barrier_execution_mode=True),
     lambda: SparkLinearLBFGS(default_params={'regParam': [1e-5]})
 ]
 

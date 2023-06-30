@@ -91,7 +91,7 @@ class ParallelComputationsSession(ComputationsSession):
         exec_cores = get_executors_cores()
 
         num_tasks = max(1, math.floor(len(execs) * exec_cores / self._parallelism))
-        num_threads_per_executor = round(num_tasks / len(execs))
+        num_threads_per_executor = max(1, round(num_tasks / len(execs)))
 
         computing_slots = [
             ComputationSlot(

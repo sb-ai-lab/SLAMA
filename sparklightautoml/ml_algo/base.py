@@ -296,7 +296,8 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
 
         self.timer.write_run_info()
 
-        _, models, val_preds, model_prediction_cols = [list(el) for el in zip(*results)]
+        computed_results = (r for r in results if r is not None)
+        _, models, val_preds, model_prediction_cols = [list(el) for el in zip(*computed_results)]
 
         return models, val_preds, model_prediction_cols
 

@@ -1,5 +1,7 @@
 import functools
 import logging
+import random
+import time
 import warnings
 from copy import copy
 from typing import Dict, Optional, Tuple, Union, cast, List, Any
@@ -424,25 +426,30 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
                 handleInvalid="keep"
             )
 
+        # assign a random port to decrease chances of allocating the same port from multiple instances
+        rand = random.Random(time.time_ns())
+        random_port = rand.randint(10_000, 50_000)
+
+        run_params = {
+            'featuresCol': self._assembler.getOutputCol(),
+            'labelCol': train.target_column,
+            'validationIndicatorCol': validation_column,
+            'verbosity': verbose_eval,
+            'useSingleDatasetMode': self._use_single_dataset_mode,
+            'useBarrierExecutionMode': self._use_barrier_execution_mode,
+            'isProvideTrainingMetric': True,
+            'chunkSize': self._chunk_size,
+            'defaultListenPort': random_port,
+            **params,
+            **({'alpha': 0.5, 'lambdaL1': 0.0, 'lambdaL2': 0.0} if train.task.name == "reg" else dict())
+        }
+
         # build the booster
         lgbm_booster = LightGBMRegressor if train.task.name == "reg" else LightGBMClassifier
-
-        lgbm = lgbm_booster(
-            **params,
-            featuresCol=self._assembler.getOutputCol(),
-            labelCol=train.target_column,
-            validationIndicatorCol=validation_column,
-            verbosity=verbose_eval,
-            useSingleDatasetMode=self._use_single_dataset_mode,
-            useBarrierExecutionMode=self._use_barrier_execution_mode,
-            isProvideTrainingMetric=True,
-            chunkSize=self._chunk_size,
-        )
-
-        if train.task.name == "reg":
-            lgbm.setAlpha(0.5).setLambdaL1(0.0).setLambdaL2(0.0)
+        lgbm = lgbm_booster(**run_params)
 
         logger.info(f"Use single dataset mode: {lgbm.getUseSingleDatasetMode()}. NumThreads: {lgbm.getNumThreads()}")
+        logger.info(f"All lgbm booster params: {run_params}")
 
         # fitting the model
         ml_model = lgbm.fit(self._assembler.transform(full_data))

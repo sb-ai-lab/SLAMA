@@ -120,9 +120,9 @@ class ParallelOptunaTuner(OptunaTuner):
         trial_ml_algo = deepcopy(ml_algo)
         ml_algo.computations_manager = cm
         trial_ml_algo.persist_output_dataset = False
-        trial_ml_algo.computations_manager = SequentialComputationsManager()
 
         with self._computations_manager.session(train_valid_iterator.train) as self._session:
+            # _get objective will use self._session
             self.study.optimize(
                 func=self._get_objective(
                     ml_algo=trial_ml_algo,
@@ -148,6 +148,10 @@ class ParallelOptunaTuner(OptunaTuner):
             with self._session.allocate() as slot:
                 assert slot.dataset is not None
                 _ml_algo = deepcopy(ml_algo)
+                _ml_algo.computations_manager = SequentialComputationsManager(
+                    num_tasks=slot.num_tasks,
+                    num_threads_per_executor=slot.num_threads_per_executor
+                )
                 tv_iter = deecopy_tviter_without_dataset(train_valid_iterator)
                 tv_iter.train = slot.dataset
 
