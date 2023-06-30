@@ -3,9 +3,8 @@ import multiprocessing
 from copy import deepcopy
 from typing import List
 
-from pyspark import SparkContext, inheritable_thread_target, RDD
-from pyspark.sql import SparkSession
-
+from pyspark import SparkContext, inheritable_thread_target
+from sparklightautoml.spark_functions import get_ctx_for_df
 from sparklightautoml.utils import SparkDataFrame, get_current_session
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
 
@@ -43,8 +42,9 @@ def duplicate_on_num_slots_with_locations_preferences(
     result = sc._jvm.org.apache.spark.lightautoml.utils.SomeFunctions.duplicateOnNumSlotsWithLocationsPreferences(
         df._jdf, num_slots, materialize_base_rdd, enforce_division_without_reminder
     )
-    dfs = [SparkDataFrame(jobj, spark._wrapped) for jobj in result._1()]
-    base_coalesced_df = SparkDataFrame(result._2(), spark._wrapped)
+    ctx = get_ctx_for_df(spark)
+    dfs = [SparkDataFrame(jobj, ctx) for jobj in result._1()]
+    base_coalesced_df = SparkDataFrame(result._2(), ctx)
     return dfs, base_coalesced_df
 
 

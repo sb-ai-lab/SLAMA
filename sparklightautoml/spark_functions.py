@@ -2,7 +2,7 @@ from importlib_metadata import version
 from packaging.version import parse
 from pyspark.sql.functions import countDistinct as count_distinct
 from pyspark import SparkContext
-from pyspark.sql import Column
+from pyspark.sql import Column, SparkSession
 # noinspection PyUnresolvedReferences
 from pyspark.sql.column import _to_java_column, _to_seq, _create_column_from_literal
 
@@ -23,6 +23,11 @@ def scalar_averaging(cols):
             _to_java_column(cols)
         )
     )
+
+
+def get_ctx_for_df(spark:SparkSession):
+    # noinspection PyUnresolvedReferences,PyProtectedMember
+    return spark._wrapped if parse(version('pyspark')) < parse('3.3.0') else spark
 
 
 if parse(version('pyspark')) >= parse('3.1.0'):
