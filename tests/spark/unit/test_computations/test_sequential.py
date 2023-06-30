@@ -18,15 +18,17 @@ dataset = spark_dataset
 K = 20
 
 
-def test_allocate(spark: SparkSession, dataset: SparkDataset):
-    manager = SequentialComputationsManager()
+@pytest.mark.parametrize("num_tasks,num_threads", [(None, None), (None, 2), (4, None), (2, 4), (4, 2)])
+def test_allocate(spark: SparkSession, dataset: SparkDataset, num_tasks, num_threads):
+    manager = SequentialComputationsManager(num_tasks=num_tasks, num_threads_per_executor=num_threads)
 
-    # TODO: add checking for access from different threads
     with manager.session(dataset) as session:
         for i in range(10):
             with session.allocate() as slot:
                 assert slot.dataset is not None
                 assert slot.dataset.uid == dataset.uid
+                assert slot.num_tasks == num_tasks
+                assert slot.num_threads_per_executor == num_threads
 
         acc = collections.deque()
         results = session.compute([build_func(acc, j) for j in range(K)])

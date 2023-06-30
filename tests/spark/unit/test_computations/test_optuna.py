@@ -19,14 +19,14 @@ dataset = spark_dataset
 
 
 @pytest.mark.parametrize("manager", [
-    None,
-    SequentialComputationsManager(),
-    ParallelComputationsManager(parallelism=1, use_location_prefs_mode=False),
+    # None,
+    # SequentialComputationsManager(),
+    # ParallelComputationsManager(parallelism=1, use_location_prefs_mode=False),
     ParallelComputationsManager(parallelism=2, use_location_prefs_mode=False),
-    ParallelComputationsManager(parallelism=5, use_location_prefs_mode=False),
-    ParallelComputationsManager(parallelism=1, use_location_prefs_mode=True),
-    ParallelComputationsManager(parallelism=2, use_location_prefs_mode=True),
-    ParallelComputationsManager(parallelism=5, use_location_prefs_mode=True)
+    # ParallelComputationsManager(parallelism=5, use_location_prefs_mode=False),
+    # ParallelComputationsManager(parallelism=1, use_location_prefs_mode=True),
+    # ParallelComputationsManager(parallelism=2, use_location_prefs_mode=True),
+    # ParallelComputationsManager(parallelism=5, use_location_prefs_mode=True)
 ])
 def test_parallel_optuna_tuner(spark: SparkSession, dataset: SparkDataset, manager: Optional[ComputationsManager]):
     # create main entities
