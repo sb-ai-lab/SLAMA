@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+set -ex
+
+function build() {
+  poetry build
+
+  docker build -t slama:latest -f docker/spark-lama.dockerfile .
+}
+
+function run() {
+  docker run -it slama:latest examples/spark/tabular-preset-automl.py
+}
+
+function help() {
+  echo "
+  List of commands.
+    build - builds 'slama:latest' image
+    run - use 'slama:latest' image to run an example (see possible examples in 'examples/spark' directory of this project)
+    help - prints this message
+  "
+}
+
+function main () {
+    cmd="$1"
+
+    if [ -z "${cmd}" ]
+    then
+      echo "No command is provided."
+      help
+      exit 1
+    fi
+
+    shift 1
+
+    echo "Executing command: ${cmd}"
+
+    case "${cmd}" in
+
+    "build")
+        build
+        ;;
+
+    "run")
+        run
+        ;;
+
+    "help")
+        help
+        ;;
+
+    *)
+        echo "Unknown command: ${cmd}"
+        ;;
+
+    esac
+}
+
+main "${@}"
