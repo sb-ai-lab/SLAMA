@@ -1,14 +1,20 @@
 import functools
+import importlib
+import json
 import logging
+import os
 import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import Counter
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+from json import JSONEncoder, JSONDecoder
 from typing import Sequence, Any, Tuple, Union, Optional, List, cast, Dict, Set, Callable
 
+import numpy as np
 import pandas as pd
 from lightautoml.dataset.base import (
     LAMLDataset,
@@ -21,7 +27,8 @@ from lightautoml.dataset.base import (
     array_attr_roles,
 )
 from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
-from lightautoml.dataset.roles import ColumnRole, NumericRole, DropRole
+from lightautoml.dataset.roles import ColumnRole, NumericRole, DropRole, DatetimeRole, GroupRole, WeightsRole, \
+    FoldsRole, PathRole, TreatmentRole, DateRole
 from lightautoml.tasks import Task
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql import functions as sf, Column
@@ -29,7 +36,7 @@ from pyspark.sql.session import SparkSession
 
 from sparklightautoml import VALIDATION_COLUMN
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import SparkDataFrame, create_directory, get_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +62,74 @@ class Unpersistable(ABC):
         ...
 
 
+class SparkDatasetMetadataJsonEncoder(JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if isinstance(o, ColumnRole):
+            dct = deepcopy(o.__dict__)
+            dct["__type__"] = ".".join([type(o).__module__, type(o).__name__])
+            dct['dtype'] = o.dtype.__name__
+
+            if isinstance(o, DatetimeRole):
+                dct['date_format'] = dct['format']
+                del dct['format']
+                dct['origin'] = o.origin.timestamp() if isinstance(o.origin, datetime) else o.origin
+
+            return dct
+
+        from sparklightautoml.tasks.base import SparkTask
+
+        if isinstance(o, SparkTask):
+            dct = {
+                "__type__": type(o).__name__,
+                "name": o.name,
+                "loss": o.loss_name,
+                "metric": o.metric_name,
+                # convert to python bool from numpy.bool_
+                "greater_is_better": True if o.greater_is_better else False
+            }
+
+            return dct
+
+        raise ValueError(f"Cannot handle object which is not a ColumRole. Object type: {type(o)}")
+
+
+class SparkDatasetMetadataJsonDecoder(JSONDecoder):
+    @staticmethod
+    def _column_roles_object_hook(json_object):
+        from sparklightautoml.tasks.base import SparkTask
+        if json_object.get("__type__", None) == "SparkTask":
+            del json_object["__type__"]
+            return SparkTask(**json_object)
+
+        if "__type__" in json_object:
+            components = json_object["__type__"].split(".")
+            module_name = ".".join(components[:-1])
+            class_name = components[-1]
+            module = importlib.import_module(module_name)
+            clazz = getattr(module, class_name)
+
+            del json_object["__type__"]
+            if clazz in [DatetimeRole, DateRole]:
+                json_object["seasonality"] = tuple(json_object["seasonality"])
+                if isinstance(json_object["origin"], float):
+                    json_object["origin"] = datetime.fromtimestamp(json_object["origin"])
+
+            json_object["dtype"] = getattr(np, json_object["dtype"])
+
+            if clazz in [GroupRole, DropRole, WeightsRole, FoldsRole, PathRole, TreatmentRole]:
+                del json_object["dtype"]
+
+            instance = clazz(**json_object)
+
+            return instance
+
+        return json_object
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("object_hook", self._column_roles_object_hook)
+        super().__init__(**kwargs)
+
+
 class SparkDataset(LAMLDataset, Unpersistable):
     """
     Implements a dataset that uses a ``pyspark.sql.DataFrame`` internally,
@@ -75,6 +150,32 @@ class SparkDataset(LAMLDataset, Unpersistable):
     _dataset_type = "SparkDataset"
 
     ID_COLUMN = "_id"
+
+    @classmethod
+    def load(cls,
+             path: str,
+             file_format: str = 'parquet',
+             file_format_options: Optional[Dict[str, Any]] = None,
+             persistence_manager: Optional['PersistenceManager'] = None,
+             partitions_num: Optional[int] = None) -> 'SparkDataset':
+        metadata_file_path = os.path.join(path, f"metadata.{file_format}")
+        file_path = os.path.join(path, f"data.{file_format}")
+        file_format_options = file_format_options or dict()
+        spark = get_current_session()
+
+        # reading metadata
+        metadata_df = spark.read.format(file_format).options(**file_format_options).load(metadata_file_path)
+        metadata = json.loads(metadata_df.select('metadata').first().asDict()['metadata'], cls=SparkDatasetMetadataJsonDecoder)
+
+        # reading data
+        data_df = spark.read.format(file_format).options(**file_format_options).load(file_path)
+        name_fixed_cols = (sf.col(c).alias(c.replace('[', '(').replace(']', ')')) for c in data_df.columns)
+        data_df = data_df.select(*name_fixed_cols)
+
+        if partitions_num:
+            data_df = data_df.repartition(partitions_num)
+
+        return SparkDataset(data=data_df, persistence_manager=persistence_manager, **metadata)
 
     # TODO: SLAMA - implement filling dependencies
     @classmethod
@@ -133,25 +234,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
                  bucketized: bool = False,
                  dependencies: Optional[List[Dependency]] = None,
                  name: Optional[str] = None,
+                 target: Optional[str] = None,
+                 folds: Optional[str] = None,
                  **kwargs: Any):
-
-        if "target" in kwargs:
-            assert isinstance(kwargs["target"], str), "Target should be a str representing column name"
-            self._target_column: str = kwargs["target"]
-        else:
-            self._target_column = None
-
-        self._folds_column = None
-        if "folds" in kwargs and kwargs["folds"] is not None:
-            assert isinstance(kwargs["folds"], str), "Folds should be a str representing column name"
-            self._folds_column: str = kwargs["folds"]
-        else:
-            self._folds_column = None
-
         self._validate_dataframe(data)
-
-        self._data = None
-        self._service_columns: Set[str] = {self.ID_COLUMN, self.target_column, self.folds_column, VALIDATION_COLUMN}
 
         roles = roles if roles else dict()
 
@@ -162,17 +248,22 @@ class SparkDataset(LAMLDataset, Unpersistable):
                 if roles[f].name == r:
                     roles[f] = DropRole()
 
+        self._data = None
         self._bucketized = bucketized
         self._roles = None
-
         self._uid = str(uuid.uuid4())
         self._persistence_manager = persistence_manager
         self._dependencies = dependencies
         self._frozen = False
         self._name = name
         self._is_persisted = False
+        self._target_column = target
+        self._folds_column = folds
+        # columns that can be transferred intact across all transformations
+        # in the pipeline
+        self._service_columns: Set[str] = {self.ID_COLUMN, target, folds, VALIDATION_COLUMN}
 
-        super().__init__(data, None, roles, task, **kwargs)
+        super().__init__(data, list(roles.keys()), roles, task, **kwargs)
 
     @property
     def uid(self) -> str:
@@ -183,8 +274,8 @@ class SparkDataset(LAMLDataset, Unpersistable):
         return self._name
 
     @property
-    def spark_session(self):
-        return SparkSession.getActiveSession()
+    def spark_session(self) -> SparkSession:
+        return self.data.sql_ctx.sparkSession
 
     @property
     def data(self) -> SparkDataFrame:
@@ -206,18 +297,20 @@ class SparkDataset(LAMLDataset, Unpersistable):
             list of features.
 
         """
-        return [c for c in self.data.columns if c not in self._service_columns] if self.data else []
+        return self._features
 
     @features.setter
-    def features(self, val: None):
-        """Ignore setting features.
-
-        Args:
-            val: ignored.
-
+    def features(self, val: List[str]):
         """
-        pass
-        # raise NotImplementedError("The operation is not supported")
+            Set features available in this dataset.
+            Columns won't be deleted from the dataframe but won't appear throught features property.
+
+            Args:
+                val: list of feature names.
+        """
+        diff = set(val).difference(self.data.columns)
+        assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
+        self._features = copy(val)
 
     @property
     def roles(self) -> RolesDict:
@@ -244,11 +337,17 @@ class SparkDataset(LAMLDataset, Unpersistable):
             self._roles = dict(((x, val[x]) for x in self.features))
         elif type(val) is list:
             self._roles = dict(zip(self.features, val))
+            diff = set(self._roles.keys()).difference(self.data.columns)
+            assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
+
         elif val:
             role = cast(ColumnRole, val)
             self._roles = dict(((x, role) for x in self.features))
         else:
             raise ValueError()
+
+        diff = set(self._roles.keys()).difference(self.data.columns)
+        assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
 
     @property
     def bucketized(self) -> bool:
@@ -272,6 +371,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
     @property
     def service_columns(self) -> List[str]:
         return [sc for sc in self._service_columns if sc in self.data.columns]
+
+    @property
+    def num_folds(self) -> int:
+        return self.data.select(self.folds_column).distinct().count()
 
     @property
     def persistence_manager(self) -> 'PersistenceManager':
@@ -396,7 +499,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
             roles: Dict with roles.
         """
         self._validate_dataframe(data)
-        super().set_data(data, None, roles)
+        super().set_data(data, features, roles)
         self._persistence_manager = persistence_manager or self._persistence_manager
         self._dependencies = dependencies if dependencies is not None else self._dependencies
         self._uid = uid or self._uid
@@ -474,6 +577,44 @@ class SparkDataset(LAMLDataset, Unpersistable):
         ds = self.empty()
         ds.set_data(self.data, self.features, self.roles, frozen=True)
         return ds
+
+    def save(self,
+             path: str,
+             save_mode: str = 'error',
+             file_format: str = 'parquet',
+             file_format_options: Optional[Dict[str, Any]] = None):
+        metadata_file_path = os.path.join(path, f"metadata.{file_format}")
+        file_path = os.path.join(path, f"data.{file_format}")
+        file_format_options = file_format_options or dict()
+
+        # prepare metadata of the dataset
+        metadata = {
+            "name": self.name,
+            "roles": self.roles,
+            "task": self.task,
+            "target": self.target_column,
+            "folds": self.folds_column,
+        }
+        metadata_str = json.dumps(metadata, cls=SparkDatasetMetadataJsonEncoder)
+        metadata_df = self.spark_session.createDataFrame([{"metadata": metadata_str}])
+
+        # create directory that will store data and metadata as separate files of dataframes
+        create_directory(path, spark=self.spark_session, exists_ok=(save_mode in ['overwrite', 'append']))
+
+        # writing dataframes
+        metadata_df.write.format(file_format).mode(save_mode).options(**file_format_options).save(metadata_file_path)
+        # fix name of columns: parquet cannot have columns with '(' or ')' in the name
+        name_fixed_cols = (sf.col(c).alias(c.replace('(', '[').replace(')', ']')) for c in self.data.columns)
+        # write dataframe with fixed column names
+        (
+            self.data
+            .select(*name_fixed_cols)
+            .write
+            .format(file_format)
+            .mode(save_mode)
+            .options(**file_format_options)
+            .save(file_path)
+        )
 
     def to_pandas(self) -> PandasDataset:
         data, target_data, folds_data, roles = self._materialize_to_pandas()

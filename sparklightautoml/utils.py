@@ -9,19 +9,18 @@ from logging import Logger
 from typing import Optional, Tuple, Dict, List, cast
 
 import pyspark
+from py4j.java_gateway import java_import
 from pyspark import RDD
 from pyspark.ml import Transformer, Estimator
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCols, HasOutputCols
-from pyspark.ml.pipeline import PipelineModel, PipelineSharedReadWrite, PipelineModelReader
-from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLReadable, MLWritable, MLWriter, \
+from pyspark.ml.pipeline import PipelineModel, PipelineSharedReadWrite
+from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLWriter, \
     DefaultParamsWriter, MLReader, DefaultParamsReader
 from pyspark.sql import SparkSession
 
-from sparklightautoml.mlwriters import CommonPickleMLWritable, CommonPickleMLReadable
-
-VERBOSE_LOGGING_FORMAT = "%(asctime)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
+VERBOSE_LOGGING_FORMAT = "%(asctime)s %(threadName)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +135,10 @@ class log_exec_timer:
 SparkDataFrame = pyspark.sql.DataFrame
 
 
+def get_current_session() -> SparkSession:
+    return SparkSession.builder.getOrCreate()
+
+
 def get_cached_df_through_rdd(df: SparkDataFrame, name: Optional[str] = None) -> Tuple[SparkDataFrame, RDD]:
     rdd = df.rdd
     cached_rdd = rdd.setName(name).cache() if name else rdd.cache()
@@ -243,11 +246,24 @@ class ColumnsSelectorTransformer(
                 or not self.getOrDefault(self._alreadyTransformed):
             ds_cols = set(dataset.columns)
             present_opt_cols = [c for c in self.get_optional_cols() if c in ds_cols]
-            dataset = dataset.select(*self.getInputCols(), *present_opt_cols)
+            input_cols = self._treat_columns_pattern(dataset, self.getInputCols())
+            opt_input_cols = self._treat_columns_pattern(dataset, present_opt_cols)
+            dataset = dataset.select([*input_cols, *opt_input_cols])
             self.set(self._alreadyTransformed, True)
+            self.set(self.outputCols, input_cols)
 
         logger.debug(f"Out {type(self)}. Name: {self._name}. Columns: {sorted(dataset.columns)}")
         return dataset
+
+    @staticmethod
+    def _treat_columns_pattern(df: SparkDataFrame, cols: List[str]) -> List[str]:
+        def treat(col: str):
+            if col.endswith('*'):
+                pattern = col[:-1]
+                return [c for c in df.columns if c.startswith(pattern)]
+            return [col]
+        cols = [cc for c in cols for cc in treat(c)]
+        return cols
 
 
 class NoOpTransformer(Transformer, DefaultParamsWritable, DefaultParamsReadable):
@@ -333,7 +349,7 @@ class WrappingSelectingPipelineModel(PipelineModel, HasInputCols):
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
         cstr = ColumnsSelectorTransformer(
             name=f"{type(self).__name__}({self.getOrDefault(self.name)})",
-            input_cols=[*dataset.columns, *self.getInputCols()],
+            input_cols=list({*dataset.columns, *self.getInputCols()}),
             optional_cols=self.getOrDefault(self.optionalCols)
         )
         ds = super()._transform(dataset)
@@ -380,7 +396,7 @@ class Cacher(Estimator):
         # ds = dataset.localCheckpoint(eager=True)
 
         # # using plain caching
-        # ds = SparkSession.getActiveSession().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
+        # ds = get_current_session().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
         ds = dataset.cache()
         ds.write.mode('overwrite').format('noop').save()
 
@@ -426,8 +442,27 @@ def log_exception(logger: Logger):
 
 
 @contextmanager
-def JobGroup(group_id: str, description: str):
-    sc = SparkSession.getActiveSession().sparkContext
+def JobGroup(group_id: str, description: str, spark: SparkSession):
+    sc = spark.sparkContext
     sc.setJobGroup(group_id, description)
     yield
     sc._jsc.clearJobGroup()
+
+
+# noinspection PyProtectedMember,PyUnresolvedReferences
+def create_directory(path: str, spark: SparkSession, exists_ok: bool = False):
+    java_import(spark._jvm, 'org.apache.hadoop.fs.Path')
+    java_import(spark._jvm, 'java.net.URI')
+    java_import(spark._jvm, 'org.apache.hadoop.fs.FileSystem')
+
+    juri = spark._jvm.Path(path).toUri()
+    jpath = spark._jvm.Path(juri.getPath())
+    jscheme = spark._jvm.URI(f"{juri.getScheme()}://{juri.getAuthority() or ''}/") \
+        if juri.getScheme() else None
+    fs = spark._jvm.FileSystem.get(jscheme, spark._jsc.hadoopConfiguration()) \
+        if jscheme else spark._jvm.FileSystem.get(spark._jsc.hadoopConfiguration())
+
+    if not fs.exists(jpath):
+        fs.mkdirs(jpath)
+    elif not exists_ok:
+        raise FileExistsError(f"The path already exists: {path}")

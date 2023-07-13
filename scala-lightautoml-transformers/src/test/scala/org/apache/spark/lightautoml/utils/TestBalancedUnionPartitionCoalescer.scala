@@ -33,7 +33,7 @@ class TestBalancedUnionPartitionCoalescer extends AnyFunSuite with BeforeAndAfte
   val spark: SparkSession = SparkSession
           .builder()
           .master(s"local-cluster[$num_workers, $num_cores, 1024]")
-          .config("spark.jars", "target/scala-2.12/spark-lightautoml_2.12-0.1.jar")
+          .config("spark.jars", "target/scala-2.12/spark-lightautoml_2.12-0.1.1.jar")
           .getOrCreate()
 
   override protected def afterAll(): Unit = {

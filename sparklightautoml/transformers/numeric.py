@@ -25,8 +25,6 @@ class SparkNaNFlagsEstimator(SparkBaseEstimator):
 
     _fit_checks = (numeric_check,)
     _transform_checks = ()
-    # TODO: the value is copied from the corresponding LAMA transformer.
-    # TODO: it is better to be taken from shared module as a string constant
     _fname_prefix = "nanflg"
 
     def __init__(

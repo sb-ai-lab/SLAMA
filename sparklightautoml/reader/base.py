@@ -26,7 +26,7 @@ from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, Persis
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
 from sparklightautoml.reader.guess_roles import get_numeric_roles_stat, get_category_roles_stat, get_null_scores
-from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import SparkDataFrame, JobGroup
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ stype2dtype = {
     "long": "long",
     "float": "float",
     "double": "float64",
+    "timestamp": "datetime64"
 }
 
 
@@ -300,16 +301,20 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
 
         train_data = self._create_target(train_data, target_col=self.target_col)
 
-        # TODO: SLAMA - fix this sampling
         total_number = train_data.count()
-        # if self.samples is not None:
-        #     if self.samples > total_number:
-        #         fraction = 1.0
-        #     else:
-        #         fraction = self.samples/total_number
-        #     subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
-        # else:
-        subsample = train_data
+        if self.samples is not None:
+            if self.samples > total_number:
+                fraction = 1.0
+            else:
+                fraction = self.samples / total_number
+            subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
+            with JobGroup("Reader: Subsampling materailization", "Reader: Subsampling materailization",
+                          train_data.sql_ctx.sparkSession):
+                subsample.count()
+            unpersist_subsample = True
+        else:
+            subsample = train_data
+            unpersist_subsample = False
 
         logger.debug("SparkToSparkReader infer roles is started")
         # infer roles
@@ -361,9 +366,12 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
 
         logger.debug("SparkToSparkReader infer roles is finished")
 
-        ok_features = self._ok_features(train_data, feats_to_guess)
+        ok_features = self._ok_features(subsample, feats_to_guess)
         guessed_feats = self._guess_role(subsample, ok_features)
         inferred_feats.update(guessed_feats)
+
+        if unpersist_subsample:
+            subsample.unpersist()
 
         # # set back
         for feat, r in inferred_feats.items():
@@ -490,7 +498,8 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
             self._n_classes = len(uniques)
 
             if isinstance(sdf.schema[target_col].dataType, NumericType):
-                uniques = sorted(uniques)
+                # TODO: SLAMA - hack
+                uniques = sorted(int(x) for x in uniques)
                 self.class_mapping = {x: i for i, x in enumerate(uniques)}
                 srtd = np.ndarray(uniques)
             elif isinstance(sdf.schema[target_col].dataType, StringType):
@@ -641,7 +650,6 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                 estimated_features.append((feat, False))
                 continue
 
-            # TODO: this part may be optimized using sampling
             crow = (
                 train_data.groupby(feat)
                 .agg(sf.count("*").alias("count"))
@@ -797,11 +805,18 @@ class SparkToSparkReaderTransformer(Transformer, SparkReaderHelper, CommonPickle
 
         dataset = self._create_unique_ids(dataset)
 
-        dataset = dataset.select(
+        processed_cols = [
             SparkDataset.ID_COLUMN,
             *service_columns,
-            *[self._convert_column(feat, role) for feat, role in roles.items()],
-        )
+            *[self._convert_column(feat, role) for feat, role in roles.items()]
+        ]
+
+        processed_cols_names = {SparkDataset.ID_COLUMN, *service_columns, *roles.keys()}
+
+        dataset = dataset.select([
+            *processed_cols,
+            *[c for c in dataset.columns if c not in processed_cols_names]
+        ])
 
         logger.debug(f"Out {type(self)}. Columns: {sorted(dataset.columns)}")
         return dataset

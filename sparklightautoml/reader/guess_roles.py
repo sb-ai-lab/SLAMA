@@ -149,12 +149,7 @@ def get_numeric_roles_stat(
     train = train.empty()
     train.set_data(sdf, roles_to_identify, roles)
 
-    assert train.folds is not None
-
-    # if train.folds is None:
-    #     train.folds = set_sklearn_folds(train.task, train.target, cv=5, random_state=42, group=train.group)
-
-    data, target = train.data, train.target
+    assert train.folds_column is not None
 
     # check task specific
     if train.task.name == "multiclass":
@@ -162,28 +157,8 @@ def get_numeric_roles_stat(
     else:
         encoder = SparkTargetEncoderEstimator
 
-    # s3d = data.shape + (-1,)
-    # empty_slice = np.isnan(data)
-
     # check scores as is
     res["raw_scores"] = get_score_from_pipe(train)
-
-    # # check unique values
-    # sub_select_columns = []
-    # top_select_columns = []
-    # for f in train.features:
-    #     sub_select_columns.append(F.count(F.when(~F.isnan(F.col(f)), F.col(f)))
-    #     .over(Window.partitionBy(F.col(f))).alias(f'{f}_count_values'))
-    #     top_select_columns.append(F.max(F.col(f'{f}_count_values')).alias(f'{f}_max_count_values'))
-    #     top_select_columns.append(F.count_distinct(F.when(~F.isnan(F.col(f)), F.col(f))).alias(f'{f}_count_distinct'))
-    # df = train.data.select(*train.features, *sub_select_columns)
-    # unique_values_stat: Dict = df.select(*top_select_columns).first().asDict()
-    #
-    # # max of frequency of unique values in every column
-    # res["top_freq_values"] = np.array([unique_values_stat[f'{f}_max_count_values'] for f in train.features])
-    # # how many unique values in every column
-    # res["unique"] = np.array([unique_values_stat[f'{f}_count_distinct'] for f in train.features])
-    # res["unique_rate"] = res["unique"] / total_number
 
     # check binned categorical score
     quantile_binning = SparkQuantileBinningEstimator(input_cols=train.features, input_roles=train.roles)
@@ -292,7 +267,7 @@ def get_category_roles_stat(
     train = train.empty()
     train.set_data(sdf, roles_to_identify, roles)
 
-    assert train.folds is not None
+    assert train.folds_column is not None
 
     # check task specific
     if train.task.name == "multiclass":

@@ -7,8 +7,8 @@ import pyspark.sql.functions as sf
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
-from examples_utils import get_persistence_manager, BUCKET_NUMS
-from examples_utils import get_dataset_attrs, prepare_test_and_train, get_spark_session
+from examples_utils import get_dataset, prepare_test_and_train, get_spark_session
+from examples_utils import get_persistence_manager, BUCKET_NUMS, check_columns
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.tasks.base import SparkTask
@@ -30,8 +30,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
     use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    cv = 5
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    cv = 3
+    dataset = get_dataset(dataset_name)
 
     persistence_manager = get_persistence_manager()
     # Alternative ways to define persistence_manager
@@ -39,8 +39,8 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # persistence_manager = CompositePlainCachePersistenceManager(bucket_nums=BUCKET_NUMS)
 
     with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type)
-        train_data, test_data = prepare_test_and_train(spark, path, seed)
+        task = SparkTask(dataset.task_type)
+        train_data, test_data = prepare_test_and_train(dataset, seed)
 
         test_data_dropped = test_data
 
@@ -55,12 +55,13 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
                 'mini_batch_size': 1000
             },
             linear_l2_params={'default_params': {'regParam': [1e-5]}},
-            reader_params={"cv": cv, "advanced_roles": False}
+            reader_params={"cv": cv, "advanced_roles": False},
+            computation_settings=("parallelism", 3)
         )
 
         oof_predictions = automl.fit_predict(
             train_data,
-            roles=roles,
+            roles=dataset.roles,
             persistence_manager=persistence_manager
         )
 
@@ -78,6 +79,9 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all
     automl.persistence_manager.unpersist_all()
 
+    test_column = "some_external_column"
+    test_data_dropped = test_data_dropped.withColumn(test_column, sf.lit(42.0))
+
     with log_exec_timer("spark-lama predicting on test (#1 way)") as predict_timer:
         te_pred = automl.predict(test_data_dropped, add_reader_attrs=True)
 
@@ -89,11 +93,13 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     with log_exec_timer("spark-lama predicting on test (#2 way)"):
         te_pred = automl.transformer().transform(test_data_dropped)
 
+        check_columns(test_data_dropped, te_pred)
+
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(pred_column).alias('prediction')
         ))
 
@@ -112,11 +118,13 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
     with log_exec_timer("spark-lama predicting on test (#3 way)"):
         te_pred = pipeline_model.transform(test_data_dropped)
 
+        check_columns(test_data_dropped, te_pred)
+
         pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
         score = task.get_dataset_metric()
         test_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(pred_column).alias('prediction')
         ))
 

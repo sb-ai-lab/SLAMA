@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "SparkLightAutoML_DEV"
-version = "0.3.0"
+version = "0.3.2"
 description = "Spark-based distribution version of fast and customizable framework for automatic ML model creation (AutoML)"
 authors = [
     "Alexander Ryzhkov <alexmryzhkov@gmail.com>",
@@ -48,6 +48,8 @@ toposort = "1.7"
 onnxmltools = "^1.11.0"
 weasyprint = {version = "52.5", optional = true}
 hdfs = "^2.7.0"
+
+numpy = "^1.23.0"
 
 
 [tool.poetry.dev-dependencies]

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @inherit_doc
 class IsHolidayTransformer(JavaTransformer, HasInputCols, HasOutputCols, CommonJavaToPythonMLReadable, JavaMLWritable):
     """
-    Scala-based implementation of Target Encoder transformer
+    Scala-based implementation of a transformer that checks whatever or not the date is a holiday
     """
 
     @classmethod

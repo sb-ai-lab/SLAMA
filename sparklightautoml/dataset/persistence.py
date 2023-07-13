@@ -9,7 +9,7 @@ from typing import Optional, Dict, List, Union, cast
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, PersistableDataFrame, PersistenceManager
-from sparklightautoml.utils import JobGroup
+from sparklightautoml.utils import JobGroup, get_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -162,8 +162,9 @@ class PlainCachePersistenceManager(BasePersistenceManager):
         logger.debug(f"Manager {self._uid}: "
                      f"caching and materializing the dataset (uid={pdf.uid}, name={pdf.name}).")
 
-        with JobGroup("Persisting", f"{type(self)} caching df (uid={pdf.uid}, name={pdf.name})"):
-            df = SparkSession.getActiveSession().createDataFrame(pdf.sdf.rdd, schema=pdf.sdf.schema) \
+        with JobGroup("Persisting", f"{type(self)} caching df (uid={pdf.uid}, name={pdf.name})",
+                      pdf.sdf.sql_ctx.sparkSession):
+            df = pdf.sdf.sql_ctx.sparkSession.createDataFrame(pdf.sdf.rdd, schema=pdf.sdf.schema) \
                 if self._prune_history else pdf.sdf
             ds = df.cache()
             ds.write.mode('overwrite').format('noop').save()
@@ -191,7 +192,8 @@ class LocalCheckpointPersistenceManager(BasePersistenceManager):
         logger.debug(f"Manager {self._uid}: "
                      f"making a local checkpoint for the dataset (uid={pdf.uid}, name={pdf.name}).")
 
-        with JobGroup("Persisting", f"{type(self)} local checkpointing of df (uid={pdf.uid}, name={pdf.name})"):
+        with JobGroup("Persisting", f"{type(self)} local checkpointing of df (uid={pdf.uid}, name={pdf.name})",
+                      pdf.sdf.sql_ctx.sparkSession):
             ds = pdf.sdf.localCheckpoint()
 
         logger.debug(f"Manager {self._uid}: "
@@ -221,7 +223,7 @@ class BucketedPersistenceManager(BasePersistenceManager):
         self._no_unpersisting = no_unpersisting
 
     def _persist(self, pdf: PersistableDataFrame, level: PersistenceLevel) -> PersistableDataFrame:
-        spark = SparkSession.getActiveSession()
+        spark = get_current_session()
         name = self._build_name(pdf)
         # TODO: SLAMA join - need to identify correct setting  for bucket_nums if it is not provided
         path = self._build_path(name)
@@ -231,7 +233,8 @@ class BucketedPersistenceManager(BasePersistenceManager):
         )
 
         with JobGroup("Persisting",
-                      f"{type(self)} saving bucketed table of df (uid={pdf.uid}, name={pdf.name}). Table path: {path}"):
+                      f"{type(self)} saving bucketed table of df (uid={pdf.uid}, name={pdf.name}). Table path: {path}",
+                      pdf.sdf.sql_ctx.sparkSession):
             # If we directly put path in .saveAsTable(...), than Spark will create an external table
             # that cannot be physically deleted with .sql("DROP TABLE <name>")
             # Without stating the path, Spark will create a managed table
@@ -263,7 +266,7 @@ class BucketedPersistenceManager(BasePersistenceManager):
             f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name} on path {path}."
         )
 
-        SparkSession.getActiveSession().sql(f"DROP TABLE {name}")
+        get_current_session().sql(f"DROP TABLE {name}")
 
         logger.debug(
             f"Manager {self._uid}: the bucketed table has been removed"

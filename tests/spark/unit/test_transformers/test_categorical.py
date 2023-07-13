@@ -22,13 +22,11 @@ from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import LAM
 from sparklightautoml.transformers.scala_wrappers.target_encoder_transformer import TargetEncoderTransformer, \
     SparkTargetEncodeTransformer
 from sparklightautoml.utils import SparkDataFrame, WrappingSelectingPipelineModel
-from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, compare_sparkml_by_metadata, \
-    workdir as working_dir
+from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, compare_sparkml_by_metadata, workdir
 from ..dataset_utils import get_test_datasets
 from ..test_auto_ml.utils import FakeOpTransformer
 
 spark = spark_sess
-workdir = working_dir
 
 CV = 5
 
@@ -86,6 +84,7 @@ def test_freq_encoder(spark: SparkSession, workdir: str, dataset: DatasetForTest
 
 
 # noinspection PyShadowingNames
+@pytest.mark.skip(reason="duplicate as of now")
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_ordinal_encoder(spark: SparkSession, dataset: DatasetForTest):
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))

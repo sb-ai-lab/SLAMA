@@ -5,7 +5,7 @@ from pyspark.ml import PipelineModel
 from pyspark.sql import functions as sf
 
 from examples_utils import get_persistence_manager, BUCKET_NUMS
-from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
+from examples_utils import get_spark_session, prepare_test_and_train, get_dataset
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.tasks.base import SparkTask
@@ -29,12 +29,12 @@ if __name__ == "__main__":
     cv = 2
     use_algos = [["lgb"]]
     dataset_name = "ipums_97"
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
-    train_data, test_data = prepare_test_and_train(spark, path, seed)
+    train_data, test_data = prepare_test_and_train(dataset, seed)
 
     with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type)
+        task = SparkTask(dataset.task_type)
 
         automl = SparkTabularAutoML(
             spark=spark,
@@ -46,7 +46,7 @@ if __name__ == "__main__":
             tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 10, 'max_tuning_time': 3600}
         )
 
-        preds = automl.fit_predict(train_data, roles, persistence_manager=persistence_manager).persist()
+        preds = automl.fit_predict(train_data, dataset.roles, persistence_manager=persistence_manager).persist()
 
     logger.info("Predicting on out of fold")
 
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         score = task.get_dataset_metric()
         expected_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(pred_column).alias('prediction')
         ))
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         score = task.get_dataset_metric()
         actual_metric_value = score(te_pred.select(
             SparkDataset.ID_COLUMN,
-            sf.col(roles['target']).alias('target'),
+            sf.col(dataset.roles['target']).alias('target'),
             sf.col(pred_column).alias('prediction')
         ))
         logger.info(f"score for test predictions via loaded pipeline: {actual_metric_value}")

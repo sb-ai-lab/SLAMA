@@ -9,8 +9,7 @@ import holidays
 import numpy as np
 import pandas as pd
 from lightautoml.dataset.base import RolesDict
-from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
-from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole, DatetimeRole
 from lightautoml.transformers.datetime import datetime_check, date_attrs
 from pyspark.ml import Transformer
 from pyspark.ml.param.shared import Param, Params

@@ -16,7 +16,23 @@ from sparklightautoml.dataset.base import SparkDataset, Unpersistable
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
 from sparklightautoml.utils import SparkDataFrame
 
-TrainVal = Tuple[SparkDataset, SparkDataset]
+TrainVal = SparkDataset
+
+
+def mark_as_train(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.withColumn(is_val_col, sf.lit(0))
+
+
+def mark_as_val(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.withColumn(is_val_col, sf.lit(1))
+
+
+def split_out_train(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.where(sf.col(is_val_col) == 0).drop(is_val_col)
+
+
+def split_out_val(sdf: SparkDataFrame, is_val_col: str):
+    return sdf.where(sf.col(is_val_col) == 1).drop(is_val_col)
 
 
 class SparkSelectionPipeline(SelectionPipeline, ABC):
@@ -52,6 +68,9 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
         """
         ...
 
+    def __getitem__(self, fold_id: int) -> SparkDataset:
+        ...
+
     @contextmanager
     def frozen(self) -> 'SparkBaseTrainValidIterator':
         yield self.freeze()
@@ -64,26 +83,9 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
     def unpersist(self, skip_val: bool = False):
         ...
 
-    @contextmanager
-    def _child_persistence_context(self) -> 'SparkBaseTrainValidIterator':
-        train_valid = copy(self)
-        train = train_valid.train.empty()
-        pm = train_valid.train.persistence_manager
-        child_manager = pm.child()
-
-        train.set_data(
-            train_valid.train.data,
-            train_valid.train.features,
-            train_valid.train.roles,
-            persistence_manager=child_manager,
-            dependencies=[]
-        )
-        train_valid.train = train
-
-        yield train_valid
-
-        child_manager.unpersist_all()
-        pm.remove_child(child_manager)
+    @abstractmethod
+    def get_validation_data(self) -> SparkDataset:
+        ...
 
     def apply_selector(self, selector: SparkSelectionPipeline) -> "SparkBaseTrainValidIterator":
         """Select features on train data.
@@ -116,6 +118,9 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
 
         return train_valid
 
+    def _validate_fold_id(self, fold_id: int):
+        assert 0 <= fold_id < len(self)
+
     def _split_by_fold(self, fold: int) -> Tuple[SparkDataset, SparkDataset, SparkDataset]:
         train = cast(SparkDataset, self.train)
         is_val_col = (
@@ -124,8 +129,9 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
         )
 
         sdf = train.data.select("*", is_val_col)
-        train_part_sdf = sdf.where(sf.col(self.TRAIN_VAL_COLUMN) == 0).drop(self.TRAIN_VAL_COLUMN)
-        valid_part_sdf = sdf.where(sf.col(self.TRAIN_VAL_COLUMN) == 1).drop(self.TRAIN_VAL_COLUMN)
+
+        train_part_sdf = split_out_train(sdf, self.TRAIN_VAL_COLUMN)
+        valid_part_sdf = split_out_val(sdf, self.TRAIN_VAL_COLUMN)
 
         train_ds = cast(SparkDataset, self.train.empty())
         train_ds.set_data(sdf, self.train.features, self.train.roles, name=self.train.name)
@@ -148,7 +154,23 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
 
         return train_ds, train_part_ds, valid_part_ds
 
-    def get_validation_data(self) -> SparkDataset:
-        ...
+    @contextmanager
+    def _child_persistence_context(self) -> 'SparkBaseTrainValidIterator':
+        train_valid = copy(self)
+        train = train_valid.train.empty()
+        pm = train_valid.train.persistence_manager
+        child_manager = pm.child()
 
+        train.set_data(
+            train_valid.train.data,
+            train_valid.train.features,
+            train_valid.train.roles,
+            persistence_manager=child_manager,
+            dependencies=[]
+        )
+        train_valid.train = train
 
+        yield train_valid
+
+        child_manager.unpersist_all()
+        pm.remove_child(child_manager)

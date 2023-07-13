@@ -1,7 +1,7 @@
 import logging.config
 
 from examples_utils import get_persistence_manager
-from examples_utils import get_spark_session, prepare_test_and_train, get_dataset_attrs
+from examples_utils import get_spark_session, prepare_test_and_train, get_dataset
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.report import SparkReportDeco
 from sparklightautoml.tasks.base import SparkTask
@@ -9,7 +9,7 @@ from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -24,12 +24,12 @@ if __name__ == "__main__":
     cv = 5
     use_algos = [["lgb"]]
     dataset_name = "lama_test_dataset"
-    path, task_type, roles, dtype = get_dataset_attrs(dataset_name)
+    dataset = get_dataset(dataset_name)
 
-    train_data, test_data = prepare_test_and_train(spark, path, seed)
+    train_data, test_data = prepare_test_and_train(dataset, seed)
 
     with log_exec_timer("spark-lama training") as train_timer:
-        task = SparkTask(task_type)
+        task = SparkTask(dataset.task_type)
 
         automl = SparkTabularAutoML(
             spark=spark,
@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
         oof_preds = report_automl.fit_predict(
             train_data,
-            roles=roles,
+            roles=dataset.roles,
             persistence_manager=get_persistence_manager()
         ).persist()
         report_automl.predict(test_data, add_reader_attrs=True)

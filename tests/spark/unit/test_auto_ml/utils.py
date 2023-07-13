@@ -1,7 +1,7 @@
 import logging
 import os
 from copy import copy
-from typing import List, cast, Optional, Any, Tuple, Callable
+from typing import List, cast, Optional, Any, Tuple, Callable, Dict
 
 import numpy as np
 import pyspark.sql.functions as sf
@@ -14,6 +14,7 @@ from pyspark.ml.functions import array_to_vector
 
 from sparklightautoml.automl.blend import SparkWeightedBlender
 from sparklightautoml.automl.presets.base import SparkAutoMLPreset
+from sparklightautoml.computations.sequential import SequentialComputationsManager
 from sparklightautoml.dataset.base import SparkDataset, PersistenceManager, PersistenceLevel
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
@@ -23,7 +24,7 @@ from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator, split_out_val
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 logger = logging.getLogger(__name__)
@@ -99,12 +100,18 @@ class DummyMLAlgo(SparkTabularMLAlgo):
         super().__init__()
         self.n_classes = n_classes
 
-    def fit_predict_single_fold(self, fold_prediction_column: str, train: SparkDataset,
-                                valid: SparkDataset) -> Tuple[SparkMLModel, SparkDataFrame, str]:
+    def fit_predict_single_fold(self,
+                                fold_prediction_column: str,
+                                validation_column: str,
+                                train: SparkDataset,
+                                runtime_settings: Optional[Dict[str, Any]] = None) \
+            -> Tuple[SparkMLModel, SparkDataFrame, str]:
         fake_op = FakeOpTransformer(cols_to_generate=[fold_prediction_column], n_classes=self.n_classes)
         ml_model = PipelineModel(stages=[fake_op])
 
-        return ml_model, ml_model.transform(valid.data), fold_prediction_column
+        valid_data = split_out_val(train.data, validation_column)
+
+        return ml_model, ml_model.transform(valid_data), fold_prediction_column
 
     def predict_single_fold(self, model: SparkMLModel, dataset: SparkDataset) -> SparkDataFrame:
         raise NotImplementedError("")
@@ -177,7 +184,11 @@ class DummySparkMLPipeline(SparkMLPipeline):
 class DummyTabularAutoML(SparkAutoMLPreset):
     def __init__(self, n_classes: int):
         config_path = os.path.join(os.getcwd(), 'sparklightautoml/automl/presets/tabular_config.yml')
-        super().__init__(SparkTask("multiclass"), config_path=config_path)
+        super().__init__(
+            SparkTask("multiclass"),
+            config_path=config_path,
+            computation_settings=SequentialComputationsManager()
+        )
         self._n_classes = n_classes
 
     def _create_validation_iterator(self, train: SparkDataset, valid: Optional[SparkDataset], n_folds: Optional[int],

@@ -8,9 +8,9 @@ import org.apache.spark.ml.feature.lightautoml.IsHolidayTransformer.IsHolidayTra
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.functions.{col, date_format, lit, to_timestamp, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, functions}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 import scala.collection.JavaConverters._
@@ -21,6 +21,7 @@ class IsHolidayTransformer(override val uid: String, private var holidays_dates:
                 with HasInputCols
                 with HasOutputCols
                 with MLWritable {
+
   def this(uid: String, holidays_dates: java.util.Map[String, java.util.Set[String]]) =
     this(
       uid,
@@ -81,14 +82,13 @@ class IsHolidayTransformer(override val uid: String, private var holidays_dates:
       holidaysDatesBcst.value(col_name)(date)
     })
 
-    val dt_format = "yyyy-MM-dd"
     val outColumns = getInputCols.zip(getOutputCols).map {
       case (in_col, out_col) =>
         val dt_col = dataset.schema(in_col).dataType match {
-          case _: DateType => date_format(to_timestamp(col(in_col)), dt_format)
-          case _: TimestampType => date_format(col(in_col), dt_format)
-          case _: LongType => date_format(col(in_col).cast(TimestampType), dt_format)
-          case _: IntegerType => date_format(col(in_col).cast(TimestampType), dt_format)
+          case _: DateType => date_format(to_timestamp(col(in_col)), IsHolidayTransformer.dt_format)
+          case _: TimestampType => date_format(col(in_col), IsHolidayTransformer.dt_format)
+          case _: LongType => date_format(col(in_col).cast(TimestampType), IsHolidayTransformer.dt_format)
+          case _: IntegerType => date_format(col(in_col).cast(TimestampType), IsHolidayTransformer.dt_format)
           case _: StringType => col(in_col)
         }
         func(lit(in_col).cast(StringType), dt_col).alias(out_col)
@@ -113,6 +113,8 @@ class IsHolidayTransformer(override val uid: String, private var holidays_dates:
 
 
 object IsHolidayTransformer extends MLReadable[IsHolidayTransformer] {
+  val dt_format = "yyyy-MM-dd"
+
   override def read: MLReader[IsHolidayTransformer] = new IsHolidayTransformerReader
 
   override def load(path: String): IsHolidayTransformer = super.load(path)
