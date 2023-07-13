@@ -84,6 +84,7 @@ def test_freq_encoder(spark: SparkSession, workdir: str, dataset: DatasetForTest
 
 
 # noinspection PyShadowingNames
+@pytest.mark.skip(reason="duplicate as of now")
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_ordinal_encoder(spark: SparkSession, dataset: DatasetForTest):
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))

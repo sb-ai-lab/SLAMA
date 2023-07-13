@@ -71,6 +71,7 @@ def do_test_bucketed_persistence_manager(spark_session: SparkSession):
     assert set(existing_tables()) == set()
 
 
+@pytest.mark.skip(reason="duplicate as of now")
 def test_bucketed_persistence_manager(spark: SparkSession):
     do_test_bucketed_persistence_manager(spark)
 
