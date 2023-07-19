@@ -81,8 +81,6 @@ def main(spark: SparkSession, seed: int):
 
     logger.info(f"score for out-of-fold predictions: {metric_value}")
 
-    transformer = automl.transformer()
-
     oof_predictions.unpersist()
     # this is necessary if persistence_manager is of CompositeManager type
     # it may not be possible to obtain oof_predictions (predictions from fit_predict) after calling unpersist_all

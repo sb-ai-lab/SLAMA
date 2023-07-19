@@ -1,5 +1,4 @@
 import logging.config
-import logging.config
 
 import pyspark.sql.functions as sf
 from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector, ModelBasedImportanceEstimator

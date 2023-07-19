@@ -12,9 +12,10 @@ from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatu
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import spark as spark_sess
+from .. import make_spark, spark as spark_sess
 from ..dataset_utils import get_test_datasets
 
+make_spark = make_spark
 spark = spark_sess
 
 

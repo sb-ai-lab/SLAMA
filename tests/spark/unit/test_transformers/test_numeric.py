@@ -8,9 +8,10 @@ from pyspark.sql import SparkSession
 
 from sparklightautoml.transformers.numeric import SparkFillInfTransformer, SparkLogOddsTransformer, \
     SparkNaNFlagsEstimator, SparkFillnaMedianEstimator, SparkQuantileBinningEstimator, SparkStandardScalerEstimator
-from .. import DatasetForTest, compare_sparkml_by_content, spark as spark_sess, \
+from .. import DatasetForTest, compare_sparkml_by_content, make_spark, spark as spark_sess, \
     compare_sparkml_by_metadata
 
+make_spark = make_spark
 spark = spark_sess
 # Note:
 # -s means no stdout capturing thus allowing one to see what happens in reality

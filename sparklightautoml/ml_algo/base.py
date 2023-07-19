@@ -13,10 +13,9 @@ from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
 from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
 from pyspark.sql import functions as sf
-from pyspark.sql.types import IntegerType
 
-from sparklightautoml.computations.builder import build_computations_manager
 from sparklightautoml.computations.base import ComputationsManager, ComputationSlot, ComputationsSettings
+from sparklightautoml.computations.builder import build_computations_manager
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.pipelines.base import TransformerInputOutputRoles
@@ -370,8 +369,6 @@ class AveragingTransformer(Transformer, HasInputCols, HasOutputCol, DefaultParam
         logger.debug(f"In {type(self)}. Columns: {sorted(dataset.columns)}")
 
         pred_cols = self.getInputCols()
-        weights = {c: w for w, c in zip(self.get_weights(), pred_cols)}
-        non_null_count_col = sf.lit(len(pred_cols)) - sum(sf.isnull(c).astype(IntegerType()) for c in pred_cols)
 
         if self.get_task_name() in ["binary", "multiclass"]:
             out_col = vector_averaging(sf.array(*pred_cols), sf.lit(self.get_dim_num()))

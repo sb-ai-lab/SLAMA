@@ -10,16 +10,14 @@ from typing import List
 from typing import Optional
 from typing import Sequence
 
-from lightautoml.dataset.base import RolesDict
 from lightautoml.reader.base import RolesDict
 from lightautoml.utils.logging import set_stdout_level, verbosity_to_loglevel
 from lightautoml.utils.timer import PipelineTimer
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.sql.session import SparkSession
 
 from .blend import SparkBlender, SparkBestModelSelector
-from ..computations.builder import build_computations_manager
 from ..computations.base import ComputationsManager, ComputationsSettings
+from ..computations.builder import build_computations_manager
 from ..dataset.base import SparkDataset, PersistenceLevel, PersistenceManager
 from ..dataset.persistence import PlainCachePersistenceManager
 from ..pipelines.base import TransformerInputOutputRoles
@@ -541,7 +539,7 @@ class SparkAutoML(TransformerInputOutputRoles):
 
 def _do_fit(ml_pipe: SparkMLPipeline, iterator: SparkBaseTrainValidIterator) \
         -> Optional[Tuple[SparkMLPipeline, SparkDataset]]:
-    pipe_predictions = cast(SparkDataset, ml_pipe.fit_predict(iterator)) \
-            .persist(level=PersistenceLevel.CHECKPOINT, force=True)
+    pipe_predictions = cast(SparkDataset, ml_pipe.fit_predict(iterator))\
+        .persist(level=PersistenceLevel.CHECKPOINT, force=True)
 
     return ml_pipe, pipe_predictions

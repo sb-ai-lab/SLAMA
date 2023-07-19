@@ -1,7 +1,6 @@
 import logging.config
 
 import pytest
-from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import PersistenceManager, PersistenceLevel
@@ -9,8 +8,9 @@ from sparklightautoml.dataset.persistence import PlainCachePersistenceManager, L
     BucketedPersistenceManager, CompositePersistenceManager
 from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from .utils import DummyTabularAutoML
-from .. import spark as spark_sess, BUCKET_NUMS
+from .. import make_spark, spark as spark_sess, BUCKET_NUMS
 
+make_spark = make_spark
 spark = spark_sess
 
 logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/lama.log'))

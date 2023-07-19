@@ -13,15 +13,15 @@ from sparklightautoml.ml_algo.base import SparkTabularMLAlgo
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import spark as spark_sess, dataset as spark_dataset
+from .. import dataset as spark_dataset, spark_for_function
 
-spark = spark_sess
+spark = spark_for_function
 dataset = spark_dataset
 
 
 parallel_manager_configs = [
     ParallelComputationsManager(parallelism=parallelism, use_location_prefs_mode=use_location_prefs_mode)
-    for parallelism, use_location_prefs_mode  in itertools.product([1, 2, 5], [False, True])
+    for parallelism, use_location_prefs_mode in itertools.product([1, 2, 5], [False, True])
 ]
 
 manager_configs = [None, SequentialComputationsManager(), *parallel_manager_configs]

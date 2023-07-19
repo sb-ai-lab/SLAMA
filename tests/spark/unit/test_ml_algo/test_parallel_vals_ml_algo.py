@@ -5,8 +5,9 @@ from sparklightautoml.computations.parallel import ParallelComputationsManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import spark as spark_sess, dataset as spark_dataset
+from .. import make_spark, spark as spark_sess, dataset as spark_dataset
 
+make_spark = make_spark
 spark = spark_sess
 dataset = spark_dataset
 

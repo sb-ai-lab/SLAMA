@@ -11,7 +11,7 @@ from lightautoml.pipelines.selection.importance_based import ModelBasedImportanc
 from lightautoml.pipelines.selection.permutation_importance_based import NpIterativeFeatureSelector
 from lightautoml.reader.tabular_batch_generator import ReadableToDf
 from lightautoml.utils.timer import TaskTimer
-from pyspark.ml import PipelineModel, Transformer
+from pyspark.ml import Transformer
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as sf, Window
 from pyspark.sql.types import DateType, StringType

@@ -1,5 +1,4 @@
 import logging.config
-import logging.config
 
 from examples_utils import get_persistence_manager
 from examples_utils import get_spark_session, prepare_test_and_train, get_dataset

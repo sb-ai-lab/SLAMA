@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from contextlib import contextmanager, ContextDecorator
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Optional, Any, Union, Dict

@@ -634,7 +634,7 @@ def prepared_datasets(spark: SparkSession,
     return sds
 
 
-def get_test_datasets(dataset: Optional[str] = None,  setting: str = "all") -> List[Dict[str, Any]]:
+def get_test_datasets(dataset: Optional[str] = None, setting: str = "all") -> List[Dict[str, Any]]:
     dss = datasets()
 
     if dataset is not None:

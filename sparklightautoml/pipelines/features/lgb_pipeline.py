@@ -1,11 +1,10 @@
-from copy import deepcopy
 from typing import Optional, Union
 
 import numpy as np
 from lightautoml.dataset.roles import CategoryRole, NumericRole
 from lightautoml.pipelines.selection.base import ImportanceEstimator
 
-from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
+from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline, SparkTabularDataFeatures
 from sparklightautoml.transformers.base import (
     SparkChangeRolesTransformer,
@@ -123,8 +122,6 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
 
         """
 
-        features = train.features
-        roles = deepcopy(train.roles)
         transformer_list = []
 
         target_encoder = self.get_target_encoder(train)

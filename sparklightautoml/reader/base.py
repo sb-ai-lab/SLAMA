@@ -19,7 +19,7 @@ from lightautoml.reader.guess_roles import (
 from lightautoml.tasks import Task
 from pyspark.ml import Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.sql import functions as sf, SparkSession
+from pyspark.sql import functions as sf
 from pyspark.sql.types import IntegerType, NumericType, FloatType, StringType
 
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, PersistableDataFrame, PersistenceManager

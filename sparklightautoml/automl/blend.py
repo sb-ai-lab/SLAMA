@@ -348,7 +348,7 @@ class SparkMeanBlender(SparkBlender):
             assert isinstance(self._pred_role, NumericVectorOrArrayRole)
             output_role = NumericVectorOrArrayRole(
                 self._pred_role.size,
-                f"MeanBlend_{{}}",
+                "MeanBlend_{{}}",
                 dtype=np.float32,
                 prob=self._outp_prob,
                 is_vector=self._pred_role.is_vector,

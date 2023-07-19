@@ -1,5 +1,6 @@
 import collections
 import threading
+import time
 from typing import Optional
 
 from sparklightautoml.computations.base import ComputationSlot
@@ -11,9 +12,11 @@ class TestWorkerException(Exception):
         super(TestWorkerException, self).__init__(f"Intentional exception in task {id}")
 
 
-def build_func(acc: collections.deque, seq_id: int):
+def build_func(acc: collections.deque, seq_id: int, delay: Optional[float] = None):
     def _func() -> int:
         acc.append(threading.get_ident())
+        if delay:
+            time.sleep(delay)
         return seq_id
     return _func
 

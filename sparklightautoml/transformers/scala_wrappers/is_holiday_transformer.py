@@ -29,7 +29,7 @@ class IsHolidayTransformer(JavaTransformer, HasInputCols, HasOutputCols, CommonJ
         transformer = IsHolidayTransformer(_java_obj).setInputCols(input_cols).setOutputCols(output_cols)
         return transformer
 
-    def __init__(self,java_obj):
+    def __init__(self, java_obj):
         super(IsHolidayTransformer, self).__init__()
         self._java_obj = java_obj
 

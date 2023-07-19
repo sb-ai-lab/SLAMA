@@ -5,7 +5,7 @@ from sparklightautoml.computations.sequential import SequentialComputationsManag
 from sparklightautoml.computations.parallel import ParallelComputationsManager
 
 # either named profile and parallelism or parallelism settings or factory
-AutoMLComputationsSettings = Union[Tuple[str, int], Dict[str, Any], 'ComputationManagerFactory']
+AutoMLComputationsSettings = Union[Tuple[str, int], Dict[str, Any], 'ComputationsManagerFactory']
 
 
 class ComputationsManagerFactory:

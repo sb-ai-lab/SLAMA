@@ -14,8 +14,9 @@ from pyspark.sql import SparkSession
 from sparklightautoml.dataset.base import SparkDataset, SparkDatasetMetadataJsonEncoder, SparkDatasetMetadataJsonDecoder
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.tasks.base import SparkTask
-from . import spark as spark_sess
+from . import make_spark, spark as spark_sess
 
+make_spark = make_spark
 spark = spark_sess
 
 

@@ -17,7 +17,7 @@ from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 

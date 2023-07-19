@@ -202,7 +202,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
 
         if any(not d.bucketized for d in datasets):
             warnings.warn(
-                f"NOT bucketized datasets are requested to be joined. It may severely affect performance",
+                "NOT bucketized datasets are requested to be joined. It may severely affect performance",
                 RuntimeWarning
             )
 
@@ -506,7 +506,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
         self._name = name or self._name
         self._frozen = frozen
 
-    def persist(self, level: Optional[PersistenceLevel] = None, force: bool=False) -> 'SparkDataset':
+    def persist(self, level: Optional[PersistenceLevel] = None, force: bool = False) -> 'SparkDataset':
         """
         Materializes current Spark DataFrame and unpersists all its dependencies
         Args:

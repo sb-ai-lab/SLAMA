@@ -1,5 +1,4 @@
 import logging.config
-import logging.config
 
 from examples.spark.examples_utils import FSOps
 from examples_utils import get_persistence_manager

@@ -5,15 +5,11 @@ from multiprocessing.pool import ThreadPool
 from queue import Queue
 from typing import Optional, List, Callable
 
-from pyspark import RDD
-
 from sparklightautoml.computations.base import ComputationsSession, ComputationSlot, T, R, logger, \
     ComputationsManager
 from sparklightautoml.computations.utils import inheritable_thread_target_with_exceptions_catcher, get_executors, \
     get_executors_cores, duplicate_on_num_slots_with_locations_preferences
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.transformers.scala_wrappers.preffered_locs_partition_coalescer import \
-    PrefferedLocsPartitionCoalescerTransformer
 from sparklightautoml.utils import SparkDataFrame
 
 
@@ -60,19 +56,19 @@ class ParallelComputationsSession(ComputationsSession):
 
     def map_and_compute(self, func: Callable[[R], T], tasks: List[R]) -> List[T]:
         assert self._pool is not None
-        # TODO: PARALLEL - probably, is not fully correct and needs to be integrated on the thread pool level, 
+        # TODO: PARALLEL - probably, is not fully correct and needs to be integrated on the thread pool level,
         #  inlcuding one-shot threads
         return self._pool.map(
-            lambda task: inheritable_thread_target_with_exceptions_catcher(lambda: func(task))(), 
+            lambda task: inheritable_thread_target_with_exceptions_catcher(lambda: func(task))(),
             tasks
         )
 
     def compute(self, tasks: List[Callable[[], T]]) -> List[T]:
         assert self._pool is not None
-        # TODO: PARALLEL - probably, is not fully correct and needs to be integrated on the thread pool level, 
+        # TODO: PARALLEL - probably, is not fully correct and needs to be integrated on the thread pool level,
         #  inlcuding one-shot threads
         return self._pool.map(
-            lambda f: inheritable_thread_target_with_exceptions_catcher(f)(), 
+            lambda f: inheritable_thread_target_with_exceptions_catcher(f)(),
             tasks
         )
 

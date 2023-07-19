@@ -11,11 +11,12 @@ from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.tasks.base import SparkTask as SparkTask
 from sparklightautoml.utils import log_exec_time
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import spark as spark_sess
+from .. import make_spark, spark as spark_sess
 from ..test_auto_ml.utils import DummyMLAlgo
 
 from pyspark.sql import functions as sf
 
+make_spark = make_spark
 spark = spark_sess
 
 

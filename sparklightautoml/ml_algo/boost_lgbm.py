@@ -516,10 +516,9 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
             logger.warning(f"Too big validation fold: {val_data_size}. "
                            f"Reducing its size down according to max_validation_size setting:"
                            f" {self._max_validation_size}")
-            full_data = full_data.where(
-                (sf.col(validation_column) != sf.lit(1)) |
-                (sf.rand(seed=self._seed) < sf.lit(self._max_validation_size / val_data_size))
-            )
+            not_val_row = (sf.col(validation_column) != sf.lit(1))
+            not_chosen_as_val = (sf.rand(seed=self._seed) < sf.lit(self._max_validation_size / val_data_size))
+            full_data = full_data.where(not_val_row | not_chosen_as_val)
 
         # checking if there are no empty partitions that may lead to hanging
         rows = (

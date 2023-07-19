@@ -12,9 +12,10 @@ from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask as SparkTask
-from .. import spark as spark_sess
+from .. import make_spark, spark as spark_sess
 from ..dataset_utils import get_test_datasets
 
+make_spark = make_spark
 spark = spark_sess
 
 

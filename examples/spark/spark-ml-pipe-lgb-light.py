@@ -1,5 +1,4 @@
 import logging.config
-import logging.config
 
 from pyspark.ml import PipelineModel
 from pyspark.sql import functions as sf

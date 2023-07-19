@@ -6,8 +6,6 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Union, cast
 
-from pyspark.sql import SparkSession
-
 from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, PersistableDataFrame, PersistenceManager
 from sparklightautoml.utils import JobGroup, get_current_session
 

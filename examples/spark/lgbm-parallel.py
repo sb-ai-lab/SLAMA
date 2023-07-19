@@ -158,7 +158,7 @@ class ParallelExperiment:
 
         assembler = VectorAssembler(
             inputCols=list(md['roles'].keys()),
-            outputCol=f"LightGBM_vassembler_features",
+            outputCol="LightGBM_vassembler_features",
             handleInvalid="keep"
         )
 

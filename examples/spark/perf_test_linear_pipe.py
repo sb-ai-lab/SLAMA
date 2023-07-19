@@ -1,6 +1,5 @@
 import functools
 import logging.config
-import logging.config
 import uuid
 from datetime import datetime
 from typing import Union, Dict, cast, Tuple, List
@@ -123,19 +122,11 @@ if __name__ == "__main__":
 
     persistence_manager = PlainCachePersistenceManager()
 
-    sdf, roles = generate_frame(cols=10, rows_count=100)#, col_encs=['LE#2'])
+    sdf, roles = generate_frame(cols=10, rows_count=100)
 
     with log_exec_time('initial_caching'):
         sdf = sdf.cache()
         sdf.write.mode('overwrite').format('noop').save()
-
-    # pcols = [test_add(c).alias(c) for c in sdf.columns if c not in {'_id'}]
-    #
-    # with log_exec_time():
-    #     new_sdf = sdf.select('_id', *pcols).cache()
-    #     new_sdf = new_sdf.select('_id', *pcols).cache()
-    #     new_sdf = new_sdf.select('_id', *pcols).cache()
-    #     new_sdf.write.mode('overwrite').format('noop').save()
 
     in_ds = SparkDataset(
         sdf,

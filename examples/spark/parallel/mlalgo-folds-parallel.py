@@ -17,7 +17,7 @@ from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT, log_e
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 from examples.spark.examples_utils import get_spark_session
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     # create main entities
     computations_manager = ParallelComputationsManager(parallelism=parallelism)
-    iterator = SparkFoldsIterator(train_ds)#.convert_to_holdout_iterator()
+    iterator = SparkFoldsIterator(train_ds)
     if ml_algo_name == "lgb":
         ml_algo = SparkBoostLGBM(experimental_parallel_mode=True, computations_settings=computations_manager)
     else:

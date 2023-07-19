@@ -270,7 +270,6 @@ def plot_pie_f1_metric(data: RDD, path):
 def f1_score_w_co(input_data, true_labels_col_name, scores_col_name, min_co=0.01, max_co=0.99, step=0.01):
 
     true_labels = sf.col(true_labels_col_name)
-    scores = sf.col(scores_col_name)
     rounded_scores_col_name = f"{scores_col_name}_rounded"
     rounded_scores = sf.col(rounded_scores_col_name)
 
@@ -321,7 +320,7 @@ def get_bins_table(data: DataFrame, n_bins=20):
     )
 
     total_count = df["count"].sum()
-    bin_size = math.ceil(total_count / n_bins)
+    _ = math.ceil(total_count / n_bins)
 
     bins_table = data.groupby("bin").agg({"y_true": [len, np.mean], "y_pred": [np.min, np.mean, np.max]}).reset_index()
     bins_table.columns = [
@@ -1168,7 +1167,7 @@ class SparkReportDeco:
 
     def _get_column_nan_ratio(self, column: Column, column_name: str, total_count: int) -> Column:
         return (
-                sf.sum(sf.when(sf.isnan(column), 1).otherwise(sf.when(sf.isnull(column), 1).otherwise(0))) / total_count
+            sf.sum(sf.when(sf.isnan(column), 1).otherwise(sf.when(sf.isnull(column), 1).otherwise(0))) / total_count
         ).alias(
             f"nanratio_{column_name}"
         )  # column._jc.toString()
@@ -1325,12 +1324,12 @@ class SparkReportDeco:
             dropped_nan_ratio = train_data.select(
                 *[
                     (
-                            sf.sum(
+                        sf.sum(
                             sf.when(sf.isnan(sf.col(col_name)), 1).otherwise(
                                 sf.when(sf.isnull(sf.col(col_name)), 1).otherwise(0)
                             )
                         )
-                            / total_count
+                        / total_count
                     ).alias(col_name)
                     for col_name in dropped_list
                 ]

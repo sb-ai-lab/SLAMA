@@ -14,9 +14,9 @@ from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
-from sparklightautoml.validation.iterators import SparkHoldoutIterator, SparkFoldsIterator
+from sparklightautoml.validation.iterators import SparkFoldsIterator
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 

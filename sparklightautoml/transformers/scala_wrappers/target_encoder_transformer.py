@@ -41,7 +41,7 @@ class TargetEncoderTransformer(JavaTransformer, HasInputCols, HasOutputCols,
         tet = TargetEncoderTransformer(_java_obj).setInputCols(input_cols).setOutputCols(output_cols)
         return tet
 
-    def __init__(self,java_obj):
+    def __init__(self, java_obj):
         super(TargetEncoderTransformer, self).__init__()
         self._java_obj = java_obj
 

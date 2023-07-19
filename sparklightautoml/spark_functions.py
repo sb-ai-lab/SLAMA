@@ -25,7 +25,7 @@ def scalar_averaging(cols):
     )
 
 
-def get_ctx_for_df(spark:SparkSession):
+def get_ctx_for_df(spark: SparkSession):
     # noinspection PyUnresolvedReferences,PyProtectedMember
     return spark._wrapped if parse(version('pyspark')) < parse('3.3.0') else spark
 
@@ -36,8 +36,6 @@ if parse(version('pyspark')) >= parse('3.1.0'):
     from pyspark.sql.functions import aggregate
     from pyspark.sql.functions import transform
 else:
-    from pyspark.sql.functions import countDistinct as count_distinct
-
     def _get_lambda_parameters(f):
         import inspect
 
@@ -131,7 +129,6 @@ else:
         sc = SparkContext._active_spark_context
         return Column(
             sc._jvm.org.apache.spark.sql.lightautoml.functions.array_to_vector(_to_java_column(col)))
-
 
     def percentile_approx(col, percentage, accuracy=10000):
         sc = SparkContext._active_spark_context
