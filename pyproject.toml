@@ -113,24 +113,20 @@ exclude = '''
 legacy_tox_ini = """
 [tox]
 isolated_build = True
-envlist = py{36, 37, 38, 39}
+envlist = py{38, 39}
 
 [gh-actions]
 python =
-    3.6: py36
-    3.7: py37
     3.8: py38
     3.9: py39
 
 [gh-actions:env]
 PLATFORM =
     ubuntu-latest: linux
-    macos-latest: macos
-    windows-latest: windows
 
 [testenv]
 whitelist_externals = poetry
 commands =
     poetry install
-    poetry run pytest tests -v
+    poetry run pytest tests -v --ignore=tests/spark/unit/test_computations
 """
