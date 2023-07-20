@@ -29,11 +29,7 @@ jobs:
 
     - uses: Gr1N/setup-poetry@v7
       with:
-        poetry-version: 1.1.7
-
-    - name: install libomp for MacOS
-      if: ${{ matrix.os == 'macos-latest' }}
-      run: brew install libomp
+        poetry-version: 1.4.1
 
     - name: install tox
       run: |
