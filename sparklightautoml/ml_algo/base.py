@@ -1,27 +1,46 @@
 import functools
 import logging
+
 from abc import ABC
 from copy import copy
-from typing import Tuple, cast, List, Optional, Sequence, Union, Any, Dict
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
+from typing import Union
+from typing import cast
 
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.ml_algo.base import MLAlgo
 from lightautoml.utils.timer import TaskTimer
-from pyspark.ml import PipelineModel, Transformer, Model
+from pyspark.ml import Model
+from pyspark.ml import PipelineModel
+from pyspark.ml import Transformer
 from pyspark.ml.param import Params
-from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
-from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
+from pyspark.ml.param.shared import HasInputCols
+from pyspark.ml.param.shared import HasOutputCol
+from pyspark.ml.param.shared import Param
+from pyspark.ml.util import DefaultParamsReadable
+from pyspark.ml.util import DefaultParamsWritable
 from pyspark.sql import functions as sf
 
-from sparklightautoml.computations.base import ComputationsManager, ComputationSlot, ComputationsSettings
+from sparklightautoml.computations.base import ComputationSlot
+from sparklightautoml.computations.base import ComputationsManager
+from sparklightautoml.computations.base import ComputationsSettings
 from sparklightautoml.computations.builder import build_computations_manager
-from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel
+from sparklightautoml.dataset.base import PersistenceLevel
+from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.pipelines.base import TransformerInputOutputRoles
-from sparklightautoml.spark_functions import vector_averaging, scalar_averaging
-from sparklightautoml.utils import SparkDataFrame, log_exception
+from sparklightautoml.spark_functions import scalar_averaging
+from sparklightautoml.spark_functions import vector_averaging
+from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import log_exception
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +62,7 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
         timer: Optional[TaskTimer] = None,
         optimization_search_space: Optional[dict] = None,
         persist_output_dataset: bool = True,
-        computations_settings: Optional[ComputationsSettings] = None
+        computations_settings: Optional[ComputationsSettings] = None,
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
         super().__init__(default_params, freeze_defaults, timer, optimization_search_space)
@@ -55,8 +74,7 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
         self._prediction_role: Optional[Union[NumericRole, NumericVectorOrArrayRole]] = None
         self._input_roles: Optional[RolesDict] = None
         self._service_columns: Optional[List[str]] = None
-        self._computations_manager: Optional[ComputationsManager] \
-            = build_computations_manager(computations_settings)
+        self._computations_manager: Optional[ComputationsManager] = build_computations_manager(computations_settings)
 
     @property
     def features(self) -> Optional[List[str]]:
@@ -138,13 +156,15 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
         self._models_prediction_columns = []
 
         with train_valid_iterator.frozen() as frozen_train_valid_iterator:
-            self.models, preds_dfs, self._models_prediction_columns = \
-                self._parallel_fit(train_valid_iterator=frozen_train_valid_iterator)
+            self.models, preds_dfs, self._models_prediction_columns = self._parallel_fit(
+                train_valid_iterator=frozen_train_valid_iterator
+            )
 
         full_preds_df = self._combine_val_preds(train_valid_iterator.get_validation_data(), preds_dfs)
         full_preds_df = self._build_averaging_transformer().transform(full_preds_df)
-        full_preds_df = self._build_vector_size_hint(self.prediction_feature, self._prediction_role)\
-            .transform(full_preds_df)
+        full_preds_df = self._build_vector_size_hint(self.prediction_feature, self._prediction_role).transform(
+            full_preds_df
+        )
 
         pred_ds = valid_ds.empty()
         pred_ds.set_data(
@@ -152,7 +172,7 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
             list(self.output_roles.keys()),
             self.output_roles,
             dependencies=[train_valid_iterator],
-            name=f"{self._name}"
+            name=f"{self._name}",
         )
         if self.persist_output_dataset:
             pred_ds = pred_ds.persist(level=PersistenceLevel.REGULAR)
@@ -170,12 +190,13 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
 
         return pred_ds
 
-    def fit_predict_single_fold(self,
-                                fold_prediction_column: str,
-                                validation_column: str,
-                                train: SparkDataset,
-                                runtime_settings: Optional[Dict[str, Any]] = None) \
-            -> Tuple[SparkMLModel, SparkDataFrame, str]:
+    def fit_predict_single_fold(
+        self,
+        fold_prediction_column: str,
+        validation_column: str,
+        train: SparkDataset,
+        runtime_settings: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
         """Train on train dataset and predict on holdout dataset.
 
         Args:
@@ -259,18 +280,21 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
         initial_df = cast(SparkDataFrame, val_data[:, []].data)
 
         full_val_preds = functools.reduce(
-            lambda acc, x: acc.join(x, on=SparkDataset.ID_COLUMN, how='left'),
+            lambda acc, x: acc.join(x, on=SparkDataset.ID_COLUMN, how="left"),
             [val_pred.drop(val_data.target_column) for val_pred in val_preds],
-            initial_df
+            initial_df,
         )
 
         return full_val_preds
 
-    def _parallel_fit(self, train_valid_iterator: SparkBaseTrainValidIterator) \
-            -> Tuple[List[Model], List[SparkDataFrame], List[str]]:
+    def _parallel_fit(
+        self, train_valid_iterator: SparkBaseTrainValidIterator
+    ) -> Tuple[List[Model], List[SparkDataFrame], List[str]]:
         num_folds = len(train_valid_iterator)
 
-        def _fit_and_val_on_fold(fold_id: int, slot: ComputationSlot) -> Optional[Tuple[int, Model, SparkDataFrame, str]]:
+        def _fit_and_val_on_fold(
+            fold_id: int, slot: ComputationSlot
+        ) -> Optional[Tuple[int, Model, SparkDataFrame, str]]:
             mdl_pred_col = f"{self.prediction_feature}_{fold_id}"
             if num_folds > 1:
                 logger.info2(
@@ -285,8 +309,9 @@ class SparkTabularMLAlgo(MLAlgo, TransformerInputOutputRoles, ABC):
             runtime_settings = {"num_tasks": slot.num_tasks, "num_threads": slot.num_threads_per_executor}
             train_ds = slot.dataset
 
-            mdl, vpred, _ \
-                = self.fit_predict_single_fold(mdl_pred_col, self.validation_column, train_ds, runtime_settings)
+            mdl, vpred, _ = self.fit_predict_single_fold(
+                mdl_pred_col, self.validation_column, train_ds, runtime_settings
+            )
             vpred = vpred.select(SparkDataset.ID_COLUMN, train_ds.target_column, mdl_pred_col)
 
             return fold_id, mdl, vpred, mdl_pred_col

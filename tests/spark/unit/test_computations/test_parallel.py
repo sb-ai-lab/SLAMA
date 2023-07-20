@@ -1,16 +1,25 @@
 import collections
 import itertools
+
 from copy import deepcopy
 
 import pytest
+
 from pyspark.sql import SparkSession
 
 from sparklightautoml.computations.parallel import ParallelComputationsManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from . import build_func, build_idx_func, build_func_with_exception, TestWorkerException, build_func_on_dataset, \
-    build_fold_func
-from .. import dataset as spark_dataset, spark_for_function
+
+from .. import dataset as spark_dataset
+from .. import spark_for_function
+from . import TestWorkerException
+from . import build_fold_func
+from . import build_func
+from . import build_func_on_dataset
+from . import build_func_with_exception
+from . import build_idx_func
+
 
 spark = spark_for_function
 dataset = spark_dataset
@@ -73,8 +82,9 @@ def test_compute_with_exceptions(spark: SparkSession, parallelism: int, use_loca
 
 
 @pytest.mark.parametrize("parallelism,use_location_prefs_mode", manager_configs)
-def test_compute_on_dataset(spark: SparkSession, dataset: SparkDataset,
-                            parallelism: int, use_location_prefs_mode: bool):
+def test_compute_on_dataset(
+    spark: SparkSession, dataset: SparkDataset, parallelism: int, use_location_prefs_mode: bool
+):
     acc = collections.deque()
     tasks = [build_func_on_dataset(acc, i, use_location_prefs_mode, base_dataset=dataset) for i in range(K)]
 
@@ -87,8 +97,9 @@ def test_compute_on_dataset(spark: SparkSession, dataset: SparkDataset,
 
 
 @pytest.mark.parametrize("parallelism,use_location_prefs_mode", manager_configs)
-def test_compute_on_train_val_iter(spark: SparkSession, dataset: SparkDataset,
-                                   parallelism: int, use_location_prefs_mode: bool):
+def test_compute_on_train_val_iter(
+    spark: SparkSession, dataset: SparkDataset, parallelism: int, use_location_prefs_mode: bool
+):
     n_folds = dataset.num_folds
     acc = collections.deque()
     tv_iter = SparkFoldsIterator(dataset)

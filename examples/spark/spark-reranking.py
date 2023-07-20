@@ -1,12 +1,18 @@
 import logging.config
 
+from examples_utils import BUCKET_NUMS
+from examples_utils import Dataset
+from examples_utils import get_persistence_manager
+from examples_utils import get_spark_session
+from examples_utils import prepare_test_and_train
 from pyspark.sql import SparkSession
 
-from examples_utils import get_persistence_manager, BUCKET_NUMS, Dataset
-from examples_utils import prepare_test_and_train, get_spark_session
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import log_exec_timer
+from sparklightautoml.utils import logging_config
+
 
 logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

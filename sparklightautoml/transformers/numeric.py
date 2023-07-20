@@ -1,18 +1,28 @@
 import logging
-from typing import Optional, Dict, List
+
+from typing import Dict
+from typing import List
+from typing import Optional
 
 import numpy as np
+
 from lightautoml.dataset.base import RolesDict
-from lightautoml.dataset.roles import ColumnRole, NumericRole, CategoryRole
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import NumericRole
 from lightautoml.transformers.numeric import numeric_check
 from pyspark.ml import Transformer
 from pyspark.ml.feature import QuantileDiscretizer
 from pyspark.sql import functions as sf
-from pyspark.sql.types import FloatType, IntegerType
+from pyspark.sql.types import FloatType
+from pyspark.sql.types import IntegerType
 
-from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
-from sparklightautoml.transformers.base import SparkBaseEstimator, SparkBaseTransformer
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
+from sparklightautoml.transformers.base import SparkBaseEstimator
+from sparklightautoml.transformers.base import SparkBaseTransformer
 from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 

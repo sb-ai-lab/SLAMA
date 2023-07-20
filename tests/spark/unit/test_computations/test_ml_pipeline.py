@@ -1,4 +1,5 @@
 import pytest
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as sf
 
@@ -10,31 +11,33 @@ from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
 from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import dataset as spark_dataset, spark_for_function
+
+from .. import dataset as spark_dataset
+from .. import spark_for_function
+
 
 spark = spark_for_function
 dataset = spark_dataset
 
 
-@pytest.mark.parametrize("manager", [
-    None,
-    SequentialComputationsManager(),
-    ParallelComputationsManager(parallelism=5, use_location_prefs_mode=False),
-    ParallelComputationsManager(parallelism=5, use_location_prefs_mode=True)
-])
+@pytest.mark.parametrize(
+    "manager",
+    [
+        None,
+        SequentialComputationsManager(),
+        ParallelComputationsManager(parallelism=5, use_location_prefs_mode=False),
+        ParallelComputationsManager(parallelism=5, use_location_prefs_mode=True),
+    ],
+)
 def test_ml_pipeline(spark: SparkSession, dataset: SparkDataset, manager: ComputationsManager):
     iterator = SparkFoldsIterator(dataset)
 
     ml_pipeline = SparkMLPipeline(
         ml_algos=[
             SparkBoostLGBM(
-                default_params={'numIterations': 25},
-                use_single_dataset_mode=True,
-                use_barrier_execution_mode=True
+                default_params={"numIterations": 25}, use_single_dataset_mode=True, use_barrier_execution_mode=True
             ),
-            SparkLinearLBFGS(
-                default_params={'regParam': [1e-5]}
-            )
+            SparkLinearLBFGS(default_params={"regParam": [1e-5]}),
         ]
     )
 
@@ -51,16 +54,20 @@ def test_ml_pipeline(spark: SparkSession, dataset: SparkDataset, manager: Comput
         assert test_preds.data.count() == dataset.data.count()
 
         score = dataset.task.get_dataset_metric()
-        oof_metric = score(oof_preds.data.select(
-            SparkDataset.ID_COLUMN,
-            sf.col(dataset.target_column).alias('target'),
-            sf.col(pred_feat).alias('prediction')
-        ))
-        test_metric = score(test_preds.data.select(
-            SparkDataset.ID_COLUMN,
-            sf.col(dataset.target_column).alias('target'),
-            sf.col(pred_feat).alias('prediction')
-        ))
+        oof_metric = score(
+            oof_preds.data.select(
+                SparkDataset.ID_COLUMN,
+                sf.col(dataset.target_column).alias("target"),
+                sf.col(pred_feat).alias("prediction"),
+            )
+        )
+        test_metric = score(
+            test_preds.data.select(
+                SparkDataset.ID_COLUMN,
+                sf.col(dataset.target_column).alias("target"),
+                sf.col(pred_feat).alias("prediction"),
+            )
+        )
 
         assert oof_metric > 0
         assert test_metric > 0

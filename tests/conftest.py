@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sklearn.model_selection import train_test_split
-
 # from lightautoml.dataset.np_pd_dataset import *
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.dataset.roles import DatetimeRole
@@ -14,6 +12,7 @@ from lightautoml.dataset.roles import FoldsRole
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.dataset.roles import TargetRole
 from lightautoml.tasks import Task
+from sklearn.model_selection import train_test_split
 
 
 RANDOM_STATE = 42

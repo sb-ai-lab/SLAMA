@@ -1,5 +1,7 @@
-from examples.spark.examples_utils import get_spark_session, get_dataset
-from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline, SparkLGBSimpleFeatures
+from examples.spark.examples_utils import get_dataset
+from examples.spark.examples_utils import get_spark_session
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask

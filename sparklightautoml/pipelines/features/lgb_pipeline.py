@@ -1,17 +1,19 @@
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from lightautoml.dataset.roles import CategoryRole, NumericRole
+
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import NumericRole
 from lightautoml.pipelines.selection.base import ImportanceEstimator
 
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline, SparkTabularDataFeatures
-from sparklightautoml.transformers.base import (
-    SparkChangeRolesTransformer,
-    SparkUnionTransformer,
-    SparkSequentialTransformer,
-    SparkEstOrTrans,
-)
+from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
+from sparklightautoml.pipelines.features.base import SparkTabularDataFeatures
+from sparklightautoml.transformers.base import SparkChangeRolesTransformer
+from sparklightautoml.transformers.base import SparkEstOrTrans
+from sparklightautoml.transformers.base import SparkSequentialTransformer
+from sparklightautoml.transformers.base import SparkUnionTransformer
 from sparklightautoml.transformers.categorical import SparkOrdinalEncoderEstimator
 from sparklightautoml.transformers.datetime import SparkTimeToNumTransformer
 

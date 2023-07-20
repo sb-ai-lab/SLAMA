@@ -1,8 +1,7 @@
 import pytest
 
-from sklearn.metrics import roc_auc_score
-
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
+from sklearn.metrics import roc_auc_score
 
 
 @pytest.mark.integtest

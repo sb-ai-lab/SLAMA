@@ -1,23 +1,31 @@
-from typing import Optional, Union, List, cast
+from typing import List
+from typing import Optional
+from typing import Union
+from typing import cast
 
 import numpy as np
 import pandas as pd
+
 from lightautoml.dataset.roles import CategoryRole
-from lightautoml.reader.guess_roles import calc_ginis, RolesDict
+from lightautoml.reader.guess_roles import RolesDict
+from lightautoml.reader.guess_roles import calc_ginis
 from lightautoml.transformers.categorical import MultiClassTargetEncoder
 from pyspark.ml import Pipeline
 from pyspark.sql import functions as sf
-from pyspark.sql.types import IntegerType, StructField, StructType
+from pyspark.sql.types import IntegerType
+from pyspark.sql.types import StructField
+from pyspark.sql.types import StructType
 
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.transformers.base import SparkChangeRolesTransformer, SparkBaseTransformer
+from sparklightautoml.transformers.base import SparkBaseTransformer
+from sparklightautoml.transformers.base import SparkChangeRolesTransformer
+from sparklightautoml.transformers.categorical import SparkFreqEncoderEstimator
+from sparklightautoml.transformers.categorical import SparkLabelEncoderEstimator
 from sparklightautoml.transformers.categorical import (
-    SparkLabelEncoderEstimator,
-    SparkFreqEncoderEstimator,
-    SparkOrdinalEncoderEstimator,
-    SparkTargetEncoderEstimator,
     SparkMulticlassTargetEncoderEstimator,
 )
+from sparklightautoml.transformers.categorical import SparkOrdinalEncoderEstimator
+from sparklightautoml.transformers.categorical import SparkTargetEncoderEstimator
 from sparklightautoml.transformers.numeric import SparkQuantileBinningEstimator
 
 
@@ -238,14 +246,7 @@ def get_category_roles_stat(
             dtypes.append(role.dtype)
 
     res = pd.DataFrame(
-        columns=[
-            "unique",
-            "top_freq_values",
-            "dtype",
-            "encoded_scores",
-            "freq_scores",
-            "ord_scores",
-        ],
+        columns=["unique", "top_freq_values", "dtype", "encoded_scores", "freq_scores", "ord_scores",],
         index=roles_to_identify,
     )
 

@@ -10,21 +10,22 @@ import time
 
 import numpy as np
 import pandas as pd
+
+from examples_utils import get_persistence_manager
+from examples_utils import get_spark_session
 from lightautoml.dataset.roles import CategoryRole
 from lightautoml.dataset.roles import DatetimeRole
 from lightautoml.dataset.roles import FoldsRole
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.dataset.roles import TargetRole
 from lightautoml.ml_algo.tuning.optuna import OptunaTuner
+from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector
 from lightautoml.pipelines.selection.importance_based import (
-    ImportanceCutoffSelector,
     ModelBasedImportanceEstimator,
 )
 from pyspark.ml import PipelineModel
 from pyspark.sql import functions as sf
 
-from examples_utils import get_persistence_manager
-from examples_utils import get_spark_session
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
@@ -33,8 +34,10 @@ from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWra
 from sparklightautoml.pipelines.selection.base import SparkSelectionPipelineWrapper
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
+
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

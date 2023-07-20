@@ -3,13 +3,14 @@ import random
 
 from tests.spark.unit.dataset_utils import datasets
 
+
 dss = [("used_cars_dataset_tmp", datasets()["used_cars_dataset_tmp"])]
 # dss = [('used_cars_dataset', datasets()['used_cars_dataset'])]
 # dss = datasets().items()
 
 for name, ds in dss:
     print(f"Name: {name}")
-    path = ds['path']
+    path = ds["path"]
     base_dir = os.path.dirname(path)
     filename, ext = os.path.splitext(os.path.basename(path))
     train_path = os.path.join(base_dir, f"{filename}_train{ext}")
@@ -27,16 +28,18 @@ for name, ds in dss:
     hash_intersection = set(hash(el) for el in train_part).intersection(set(hash(elt) for elt in test_part))
     # assert len(hash_intersection) == 0, f"Len: {len(hash_intersection)}"
     if len(hash_intersection) != 0:
-        print(f"Warning! Intersections length: {len(hash_intersection)}. "
-              f"Train part length: {len(train_part)}. "
-              f"Test part length: {len(test_part)}.")
+        print(
+            f"Warning! Intersections length: {len(hash_intersection)}. "
+            f"Train part length: {len(train_part)}. "
+            f"Test part length: {len(test_part)}."
+        )
 
     with open(train_path, "w") as f:
-        part = ''.join(train_part)
+        part = "".join(train_part)
         f.write(header)
         f.write(part)
 
     with open(test_path, "w") as f:
-        part = ''.join(test_part)
+        part = "".join(test_part)
         f.write(header)
         f.write(part)

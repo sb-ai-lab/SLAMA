@@ -2,12 +2,16 @@ import logging.config
 import uuid
 
 import pandas as pd
+
+from examples_utils import get_dataset
 from lightautoml.automl.presets.tabular_presets import TabularAutoML
 from lightautoml.tasks import Task
 from sklearn.model_selection import train_test_split
 
-from examples_utils import get_dataset
-from sparklightautoml.utils import log_exec_timer, logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import log_exec_timer
+from sparklightautoml.utils import logging_config
+
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

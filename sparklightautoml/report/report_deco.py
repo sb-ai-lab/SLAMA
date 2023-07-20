@@ -4,30 +4,41 @@ import logging
 import math
 import os
 import warnings
+
 from operator import itemgetter
-from typing import Optional, Dict
+from typing import Dict
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from json2html import json2html
 from lightautoml.dataset.roles import ColumnRole
 from pyspark import RDD
 from pyspark.ml.functions import vector_to_array
-from pyspark.mllib.evaluation import BinaryClassificationMetrics, RegressionMetrics, MulticlassMetrics
+from pyspark.mllib.evaluation import BinaryClassificationMetrics
+from pyspark.mllib.evaluation import MulticlassMetrics
+from pyspark.mllib.evaluation import RegressionMetrics
 from pyspark.mllib.linalg import DenseMatrix
 from pyspark.sql import Column
+from pyspark.sql import functions as sf
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql import functions as sf
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.report.handy_spark_utils import call2
-from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import LAMLStringIndexer, LAMLStringIndexerModel
+from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import (
+    LAMLStringIndexer,
+)
+from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import (
+    LAMLStringIndexerModel,
+)
 from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +115,9 @@ def round_score_col(input_data, scores_col_name, true_labels_col_name, min_co=0.
         _id_col,
         true_labels,
         sf.when(sf.col("_scores_prepared_value") < min_co, min_co)
-        .otherwise(sf.when(sf.col("_scores_prepared_value") > max_co, max_co).otherwise(sf.col("_scores_prepared_value")))
+        .otherwise(
+            sf.when(sf.col("_scores_prepared_value") > max_co, max_co).otherwise(sf.col("_scores_prepared_value"))
+        )
         .alias(f"{scores_col_name}_rounded"),
     )
 
@@ -143,12 +156,7 @@ def plot_pr_curve_image(data, ap_score, positive_rate, path):
     lw = 2
     plt.plot(recall, precision, color="blue", lw=lw, label="Trained model")
     plt.plot(
-        [0, 1],
-        [positive_rate, positive_rate],
-        color="red",
-        lw=lw,
-        linestyle="--",
-        label="Random model",
+        [0, 1], [positive_rate, positive_rate], color="red", lw=lw, linestyle="--", label="Random model",
     )
     plt.xlim([-0.05, 1.05])
     plt.ylim([0.45, 1.05])
@@ -239,12 +247,7 @@ def plot_pie_f1_metric(data: RDD, path):
     wedges, texts = ax.pie([tp, fp, fn, tn], wedgeprops=dict(width=0.5), startangle=-40)
 
     bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
-    kw = dict(
-        arrowprops=dict(arrowstyle="-", color="k"),
-        bbox=bbox_props,
-        zorder=0,
-        va="center",
-    )
+    kw = dict(arrowprops=dict(arrowstyle="-", color="k"), bbox=bbox_props, zorder=0, va="center",)
 
     for i, p in enumerate(wedges):
         ang = (p.theta2 - p.theta1) / 2.0 + p.theta1
@@ -626,8 +629,7 @@ class SparkReportDeco:
         )
 
         plot_error_hist(
-            err_data,
-            path=os.path.join(self.output_path, self._inference_content["error_hist"]),
+            err_data, path=os.path.join(self.output_path, self._inference_content["error_hist"]),
         )
 
         plot_reg_scatter(
@@ -651,7 +653,8 @@ class SparkReportDeco:
 
         median_ae = data.select(
             sf.percentile_approx(
-                sf.abs(sf.col(predictions_col_name).astype("double") - sf.col(true_values_col_name).astype("double")), 0.5
+                sf.abs(sf.col(predictions_col_name).astype("double") - sf.col(true_values_col_name).astype("double")),
+                0.5,
             )
         ).first()[0]
 
@@ -719,22 +722,13 @@ class SparkReportDeco:
         s = list(labels_counts["count"])
 
         # p, r, f, s = precision_recall_fscore_support(y_true, y_pred)
-        cls_report = pd.DataFrame(
-            {
-                "Class name": classes,
-                "Precision": p,
-                "Recall": r,
-                "F1-score": f,
-                "Support": s,
-            }
-        )
+        cls_report = pd.DataFrame({"Class name": classes, "Precision": p, "Recall": r, "F1-score": f, "Support": s,})
         self._inference_content["classification_report"] = cls_report.to_html(
             index=False, float_format="{:.4f}".format, justify="left"
         )
 
         plot_confusion_matrix(
-            metrics.confusionMatrix(),
-            path=os.path.join(self.output_path, self._inference_content["confusion_matrix"]),
+            metrics.confusionMatrix(), path=os.path.join(self.output_path, self._inference_content["confusion_matrix"]),
         )
 
         return [
@@ -816,7 +810,7 @@ class SparkReportDeco:
                 "roc_curve": "valid_roc_curve.png",
                 "pr_curve": "valid_pr_curve.png",
                 "pie_f1_metric": "valid_pie_f1_metric.png",
-                "distribution_of_logits": "valid_distribution_of_logits.png"
+                "distribution_of_logits": "valid_distribution_of_logits.png",
             }
             # graphics and metrics
             _, self._F1_thresh, positive_rate = f1_score_w_co(
@@ -832,17 +826,14 @@ class SparkReportDeco:
             # update model section
             evaluation_parameters = ["AUC-score", "Precision", "Recall", "F1-score"]
             self._model_summary = pd.DataFrame(
-                {
-                    "Evaluation parameter": evaluation_parameters,
-                    "Validation sample": [auc_score, prec, rec, f1],
-                }
+                {"Evaluation parameter": evaluation_parameters, "Validation sample": [auc_score, prec, rec, f1],}
             )
         elif self.task == "reg":
             # filling for html
             self._inference_content = {
                 "target_distribution": "valid_target_distribution.png",
                 "error_hist": "valid_error_hist.png",
-                "scatter_plot": "valid_scatter_plot.png"
+                "scatter_plot": "valid_scatter_plot.png",
             }
             # graphics and metrics
 
@@ -866,9 +857,7 @@ class SparkReportDeco:
         elif self.task == "multiclass":
             self._N_classes = train_data.select(sf.count_distinct(sf.col(self._target))).first()[0]
 
-            self._inference_content = {
-                "confusion_matrix": "valid_confusion_matrix.png"
-            }
+            self._inference_content = {"confusion_matrix": "valid_confusion_matrix.png"}
 
             index_names = np.array([["Precision", "Recall", "F1-score"], ["micro", "macro", "weighted"]])
             index = pd.MultiIndex.from_product(index_names, names=["Evaluation metric", "Average"])
@@ -937,7 +926,7 @@ class SparkReportDeco:
                 "pie_f1_metric": f"test_pie_f1_metric_{self._n_test_sample}.png",
                 "bins_preds": f"test_bins_preds_{self._n_test_sample}.png",
                 "preds_distribution_by_bins": f"test_preds_distribution_by_bins_{self._n_test_sample}.png",
-                "distribution_of_logits": f"test_distribution_of_logits_{self._n_test_sample}.png"
+                "distribution_of_logits": f"test_distribution_of_logits_{self._n_test_sample}.png",
             }
             # graphics and metrics
             true_values_col = sf.col(true_values_col_name)
@@ -969,7 +958,7 @@ class SparkReportDeco:
             self._inference_content = {
                 "target_distribution": f"test_target_distribution_{self._n_test_sample}.png",
                 "error_hist": f"test_error_hist_{self._n_test_sample}.png",
-                "scatter_plot": f"test_scatter_plot_{self._n_test_sample}.png"
+                "scatter_plot": f"test_scatter_plot_{self._n_test_sample}.png",
             }
             # graphics
             mean_ae, median_ae, mse, r2, evs = self._regression_details(
@@ -988,9 +977,7 @@ class SparkReportDeco:
                 self._model_summary["Test sample"] = [mean_ae, median_ae, mse, r2, evs]
 
         elif self.task == "multiclass":
-            self._inference_content = {
-                "confusion_matrix": f"test_confusion_matrix_{self._n_test_sample}.png"
-            }
+            self._inference_content = {"confusion_matrix": f"test_confusion_matrix_{self._n_test_sample}.png"}
             test_summary = self._multiclass_details(
                 data, predicted_labels_col_name=predictions_col_name, true_labels_col_name=true_values_col_name
             )
@@ -1056,10 +1043,7 @@ class SparkReportDeco:
             self._plot_pdp(
                 test_data,
                 feature_name,
-                path=os.path.join(
-                    self.output_path,
-                    interpretaton_subsection["feature_interpretation_plot"],
-                ),
+                path=os.path.join(self.output_path, interpretaton_subsection["feature_interpretation_plot"],),
             )
             env = Environment(loader=FileSystemLoader(searchpath=self.template_path))
             interpretation_subsection = env.get_template(self._interpretation_subsection_path).render(
@@ -1245,9 +1229,12 @@ class SparkReportDeco:
             item = {
                 "Feature name": feature_name,
                 "NaN ratio": "{:.4f}".format(stat_data[f"nanratio_{feature_name}"][0]),
-                "min": stat_data[f"min_{feature_name}"][0], "quantile_25": stat_data[f"perc0.25_{feature_name}"][0],
-                "average": stat_data[f"avg_{feature_name}"][0], "median": stat_data[f"perc0.5_{feature_name}"][0],
-                "quantile_75": stat_data[f"perc0.75_{feature_name}"][0], "max": stat_data[f"max_{feature_name}"][0]
+                "min": stat_data[f"min_{feature_name}"][0],
+                "quantile_25": stat_data[f"perc0.25_{feature_name}"][0],
+                "average": stat_data[f"avg_{feature_name}"][0],
+                "median": stat_data[f"perc0.5_{feature_name}"][0],
+                "quantile_75": stat_data[f"perc0.75_{feature_name}"][0],
+                "max": stat_data[f"max_{feature_name}"][0],
             }
             numerical_features_df.append(item)
         if len(numerical_features_df) == 0:
@@ -1286,7 +1273,7 @@ class SparkReportDeco:
                 "Most frequent value": sorted_enc[0][0],
                 "Occurance of most frequent": "{:.1f}%".format(100 * (int(sorted_enc[0][1]) / float(total_count))),
                 "Least frequent value": sorted_enc[-1][0],
-                "Occurance of least frequent": "{:.1f}%".format(100 * (int(sorted_enc[-1][1]) / float(total_count)))
+                "Occurance of least frequent": "{:.1f}%".format(100 * (int(sorted_enc[-1][1]) / float(total_count))),
             }
             categorical_features_df.append(item)
         if len(categorical_features_df) == 0:
@@ -1303,7 +1290,7 @@ class SparkReportDeco:
                 "Feature name": feature_name,
                 "NaN ratio": "{:.4f}".format(stat_data[f"nanratio_{feature_name}"][0]),
                 "min": stat_data[f"max_{feature_name}"][0],
-                "base_date": self._model.reader._roles[feature_name].base_date
+                "base_date": self._model.reader._roles[feature_name].base_date,
             }
             datetime_features_df.append(item)
         if len(datetime_features_df) == 0:
@@ -1365,16 +1352,12 @@ class SparkReportDeco:
         model_summary = None
         if self._model_summary is not None:
             model_summary = self._model_summary.to_html(
-                index=self.task == "multiclass",
-                justify="left",
-                float_format="{:.4f}".format,
+                index=self.task == "multiclass", justify="left", float_format="{:.4f}".format,
             )
 
         env = Environment(loader=FileSystemLoader(searchpath=self.template_path))
         model_section = env.get_template(self._model_section_path).render(
-            model_name=self._model_name,
-            model_parameters=self._model_parameters,
-            model_summary=model_summary,
+            model_name=self._model_name, model_parameters=self._model_parameters, model_summary=model_summary,
         )
         self._sections["model"] = model_section
 

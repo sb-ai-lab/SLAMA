@@ -1,21 +1,30 @@
 import logging.config
 import os
+
 from typing import List
 
 import numpy as np
 import pytest
+
 from lightautoml.dataset.roles import NumericRole
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import BucketedPersistenceManager
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT, get_current_session
-from .. import BUCKET_NUMS, spark_for_function, spark_hdfs as spark_hdfs_sess, HDFS_TMP_SLAMA_DIR
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import get_current_session
+from sparklightautoml.utils import logging_config
+
+from .. import BUCKET_NUMS
+from .. import HDFS_TMP_SLAMA_DIR
+from .. import spark_for_function
+from .. import spark_hdfs as spark_hdfs_sess
+
 
 spark = spark_for_function
 spark_hdfs = spark_hdfs_sess
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/lama.log'))
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/lama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -35,23 +44,16 @@ def do_test_bucketed_persistence_manager(spark_session: SparkSession):
 
         roles = {col: NumericRole(np.int32) for col in in_cols}
 
-        df_data = [
-            {col: val for col, val in zip(in_cols, row)}
-            for row in data
-        ]
+        df_data = [{col: val for col, val in zip(in_cols, row)} for row in data]
         df = spark_session.createDataFrame(df_data)
 
         return SparkDataset(df, roles, name=name)
 
     def existing_tables() -> List[str]:
-        return [
-            table.name.split("_")[0]
-            for table in get_current_session().catalog.listTables()
-        ]
+        return [table.name.split("_")[0] for table in get_current_session().catalog.listTables()]
 
     pmanager = BucketedPersistenceManager(
-        bucketed_datasets_folder=f"hdfs://node21.bdcl:9000{HDFS_TMP_SLAMA_DIR}",
-        bucket_nums=BUCKET_NUMS
+        bucketed_datasets_folder=f"hdfs://node21.bdcl:9000{HDFS_TMP_SLAMA_DIR}", bucket_nums=BUCKET_NUMS
     )
 
     # we lowercase all tables name in asserts due to spark creates tables only only with preprocessed names
@@ -78,7 +80,7 @@ def test_bucketed_persistence_manager(spark: SparkSession):
 
 @pytest.mark.skipif(
     "DO_HDFS_BASED_TESTS" not in os.environ,
-    reason="Env var 'DO_HDFS_BASED_TESTS' is not set. Not sure if the test may succeed."
+    reason="Env var 'DO_HDFS_BASED_TESTS' is not set. Not sure if the test may succeed.",
 )
 def test_bucketed_persistence_manager_with_hdfs(spark_hdfs: SparkSession):
     """

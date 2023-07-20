@@ -1,32 +1,57 @@
 import logging
 import uuid
+
 from copy import copy
 from copy import deepcopy
-from typing import Optional, Any, List, Dict, Tuple, cast
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import cast
 
 import numpy as np
 import pandas as pd
-from lightautoml.dataset.base import array_attr_roles, valid_array_attributes
-from lightautoml.dataset.roles import ColumnRole, DropRole, NumericRole, DatetimeRole, CategoryRole
+
+from lightautoml.dataset.base import array_attr_roles
+from lightautoml.dataset.base import valid_array_attributes
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import DropRole
+from lightautoml.dataset.roles import NumericRole
 from lightautoml.dataset.utils import roles_parser
-from lightautoml.reader.base import Reader, UserDefinedRolesDict, RoleType, RolesDict
-from lightautoml.reader.guess_roles import (
-    calc_encoding_rules,
-    rule_based_roles_guess,
-    calc_category_rules,
-    rule_based_cat_handler_guess,
-)
+from lightautoml.reader.base import Reader
+from lightautoml.reader.base import RolesDict
+from lightautoml.reader.base import RoleType
+from lightautoml.reader.base import UserDefinedRolesDict
+from lightautoml.reader.guess_roles import calc_category_rules
+from lightautoml.reader.guess_roles import calc_encoding_rules
+from lightautoml.reader.guess_roles import rule_based_cat_handler_guess
+from lightautoml.reader.guess_roles import rule_based_roles_guess
 from lightautoml.tasks import Task
 from pyspark.ml import Transformer
-from pyspark.ml.param import Param, Params
+from pyspark.ml.param import Param
+from pyspark.ml.param import Params
 from pyspark.sql import functions as sf
-from pyspark.sql.types import IntegerType, NumericType, FloatType, StringType
+from pyspark.sql.types import FloatType
+from pyspark.sql.types import IntegerType
+from pyspark.sql.types import NumericType
+from pyspark.sql.types import StringType
 
-from sparklightautoml.dataset.base import SparkDataset, PersistenceLevel, PersistableDataFrame, PersistenceManager
+from sparklightautoml.dataset.base import PersistableDataFrame
+from sparklightautoml.dataset.base import PersistenceLevel
+from sparklightautoml.dataset.base import PersistenceManager
+from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
-from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
-from sparklightautoml.reader.guess_roles import get_numeric_roles_stat, get_category_roles_stat, get_null_scores
-from sparklightautoml.utils import SparkDataFrame, JobGroup
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
+from sparklightautoml.reader.guess_roles import get_category_roles_stat
+from sparklightautoml.reader.guess_roles import get_null_scores
+from sparklightautoml.reader.guess_roles import get_numeric_roles_stat
+from sparklightautoml.utils import JobGroup
+from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +90,7 @@ stype2dtype = {
     "long": "long",
     "float": "float",
     "double": "float64",
-    "timestamp": "datetime64"
+    "timestamp": "datetime64",
 }
 
 
@@ -232,12 +257,12 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
         return dataset
 
     def fit_read(
-            self,
-            train_data: SparkDataFrame,
-            features_names: Any = None,
-            roles: UserDefinedRolesDict = None,
-            persistence_manager: Optional[PersistenceManager] = None,
-            **kwargs: Any
+        self,
+        train_data: SparkDataFrame,
+        features_names: Any = None,
+        roles: UserDefinedRolesDict = None,
+        persistence_manager: Optional[PersistenceManager] = None,
+        **kwargs: Any,
     ) -> SparkDataset:
         """Get dataset with initial feature selection.
 
@@ -261,8 +286,7 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
 
         # bucketing should happen here
         initial_train_data_pdf = persistence_manager.persist(
-            PersistableDataFrame(train_data, uid=str(uuid.uuid4())),
-            level=PersistenceLevel.READER
+            PersistableDataFrame(train_data, uid=str(uuid.uuid4())), level=PersistenceLevel.READER
         )
 
         train_data = initial_train_data_pdf.sdf
@@ -308,8 +332,11 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
             else:
                 fraction = self.samples / total_number
             subsample = train_data.sample(fraction=fraction, seed=self.random_state).cache()
-            with JobGroup("Reader: Subsampling materailization", "Reader: Subsampling materailization",
-                          train_data.sql_ctx.sparkSession):
+            with JobGroup(
+                "Reader: Subsampling materailization",
+                "Reader: Subsampling materailization",
+                train_data.sql_ctx.sparkSession,
+            ):
                 subsample.count()
             unpersist_subsample = True
         else:
@@ -410,7 +437,7 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
             task=self.task,
             dependencies=deps,
             name="SparkToSparkReader",
-            **kwargs
+            **kwargs,
         )
 
         if self.advanced_roles:
@@ -427,7 +454,7 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                 task=self.task,
                 dependencies=deps,
                 name="SparkToSparkReader",
-                **kwargs
+                **kwargs,
             )
 
         logger.info("Reader finished fit_read")
@@ -693,10 +720,7 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
         # guess roles nor numerics
 
         stat = get_numeric_roles_stat(
-            dataset,
-            manual_roles=manual_roles,
-            random_state=self.random_state,
-            subsample=self.samples,
+            dataset, manual_roles=manual_roles, random_state=self.random_state, subsample=self.samples,
         )
 
         logger.info("AdvGuessRoles: Numeric roles stats were calculated")
@@ -799,7 +823,9 @@ class SparkToSparkReaderTransformer(Transformer, SparkReaderHelper, CommonPickle
                     continue
 
                 if array_attr == "target":
-                    dataset = self._process_target_column(self.get_task_name(), self.get_class_mapping(), dataset, col_name)
+                    dataset = self._process_target_column(
+                        self.get_task_name(), self.get_class_mapping(), dataset, col_name
+                    )
 
                 service_columns.append(col_name)
 
@@ -808,15 +834,12 @@ class SparkToSparkReaderTransformer(Transformer, SparkReaderHelper, CommonPickle
         processed_cols = [
             SparkDataset.ID_COLUMN,
             *service_columns,
-            *[self._convert_column(feat, role) for feat, role in roles.items()]
+            *[self._convert_column(feat, role) for feat, role in roles.items()],
         ]
 
         processed_cols_names = {SparkDataset.ID_COLUMN, *service_columns, *roles.keys()}
 
-        dataset = dataset.select([
-            *processed_cols,
-            *[c for c in dataset.columns if c not in processed_cols_names]
-        ])
+        dataset = dataset.select([*processed_cols, *[c for c in dataset.columns if c not in processed_cols_names]])
 
         logger.debug(f"Out {type(self)}. Columns: {sorted(dataset.columns)}")
         return dataset

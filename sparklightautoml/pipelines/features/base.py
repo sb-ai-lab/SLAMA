@@ -2,48 +2,63 @@
 import itertools
 import logging
 import uuid
+
 from copy import copy
 from dataclasses import dataclass
-from typing import Any, Callable, Set, Dict, cast
+from typing import Any
+from typing import Callable
+from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Set
 from typing import Tuple
+from typing import cast
 
 import numpy as np
 import toposort
+
 from lightautoml.dataset.base import RolesDict
-from lightautoml.dataset.roles import ColumnRole, NumericRole, DatetimeRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import NumericRole
 from lightautoml.pipelines.features.base import FeaturesPipeline
 from lightautoml.pipelines.utils import get_columns_by_role
 from pandas import DataFrame
 from pandas import Series
-from pyspark.ml import Transformer, Estimator, Pipeline, PipelineModel
+from pyspark.ml import Estimator
+from pyspark.ml import Pipeline
+from pyspark.ml import PipelineModel
+from pyspark.ml import Transformer
 from pyspark.sql import functions as sf
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.mlwriters import CommonPickleMLWritable, CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
 from sparklightautoml.pipelines.base import TransformerInputOutputRoles
-from sparklightautoml.transformers.base import (
-    SparkBaseEstimator,
-    SparkBaseTransformer,
-    SparkUnionTransformer,
-    SparkSequentialTransformer,
-    SparkEstOrTrans, SparkColumnsAndRoles, )
-from sparklightautoml.transformers.base import (
-    SparkChangeRolesTransformer,
-)
+from sparklightautoml.transformers.base import SparkBaseEstimator
+from sparklightautoml.transformers.base import SparkBaseTransformer
+from sparklightautoml.transformers.base import SparkChangeRolesTransformer
+from sparklightautoml.transformers.base import SparkColumnsAndRoles
+from sparklightautoml.transformers.base import SparkEstOrTrans
+from sparklightautoml.transformers.base import SparkSequentialTransformer
+from sparklightautoml.transformers.base import SparkUnionTransformer
+from sparklightautoml.transformers.categorical import SparkCatIntersectionsEstimator
+from sparklightautoml.transformers.categorical import SparkFreqEncoderEstimator
+from sparklightautoml.transformers.categorical import SparkLabelEncoderEstimator
 from sparklightautoml.transformers.categorical import (
-    SparkCatIntersectionsEstimator,
-    SparkFreqEncoderEstimator,
-    SparkLabelEncoderEstimator,
-    SparkOrdinalEncoderEstimator,
     SparkMulticlassTargetEncoderEstimator,
 )
+from sparklightautoml.transformers.categorical import SparkOrdinalEncoderEstimator
 from sparklightautoml.transformers.categorical import SparkTargetEncoderEstimator
-from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer, SparkDateSeasonsEstimator
+from sparklightautoml.transformers.datetime import SparkBaseDiffTransformer
+from sparklightautoml.transformers.datetime import SparkDateSeasonsEstimator
 from sparklightautoml.transformers.numeric import SparkQuantileBinningEstimator
-from sparklightautoml.utils import Cacher, warn_if_not_cached, SparkDataFrame, ColumnsSelectorTransformer
+from sparklightautoml.utils import Cacher
+from sparklightautoml.utils import ColumnsSelectorTransformer
+from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import warn_if_not_cached
+
 
 logger = logging.getLogger(__name__)
 
@@ -220,10 +235,7 @@ class SparkFeaturesPipeline(FeaturesPipeline, TransformerInputOutputRoles):
 
         return FittedPipe(dataset=processed_dataset, transformer=pipeline)
 
-    def _optimize_and_fit(
-            self,
-            train: SparkDataset,
-            pipeline: SparkEstOrTrans) -> FittedPipe:
+    def _optimize_and_fit(self, train: SparkDataset, pipeline: SparkEstOrTrans) -> FittedPipe:
         graph = build_graph(pipeline)
         tr_layers = list(toposort.toposort(graph))
 
@@ -241,7 +253,7 @@ class SparkFeaturesPipeline(FeaturesPipeline, TransformerInputOutputRoles):
             cols = est.getOutputCols()
             if len(cols) > 0:
                 return cols
-            return [f'{est.get_prefix()}*']
+            return [f"{est.get_prefix()}*"]
 
         def cum_outputs_layers(external_input: Set[str], layers):
             available_inputs = [external_input]
@@ -263,23 +275,27 @@ class SparkFeaturesPipeline(FeaturesPipeline, TransformerInputOutputRoles):
         out_deps = cum_outputs_layers(set(train.features), tr_layers)
         in_deps = cum_inputs_layers([*tr_layers, enodes])
         cols_to_select_in_layers = [
-            list(out_feats.intersection(next_in_feats))
-            for out_feats, next_in_feats in zip(out_deps[1:], in_deps[1:])
+            list(out_feats.intersection(next_in_feats)) for out_feats, next_in_feats in zip(out_deps[1:], in_deps[1:])
         ]
 
-        dag_pipeline = Pipeline(stages=[
-            stage
-            for i, (layer, cols) in enumerate(zip(tr_layers, cols_to_select_in_layers))
-            for stage in itertools.chain(layer, [
-                ColumnsSelectorTransformer(
-                    name=f"{type(self).__name__} Layer: {i}",
-                    input_cols=[SparkDataset.ID_COLUMN, *cols],
-                    optional_cols=[c for c in train.service_columns if c != SparkDataset.ID_COLUMN],
-                    transform_only_first_time=True
-                ),
-                Cacher(cacher_key)
-            ])
-        ])
+        dag_pipeline = Pipeline(
+            stages=[
+                stage
+                for i, (layer, cols) in enumerate(zip(tr_layers, cols_to_select_in_layers))
+                for stage in itertools.chain(
+                    layer,
+                    [
+                        ColumnsSelectorTransformer(
+                            name=f"{type(self).__name__} Layer: {i}",
+                            input_cols=[SparkDataset.ID_COLUMN, *cols],
+                            optional_cols=[c for c in train.service_columns if c != SparkDataset.ID_COLUMN],
+                            transform_only_first_time=True,
+                        ),
+                        Cacher(cacher_key),
+                    ],
+                )
+            ]
+        )
 
         dag_transformer = dag_pipeline.fit(train.data)
 
@@ -291,7 +307,7 @@ class SparkFeaturesPipeline(FeaturesPipeline, TransformerInputOutputRoles):
             list(output_roles.keys()),
             output_roles,
             dependencies=[lambda: Cacher.release_cache_by_key(cacher_key), train],
-            name=type(self).__name__
+            name=type(self).__name__,
         )
 
         return FittedPipe(dataset=featurized_train, transformer=dag_transformer)
@@ -400,10 +416,7 @@ class SparkTabularDataFeatures:
         return date_as_cat
 
     def get_numeric_data(
-        self,
-        train: SparkDataset,
-        feats_to_select: Optional[List[str]] = None,
-        prob: Optional[bool] = None,
+        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None, prob: Optional[bool] = None,
     ) -> Optional[SparkBaseTransformer]:
         """Select numeric features.
 
@@ -434,10 +447,7 @@ class SparkTabularDataFeatures:
         return num_processing
 
     def get_numeric_vectors_data(
-            self,
-            train: SparkDataset,
-            feats_to_select: Optional[List[str]] = None,
-            prob: Optional[bool] = None
+        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None, prob: Optional[bool] = None
     ):
 
         if feats_to_select is None:
@@ -453,10 +463,7 @@ class SparkTabularDataFeatures:
 
         new_roles = {
             feat: NumericVectorOrArrayRole(
-                role.size,
-                role.element_col_name_template,
-                np.float32,
-                is_vector=role.is_vector
+                role.size, role.element_col_name_template, np.float32, is_vector=role.is_vector
             )
             for feat, role in roles.items()
         }
@@ -693,10 +700,7 @@ class SparkTabularDataFeatures:
         # check for cardinality
         df["cardinality"] = self.get_uniques_cnt(train, cats)
         # sort
-        df = df.sort_values(
-            by=["importance", "cardinality"],
-            ascending=[False, self.ascending_by_cardinality],
-        )
+        df = df.sort_values(by=["importance", "cardinality"], ascending=[False, self.ascending_by_cardinality],)
         # get top n
         top = list(df.index[:top_n])
 
@@ -722,22 +726,14 @@ class SparkNoOpTransformer(SparkBaseTransformer, CommonPickleMLWritable, CommonP
 
     def __init__(self, roles: RolesDict):
         cols = list(roles.keys())
-        super().__init__(
-            input_cols=cols,
-            output_cols=cols,
-            input_roles=roles,
-            output_roles=roles
-        )
+        super().__init__(input_cols=cols, output_cols=cols, input_roles=roles, output_roles=roles)
 
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
         return dataset
 
 
 class SparkPipelineModel(PipelineModel, SparkColumnsAndRoles):
-    def __init__(self,
-                 stages: List[SparkBaseTransformer],
-                 input_roles: RolesDict,
-                 output_roles: RolesDict):
+    def __init__(self, stages: List[SparkBaseTransformer], input_roles: RolesDict, output_roles: RolesDict):
         super(SparkPipelineModel, self).__init__(stages)
         self.set(self.inputCols, list(input_roles.keys()))
         self.set(self.outputCols, list(output_roles.keys()))

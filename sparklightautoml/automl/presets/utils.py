@@ -1,16 +1,20 @@
 import calendar
 import datetime
 import logging
-from typing import Iterator, List, Tuple
-import numpy as np
 
+from typing import Iterator
+from typing import List
+from typing import Tuple
+
+import numpy as np
 import pandas as pd
 
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import StructField
 
-from sparklightautoml.utils import SparkDataFrame
 from sparklightautoml.tasks.base import SparkMetric
+from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 

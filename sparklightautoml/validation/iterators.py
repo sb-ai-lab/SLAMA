@@ -1,11 +1,16 @@
 import logging
-from typing import Optional, cast, Iterable
+
+from typing import Iterable
+from typing import Optional
+from typing import cast
 
 from pyspark.sql import functions as sf
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.utils import SparkDataFrame
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator, TrainVal
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import TrainVal
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +55,7 @@ class SparkDummyIterator(SparkBaseTrainValidIterator):
 
         return train_ds
 
-    def freeze(self) -> 'SparkDummyIterator':
+    def freeze(self) -> "SparkDummyIterator":
         return SparkDummyIterator(self.train.freeze())
 
     def unpersist(self, skip_val: bool = False):
@@ -70,8 +75,9 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
     """Simple one step iterator over one fold of SparkDataset"""
 
     def __init__(self, train: SparkDataset):
-        assert self.TRAIN_VAL_COLUMN in train.data.columns, \
-            f"Cannot accept dataset without explicit '{self.TRAIN_VAL_COLUMN}' column"
+        assert (
+            self.TRAIN_VAL_COLUMN in train.data.columns
+        ), f"Cannot accept dataset without explicit '{self.TRAIN_VAL_COLUMN}' column"
         super().__init__(train)
         self._curr_idx = 0
 
@@ -101,7 +107,7 @@ class SparkHoldoutIterator(SparkBaseTrainValidIterator):
 
         return self.train
 
-    def freeze(self) -> 'SparkHoldoutIterator':
+    def freeze(self) -> "SparkHoldoutIterator":
         return SparkHoldoutIterator(self.train.freeze())
 
     def unpersist(self, skip_val: bool = False):
@@ -123,6 +129,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
     Folds should be defined in Reader, based on cross validation method.
     """
+
     def __init__(self, train: SparkDataset, n_folds: Optional[int] = None):
         """Creates iterator.
 
@@ -188,7 +195,7 @@ class SparkFoldsIterator(SparkBaseTrainValidIterator):
 
         return full_ds_with_is_val_col
 
-    def freeze(self) -> 'SparkFoldsIterator':
+    def freeze(self) -> "SparkFoldsIterator":
         return SparkFoldsIterator(self.train.freeze(), n_folds=self.n_folds)
 
     def unpersist(self, skip_val: bool = False):

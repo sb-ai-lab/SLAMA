@@ -1,25 +1,43 @@
 import itertools
+
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime
-from typing import Dict, Set
-from typing import Iterator, Optional, Sequence, List, cast
+from typing import Dict
+from typing import Iterator
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Set
+from typing import cast
 
 import holidays
 import numpy as np
 import pandas as pd
+
 from lightautoml.dataset.base import RolesDict
-from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole, DatetimeRole
-from lightautoml.transformers.datetime import datetime_check, date_attrs
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import NumericRole
+from lightautoml.transformers.datetime import date_attrs
+from lightautoml.transformers.datetime import datetime_check
 from pyspark.ml import Transformer
-from pyspark.ml.param.shared import Param, Params
-from pyspark.sql import functions as sf, DataFrame as SparkDataFrame
+from pyspark.ml.param.shared import Param
+from pyspark.ml.param.shared import Params
+from pyspark.sql import DataFrame as SparkDataFrame
+from pyspark.sql import functions as sf
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import IntegerType
 
-from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
-from sparklightautoml.transformers.base import SparkBaseTransformer, SparkBaseEstimator
-from sparklightautoml.transformers.scala_wrappers.is_holiday_transformer import IsHolidayTransformer
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
+from sparklightautoml.transformers.base import SparkBaseEstimator
+from sparklightautoml.transformers.base import SparkBaseTransformer
+from sparklightautoml.transformers.scala_wrappers.is_holiday_transformer import (
+    IsHolidayTransformer,
+)
+
 
 _DateSeasonsTransformations = Dict[str, List[str]]
 
@@ -182,12 +200,7 @@ class SparkBaseDiffTransformer(
 class SparkDateSeasonsEstimator(SparkBaseEstimator):
     _fname_prefix = "season"
 
-    def __init__(
-        self,
-        input_cols: List[str],
-        input_roles: RolesDict,
-        output_role: Optional[ColumnRole] = None
-    ):
+    def __init__(self, input_cols: List[str], input_roles: RolesDict, output_role: Optional[ColumnRole] = None):
         output_role = output_role or CategoryRole(np.int32)
 
         super().__init__(input_cols, input_roles, output_role=output_role)
@@ -215,19 +228,27 @@ class SparkDateSeasonsEstimator(SparkBaseEstimator):
     def _fit(self, dataset: SparkDataFrame) -> Transformer:
         roles = self.get_input_roles()
 
-        min_max_years = dataset.select(*[
-            sf.struct(sf.year(sf.min(in_col)).alias('min'), sf.year(sf.max(in_col)).alias('max')).alias(in_col)
-            for in_col in self.getInputCols()
-        ]).first().asDict()
+        min_max_years = (
+            dataset.select(
+                *[
+                    sf.struct(sf.year(sf.min(in_col)).alias("min"), sf.year(sf.max(in_col)).alias("max")).alias(in_col)
+                    for in_col in self.getInputCols()
+                ]
+            )
+            .first()
+            .asDict()
+        )
 
         holidays_cols_dates: Dict[str, Set[str]] = {
-            col:
-                set(dt.strftime("%Y-%m-%d") for dt in holidays.country_holidays(
+            col: set(
+                dt.strftime("%Y-%m-%d")
+                for dt in holidays.country_holidays(
                     years=list(range(min_y, max_y + 1)),
                     country=roles[col].country,
                     prov=roles[col].prov,
-                    state=roles[col].state
-                ).keys())
+                    state=roles[col].state,
+                ).keys()
+            )
             for col, (min_y, max_y) in min_max_years.items()
         }
 
@@ -238,14 +259,13 @@ class SparkDateSeasonsEstimator(SparkBaseEstimator):
             input_roles=self.get_input_roles(),
             output_roles=self.get_output_roles(),
             seasons_transformations=self.transformations,
-            holidays_dates=holidays_cols_dates
+            holidays_dates=holidays_cols_dates,
         )
 
 
-class SparkDateSeasonsTransformer(SparkBaseTransformer,
-                                  SparkDatetimeHelper,
-                                  CommonPickleMLWritable,
-                                  CommonPickleMLReadable):
+class SparkDateSeasonsTransformer(
+    SparkBaseTransformer, SparkDatetimeHelper, CommonPickleMLWritable, CommonPickleMLReadable
+):
     """
     Extracts unit of time from Datetime values and marks holiday dates.
     """
@@ -265,7 +285,7 @@ class SparkDateSeasonsTransformer(SparkBaseTransformer,
         input_roles: RolesDict,
         output_roles: RolesDict,
         seasons_transformations: _DateSeasonsTransformations,
-        holidays_dates: Dict[str, Set[str]]
+        holidays_dates: Dict[str, Set[str]],
     ):
         output_cols = [*itertools.chain(*seasons_out_cols.values()), *holidays_out_cols]
         super().__init__(input_cols, output_cols, input_roles, output_roles)
@@ -298,9 +318,7 @@ class SparkDateSeasonsTransformer(SparkBaseTransformer,
             new_cols.extend(seas_cols)
 
         holidays_transformer = IsHolidayTransformer.create(
-            holidays_dates=holidays_dates,
-            input_cols=self.getInputCols(),
-            output_cols=holidays_out_cols
+            holidays_dates=holidays_dates, input_cols=self.getInputCols(), output_cols=holidays_out_cols
         )
         df = holidays_transformer.transform(df.select("*", *new_cols))
 

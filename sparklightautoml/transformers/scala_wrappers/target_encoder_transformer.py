@@ -1,41 +1,58 @@
 import logging
 import os
-from typing import Dict, List
+
+from typing import Dict
+from typing import List
 from uuid import uuid4
 
 from lightautoml.dataset.base import RolesDict
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.param.shared import HasInputCols, HasOutputCols
-from pyspark.ml.util import JavaMLWritable, MLWriter
-from pyspark.ml.wrapper import JavaTransformer, JavaParams
+from pyspark.ml.param.shared import HasInputCols
+from pyspark.ml.param.shared import HasOutputCols
+from pyspark.ml.util import JavaMLWritable
+from pyspark.ml.util import MLWriter
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.wrapper import JavaTransformer
 
-from sparklightautoml.mlwriters import CommonJavaToPythonMLReadable, СommonPickleMLWriter, СommonPickleMLReader, \
-    CommonPickleMLWritable, CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonJavaToPythonMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
+from sparklightautoml.mlwriters import СommonPickleMLReader
+from sparklightautoml.mlwriters import СommonPickleMLWriter
 from sparklightautoml.transformers.base import SparkBaseTransformer
 from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 
 
 @inherit_doc
-class TargetEncoderTransformer(JavaTransformer, HasInputCols, HasOutputCols,
-                               CommonJavaToPythonMLReadable, JavaMLWritable):
+class TargetEncoderTransformer(
+    JavaTransformer, HasInputCols, HasOutputCols, CommonJavaToPythonMLReadable, JavaMLWritable
+):
     """
     Scala-based implementation of Target Encoder transformer
     """
 
     @classmethod
-    def create(cls, *,
-               enc: Dict[str, List[float]],
-               oof_enc: Dict[str, List[List[float]]],
-               fold_column: str,
-               apply_oof: bool,
-               input_cols: List[str],
-               output_cols: List[str]):
+    def create(
+        cls,
+        *,
+        enc: Dict[str, List[float]],
+        oof_enc: Dict[str, List[List[float]]],
+        fold_column: str,
+        apply_oof: bool,
+        input_cols: List[str],
+        output_cols: List[str],
+    ):
         uid = f"TargetEncoderTransformer_{str(uuid4()).replace('-', '_')}"
         _java_obj = cls._new_java_obj(
             "org.apache.spark.ml.feature.lightautoml.TargetEncoderTransformer",
-            uid, enc, oof_enc, fold_column, apply_oof
+            uid,
+            enc,
+            oof_enc,
+            fold_column,
+            apply_oof,
         )
 
         tet = TargetEncoderTransformer(_java_obj).setInputCols(input_cols).setOutputCols(output_cols)
@@ -45,11 +62,11 @@ class TargetEncoderTransformer(JavaTransformer, HasInputCols, HasOutputCols,
         super(TargetEncoderTransformer, self).__init__()
         self._java_obj = java_obj
 
-    def setInputCols(self, value) -> 'TargetEncoderTransformer':
+    def setInputCols(self, value) -> "TargetEncoderTransformer":
         self.set(self.inputCols, value)
         return self
 
-    def setOutputCols(self, value) -> 'TargetEncoderTransformer':
+    def setOutputCols(self, value) -> "TargetEncoderTransformer":
         self.set(self.outputCols, value)
         return self
 
@@ -95,7 +112,7 @@ class SparkTargetEncoderTransformerMLWriter(СommonPickleMLWriter):
     Implements MLWriter.saveImpl(path) method.
     """
 
-    def __init__(self, instance: 'SparkTargetEncodeTransformer'):
+    def __init__(self, instance: "SparkTargetEncodeTransformer"):
         super().__init__(instance)
         self.instance = instance
 
@@ -106,7 +123,7 @@ class SparkTargetEncoderTransformerMLWriter(СommonPickleMLWriter):
 
 
 class SparkTargetEncoderTransformerMLReader(СommonPickleMLReader):
-    def load(self, path) -> 'SparkTargetEncodeTransformer':
+    def load(self, path) -> "SparkTargetEncodeTransformer":
         """Load the ML instance from the input path."""
         instance = super().load(path)
         tet_path = os.path.join(path, "scala_target_encoder_instance")
@@ -117,8 +134,9 @@ class SparkTargetEncoderTransformerMLReader(СommonPickleMLReader):
 
 class SparkTargetEncoderTransformerMLWritable(CommonPickleMLWritable):
     def write(self) -> MLWriter:
-        assert isinstance(self, SparkTargetEncodeTransformer), \
-            f"This class can work only with {type(SparkTargetEncodeTransformer)}"
+        assert isinstance(
+            self, SparkTargetEncodeTransformer
+        ), f"This class can work only with {type(SparkTargetEncodeTransformer)}"
         """Returns MLWriter instance that can save the Transformer instance."""
         return SparkTargetEncoderTransformerMLWriter(self)
 
@@ -130,15 +148,12 @@ class SparkTargetEncoderTransformerMLReadable(CommonPickleMLReadable):
         return SparkTargetEncoderTransformerMLReader()
 
 
-class SparkTargetEncodeTransformer(SparkBaseTransformer,
-                                   SparkTargetEncoderTransformerMLWritable,
-                                   SparkTargetEncoderTransformerMLReadable):
+class SparkTargetEncodeTransformer(
+    SparkBaseTransformer, SparkTargetEncoderTransformerMLWritable, SparkTargetEncoderTransformerMLReadable
+):
     def __init__(self, tet: TargetEncoderTransformer, input_roles: RolesDict, output_roles: RolesDict):
         super(SparkTargetEncodeTransformer, self).__init__(
-            list(input_roles.keys()),
-            list(output_roles.keys()),
-            input_roles,
-            output_roles
+            list(input_roles.keys()), list(output_roles.keys()), input_roles, output_roles
         )
 
         self._target_encoder_transformer = tet
@@ -152,5 +167,5 @@ class SparkTargetEncodeTransformer(SparkBaseTransformer,
         # method to avoid modifying the original state.
         state = self.__dict__.copy()
         # Remove the unpicklable entries.
-        del state['_target_encoder_transformer']
+        del state["_target_encoder_transformer"]
         return state

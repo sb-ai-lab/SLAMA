@@ -16,5 +16,7 @@ class PrefferedLocsPartitionCoalescerTransformer(JavaTransformer):
         super(PrefferedLocsPartitionCoalescerTransformer, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.lightautoml.utils.PrefferedLocsPartitionCoalescerTransformer",
-            self.uid, pref_locs, do_shuffle
+            self.uid,
+            pref_locs,
+            do_shuffle,
         )

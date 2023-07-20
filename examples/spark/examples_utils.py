@@ -1,13 +1,20 @@
 import inspect
 import os
-from dataclasses import dataclass, field
-from typing import Tuple, Optional, Any, Dict
+
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any
+from typing import Dict
+from typing import Optional
+from typing import Tuple
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset import persistence
-from sparklightautoml.utils import SparkDataFrame, get_current_session
+from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import get_current_session
+
 
 BUCKET_NUMS = 6
 PERSISTENCE_MANAGER_ENV_VAR = "PERSISTENCE_MANAGER"

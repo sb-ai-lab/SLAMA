@@ -1,22 +1,34 @@
 import functools
 import logging.config
 import uuid
+
 from datetime import datetime
-from typing import Union, Dict, cast, Tuple, List
+from typing import Dict
+from typing import List
+from typing import Tuple
+from typing import Union
+from typing import cast
 
 import pandas as pd
+
+from examples_utils import get_spark_session
 from lightautoml.dataset.base import RolesDict
-from lightautoml.dataset.roles import CategoryRole, DatetimeRole, NumericRole, ColumnRole
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import NumericRole
 from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import functions as sf
 from pyspark.sql.pandas.functions import pandas_udf
 
-from examples_utils import get_spark_session
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT, log_exec_time
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import log_exec_time
+from sparklightautoml.utils import logging_config
+
 
 logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

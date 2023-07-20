@@ -1,8 +1,12 @@
 import logging
+
 from logging import config
-from typing import Tuple, Union, Callable
+from typing import Callable
+from typing import Tuple
+from typing import Union
 
 import optuna
+
 from lightautoml.ml_algo.tuning.optuna import TunableAlgo
 from lightautoml.ml_algo.utils import tune_and_fit_predict
 from pyspark.sql import functions as sf
@@ -13,9 +17,11 @@ from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.tuning.parallel_optuna import ParallelOptunaTuner
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
 from sparklightautoml.validation.iterators import SparkFoldsIterator
+
 
 config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

@@ -1,16 +1,25 @@
 import collections
 import threading
+
 from copy import deepcopy
 
 import pytest
+
 from pyspark.sql import SparkSession
 
 from sparklightautoml.computations.sequential import SequentialComputationsManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from . import build_func, build_idx_func, TestWorkerException, build_func_on_dataset, build_fold_func, \
-    build_func_with_exception
-from .. import dataset as spark_dataset, spark_for_function
+
+from .. import dataset as spark_dataset
+from .. import spark_for_function
+from . import TestWorkerException
+from . import build_fold_func
+from . import build_func
+from . import build_func_on_dataset
+from . import build_func_with_exception
+from . import build_idx_func
+
 
 spark = spark_for_function
 dataset = spark_dataset

@@ -2,31 +2,49 @@
 import functools
 import logging
 import os
+
 from copy import copy
-from typing import Any, Callable, Tuple, cast, Union
+from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Sequence
+from typing import Tuple
+from typing import Union
+from typing import cast
 
 from lightautoml.reader.base import RolesDict
-from lightautoml.utils.logging import set_stdout_level, verbosity_to_loglevel
+from lightautoml.utils.logging import set_stdout_level
+from lightautoml.utils.logging import verbosity_to_loglevel
 from lightautoml.utils.timer import PipelineTimer
-from pyspark.ml import PipelineModel, Transformer
+from pyspark.ml import PipelineModel
+from pyspark.ml import Transformer
 
-from .blend import SparkBlender, SparkBestModelSelector
-from ..computations.base import ComputationsManager, ComputationsSettings
+from ..computations.base import ComputationsManager
+from ..computations.base import ComputationsSettings
 from ..computations.builder import build_computations_manager
-from ..dataset.base import SparkDataset, PersistenceLevel, PersistenceManager
+from ..dataset.base import PersistenceLevel
+from ..dataset.base import PersistenceManager
+from ..dataset.base import SparkDataset
 from ..dataset.persistence import PlainCachePersistenceManager
 from ..pipelines.base import TransformerInputOutputRoles
 from ..pipelines.features.base import SparkPipelineModel
 from ..pipelines.ml.base import SparkMLPipeline
 from ..reader.base import SparkToSparkReader
-from ..utils import ColumnsSelectorTransformer, SparkDataFrame, get_current_session
-from ..validation.base import SparkBaseTrainValidIterator, mark_as_train, mark_as_val
-from ..validation.iterators import SparkFoldsIterator, SparkHoldoutIterator, SparkDummyIterator
+from ..utils import ColumnsSelectorTransformer
+from ..utils import SparkDataFrame
+from ..utils import get_current_session
+from ..validation.base import SparkBaseTrainValidIterator
+from ..validation.base import mark_as_train
+from ..validation.base import mark_as_val
+from ..validation.iterators import SparkDummyIterator
+from ..validation.iterators import SparkFoldsIterator
+from ..validation.iterators import SparkHoldoutIterator
+from .blend import SparkBestModelSelector
+from .blend import SparkBlender
+
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +99,7 @@ class SparkAutoML(TransformerInputOutputRoles):
         blender: Optional[SparkBlender] = None,
         skip_conn: bool = False,
         return_all_predictions: bool = False,
-        computation_settings: Optional[ComputationsSettings] = ("no_parallelism", -1)
+        computation_settings: Optional[ComputationsSettings] = ("no_parallelism", -1),
     ):
         """
 
@@ -118,8 +136,7 @@ class SparkAutoML(TransformerInputOutputRoles):
         if reader and levels:
             self._initialize(reader, levels, timer, blender, skip_conn, return_all_predictions)
 
-        self._computations_manager: Optional[ComputationsManager] =  \
-            build_computations_manager(computation_settings)
+        self._computations_manager: Optional[ComputationsManager] = build_computations_manager(computation_settings)
 
     @property
     def input_roles(self) -> Optional[RolesDict]:
@@ -133,12 +150,13 @@ class SparkAutoML(TransformerInputOutputRoles):
     def persistence_manager(self) -> Optional[PersistenceManager]:
         return self._persistence_manager
 
-    def transformer(self,
-                    return_all_predictions: bool = False,
-                    add_array_attrs: bool = True,
-                    leave_only_predict_cols: bool = False,
-                    **reader_args) \
-            -> SparkPipelineModel:
+    def transformer(
+        self,
+        return_all_predictions: bool = False,
+        add_array_attrs: bool = True,
+        leave_only_predict_cols: bool = False,
+        **reader_args,
+    ) -> SparkPipelineModel:
         if not return_all_predictions:
             blender = [self.blender.transformer()]
             output_roles = self.blender.output_roles
@@ -156,7 +174,7 @@ class SparkAutoML(TransformerInputOutputRoles):
             self.reader.transformer(add_array_attrs=add_array_attrs, **reader_args),
             *(ml_pipe.transformer() for level in self.levels for ml_pipe in level),
             *blender,
-            *([sel_tr] if leave_only_predict_cols else [])
+            *([sel_tr] if leave_only_predict_cols else []),
         ]
 
         return SparkPipelineModel(stages, input_roles=self.input_roles, output_roles=output_roles)
@@ -219,7 +237,7 @@ class SparkAutoML(TransformerInputOutputRoles):
         valid_data: Optional[Any] = None,
         valid_features: Optional[Sequence[str]] = None,
         verbose: int = 0,
-        persistence_manager: Optional[PersistenceManager] = None
+        persistence_manager: Optional[PersistenceManager] = None,
     ) -> SparkDataset:
         """Fit on input data and make prediction on validation part.
 
@@ -244,8 +262,9 @@ class SparkAutoML(TransformerInputOutputRoles):
 
         self._persistence_manager = persistence_manager or PlainCachePersistenceManager()
 
-        train_dataset = self.reader.fit_read(train_data, train_features, roles,
-                                             persistence_manager=self._persistence_manager)
+        train_dataset = self.reader.fit_read(
+            train_data, train_features, roles, persistence_manager=self._persistence_manager
+        )
 
         train_dataset = train_dataset.persist(level=PersistenceLevel.REGULAR)
 
@@ -258,8 +277,9 @@ class SparkAutoML(TransformerInputOutputRoles):
         ), "Not possible to fit more than 1 level with holdout validation"
 
         if valid_data:
-            valid_dataset = self.reader.read(valid_data, valid_features, add_array_attrs=True)\
-                .persist(PersistenceLevel.READER)
+            valid_dataset = self.reader.read(valid_data, valid_features, add_array_attrs=True).persist(
+                PersistenceLevel.READER
+            )
         else:
             valid_dataset = None
 
@@ -278,8 +298,7 @@ class SparkAutoML(TransformerInputOutputRoles):
 
             with train_valid.frozen() as frozen_train_valid:
                 pipes, all_pipes_predictions, flg_last_level = self._parallel_level(
-                    level=level,
-                    train_valid_iterator=frozen_train_valid
+                    level=level, train_valid_iterator=frozen_train_valid
                 )
 
             flg_last_level = flg_last_level or leven_number == len(self._levels)
@@ -295,8 +314,9 @@ class SparkAutoML(TransformerInputOutputRoles):
 
             self.levels.append(pipes)
 
-            level = [train_valid.get_validation_data(), *all_pipes_predictions] \
-                if self.skip_conn else all_pipes_predictions
+            level = (
+                [train_valid.get_validation_data(), *all_pipes_predictions] if self.skip_conn else all_pipes_predictions
+            )
             name = f"{level_ds_name}_skip_conn" if self.skip_conn else level_ds_name
             level_ds = SparkDataset.concatenate(level, name=name)
 
@@ -321,7 +341,7 @@ class SparkAutoML(TransformerInputOutputRoles):
         data: ReadableIntoSparkDf,
         return_all_predictions: Optional[bool] = None,
         add_reader_attrs: bool = False,
-        persistence_manager: Optional[PersistenceManager] = None
+        persistence_manager: Optional[PersistenceManager] = None,
     ) -> SparkDataset:
         """Get dataset with predictions.
 
@@ -359,7 +379,7 @@ class SparkAutoML(TransformerInputOutputRoles):
         automl_model = self.transformer(
             return_all_predictions=return_all_predictions,
             add_array_attrs=add_reader_attrs,
-            leave_only_predict_cols=True
+            leave_only_predict_cols=True,
         )
 
         data = self._read_data(data)
@@ -370,7 +390,7 @@ class SparkAutoML(TransformerInputOutputRoles):
             roles=copy(automl_model.get_output_roles()),
             task=self.reader.task,
             persistence_manager=persistence_manager,
-            target=self.reader.target_col
+            target=self.reader.target_col,
         )
 
         return sds
@@ -412,8 +432,9 @@ class SparkAutoML(TransformerInputOutputRoles):
         self, train: SparkDataset, valid: Optional[SparkDataset], n_folds: Optional[int], cv_iter: Optional[Callable]
     ) -> SparkBaseTrainValidIterator:
         if valid:
-            sdf = mark_as_train(train.data, SparkBaseTrainValidIterator.TRAIN_VAL_COLUMN)\
-                .unionByName(mark_as_val(valid.data, SparkBaseTrainValidIterator.TRAIN_VAL_COLUMN))
+            sdf = mark_as_train(train.data, SparkBaseTrainValidIterator.TRAIN_VAL_COLUMN).unionByName(
+                mark_as_val(valid.data, SparkBaseTrainValidIterator.TRAIN_VAL_COLUMN)
+            )
 
             new_train = train.empty()
             new_train.set_data(sdf, train.features, train.roles, dependencies=[train, valid])
@@ -512,15 +533,11 @@ class SparkAutoML(TransformerInputOutputRoles):
     def _get_read_csv_params(self) -> Dict:
         return {}
 
-    def _parallel_level(self,
-                        level: Sequence[SparkMLPipeline],
-                        train_valid_iterator: SparkBaseTrainValidIterator) \
-            -> Tuple[List[SparkMLPipeline], List[SparkDataset], bool]:
+    def _parallel_level(
+        self, level: Sequence[SparkMLPipeline], train_valid_iterator: SparkBaseTrainValidIterator
+    ) -> Tuple[List[SparkMLPipeline], List[SparkDataset], bool]:
 
-        fit_tasks = [
-            functools.partial(_do_fit, ml_pipe, copy(train_valid_iterator))
-            for k, ml_pipe in enumerate(level)
-        ]
+        fit_tasks = [functools.partial(_do_fit, ml_pipe, copy(train_valid_iterator)) for k, ml_pipe in enumerate(level)]
 
         results = self._computations_manager.compute(fit_tasks)
 
@@ -537,9 +554,11 @@ class SparkAutoML(TransformerInputOutputRoles):
         return ml_pipes, ml_pipes_preds, flg_last_level
 
 
-def _do_fit(ml_pipe: SparkMLPipeline, iterator: SparkBaseTrainValidIterator) \
-        -> Optional[Tuple[SparkMLPipeline, SparkDataset]]:
-    pipe_predictions = cast(SparkDataset, ml_pipe.fit_predict(iterator))\
-        .persist(level=PersistenceLevel.CHECKPOINT, force=True)
+def _do_fit(
+    ml_pipe: SparkMLPipeline, iterator: SparkBaseTrainValidIterator
+) -> Optional[Tuple[SparkMLPipeline, SparkDataset]]:
+    pipe_predictions = cast(SparkDataset, ml_pipe.fit_predict(iterator)).persist(
+        level=PersistenceLevel.CHECKPOINT, force=True
+    )
 
     return ml_pipe, pipe_predictions

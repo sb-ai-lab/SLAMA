@@ -1,24 +1,32 @@
 """Base classes for MLPipeline."""
 import uuid
 import warnings
+
 from copy import copy
-from typing import List, cast, Sequence, Union, Tuple, Optional
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
+from typing import Union
+from typing import cast
 
 from lightautoml.dataset.base import RolesDict
 from lightautoml.ml_algo.tuning.base import ParamsTuner
 from lightautoml.ml_algo.utils import tune_and_fit_predict
 from lightautoml.pipelines.ml.base import MLPipeline as LAMAMLPipeline
 from lightautoml.pipelines.selection.base import EmptySelector
-from pyspark.ml import Transformer, PipelineModel
+from pyspark.ml import PipelineModel
+from pyspark.ml import Transformer
 
-from ..base import TransformerInputOutputRoles
-from ..features.base import SparkFeaturesPipeline, SparkEmptyFeaturePipeline
-from ..selection.base import SparkSelectionPipelineWrapper
-from ...computations.builder import build_computations_manager
 from ...computations.base import ComputationsSettings
+from ...computations.builder import build_computations_manager
 from ...dataset.base import SparkDataset
 from ...ml_algo.base import SparkTabularMLAlgo
 from ...validation.base import SparkBaseTrainValidIterator
+from ..base import TransformerInputOutputRoles
+from ..features.base import SparkEmptyFeaturePipeline
+from ..features.base import SparkFeaturesPipeline
+from ..selection.base import SparkSelectionPipelineWrapper
 
 
 class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
@@ -54,7 +62,7 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
         post_selection: Optional[SparkSelectionPipelineWrapper] = None,
         name: Optional[str] = None,
         persist_before_ml_algo: bool = False,
-        computations_settings: Optional[ComputationsSettings] = None
+        computations_settings: Optional[ComputationsSettings] = None,
     ):
         if features_pipeline is None:
             features_pipeline = SparkEmptyFeaturePipeline()
@@ -98,10 +106,7 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
         assert self._transformer is not None, f"{type(self)} seems to be not fitted"
         return self._transformer
 
-    def fit_predict(
-            self,
-            train_valid: SparkBaseTrainValidIterator
-    ) -> SparkDataset:
+    def fit_predict(self, train_valid: SparkBaseTrainValidIterator) -> SparkDataset:
         """Fit on train/valid iterator and transform on validation part.
 
         Args:
@@ -125,8 +130,9 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
 
             def build_fit_func(ml_algo: SparkTabularMLAlgo, param_tuner: ParamsTuner, force_calc: bool):
                 def func():
-                    fitted_ml_algo, curr_preds = tune_and_fit_predict(ml_algo, param_tuner,
-                                                                      frozen_train_valid, force_calc)
+                    fitted_ml_algo, curr_preds = tune_and_fit_predict(
+                        ml_algo, param_tuner, frozen_train_valid, force_calc
+                    )
                     fitted_ml_algo = cast(SparkTabularMLAlgo, fitted_ml_algo)
                     curr_preds = cast(SparkDataset, curr_preds)
 
@@ -137,6 +143,7 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
                         )
 
                     return fitted_ml_algo, curr_preds
+
                 return func
 
             fit_tasks = [
@@ -155,17 +162,17 @@ class SparkMLPipeline(LAMAMLPipeline, TransformerInputOutputRoles):
         del self._ml_algos
 
         val_preds_ds = SparkDataset.concatenate(
-            preds,
-            name=f"{type(self)}_folds_predictions",
-            extra_dependencies=[train_valid]
+            preds, name=f"{type(self)}_folds_predictions", extra_dependencies=[train_valid]
         )
 
-        self._transformer = PipelineModel(stages=[
-            # self.pre_selection.transformer(),
-            self.features_pipeline.transformer(),
-            # self.post_selection.transformer(),
-            *[ml_algo.transformer() for ml_algo in self.ml_algos],
-        ])
+        self._transformer = PipelineModel(
+            stages=[
+                # self.pre_selection.transformer(),
+                self.features_pipeline.transformer(),
+                # self.post_selection.transformer(),
+                *[ml_algo.transformer() for ml_algo in self.ml_algos],
+            ]
+        )
 
         self._input_roles = copy(train_valid.train.roles)
         self._output_roles = copy(val_preds_ds.roles)

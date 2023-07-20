@@ -1,21 +1,25 @@
 import logging
-from logging import config
-from typing import Tuple, Union
-
 import os
+
+from logging import config
+from typing import Tuple
+from typing import Union
 
 from lightautoml.ml_algo.tuning.base import DefaultTuner
 from lightautoml.ml_algo.utils import tune_and_fit_predict
 from pyspark.sql import functions as sf
 
+from examples.spark.examples_utils import get_spark_session
 from sparklightautoml.computations.parallel import ParallelComputationsManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT, log_exec_timer
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import log_exec_timer
+from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from examples.spark.examples_utils import get_spark_session
+
 
 config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)

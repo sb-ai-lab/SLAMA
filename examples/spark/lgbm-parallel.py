@@ -3,24 +3,34 @@ import logging
 import os
 import pickle
 import shutil
+
 from multiprocessing.pool import ThreadPool
-from typing import Tuple, List, Dict, Any
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
 
 # noinspection PyUnresolvedReferences
 from pyspark import inheritable_thread_target
 from pyspark.ml.feature import VectorAssembler
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as sf
-from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
+from synapse.ml.lightgbm import LightGBMClassifier
+from synapse.ml.lightgbm import LightGBMRegressor
 
-from examples.spark.examples_utils import get_spark_session, get_dataset, prepare_test_and_train
+from examples.spark.examples_utils import get_dataset
+from examples.spark.examples_utils import get_spark_session
+from examples.spark.examples_utils import prepare_test_and_train
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.transformers.scala_wrappers.balanced_union_partitions_coalescer import \
-    BalancedUnionPartitionsCoalescerTransformer
+from sparklightautoml.transformers.scala_wrappers.balanced_union_partitions_coalescer import (
+    BalancedUnionPartitionsCoalescerTransformer,
+)
 from sparklightautoml.utils import log_exec_timer
+
 
 logger = logging.getLogger(__name__)
 

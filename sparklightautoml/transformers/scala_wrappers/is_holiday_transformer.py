@@ -1,13 +1,19 @@
 import logging
-from typing import Dict, Set, List
+
+from typing import Dict
+from typing import List
+from typing import Set
 from uuid import uuid4
 
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.param.shared import HasInputCols, HasOutputCols
+from pyspark.ml.param.shared import HasInputCols
+from pyspark.ml.param.shared import HasOutputCols
 from pyspark.ml.util import JavaMLWritable
-from pyspark.ml.wrapper import JavaTransformer, JavaParams
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.wrapper import JavaTransformer
 
 from sparklightautoml.mlwriters import CommonJavaToPythonMLReadable
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +28,7 @@ class IsHolidayTransformer(JavaTransformer, HasInputCols, HasOutputCols, CommonJ
     def create(cls, *, holidays_dates: Dict[str, Set[str]], input_cols: List[str], output_cols: List[str]):
         uid = f"IsHolidayTransformer_{str(uuid4()).replace('-', '_')}"
         _java_obj = cls._new_java_obj(
-            "org.apache.spark.ml.feature.lightautoml.IsHolidayTransformer",
-            uid, holidays_dates
+            "org.apache.spark.ml.feature.lightautoml.IsHolidayTransformer", uid, holidays_dates
         )
 
         transformer = IsHolidayTransformer(_java_obj).setInputCols(input_cols).setOutputCols(output_cols)
@@ -33,11 +38,11 @@ class IsHolidayTransformer(JavaTransformer, HasInputCols, HasOutputCols, CommonJ
         super(IsHolidayTransformer, self).__init__()
         self._java_obj = java_obj
 
-    def setInputCols(self, value) -> 'IsHolidayTransformer':
+    def setInputCols(self, value) -> "IsHolidayTransformer":
         self.set(self.inputCols, value)
         return self
 
-    def setOutputCols(self, value) -> 'IsHolidayTransformer':
+    def setOutputCols(self, value) -> "IsHolidayTransformer":
         self.set(self.outputCols, value)
         return self
 

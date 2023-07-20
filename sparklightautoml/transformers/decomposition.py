@@ -2,10 +2,12 @@ from typing import List
 
 import numpy as np
 import pyspark.sql.functions as sf
+
 from lightautoml.dataset.roles import NumericRole
 from lightautoml.transformers.decomposition import numeric_check
 from pyspark.ml.feature import PCA
-from pyspark.ml.functions import vector_to_array, array_to_vector
+from pyspark.ml.functions import array_to_vector
+from pyspark.ml.functions import vector_to_array
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.transformers.base import ObsoleteSparkTransformer

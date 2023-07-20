@@ -1,24 +1,35 @@
 import logging
+
 from abc import ABC
-from copy import copy, deepcopy
-from typing import Dict, cast, List, Optional, Union
+from copy import copy
+from copy import deepcopy
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
+from typing import cast
 
 from lightautoml.dataset.base import RolesDict
 from lightautoml.dataset.roles import ColumnRole
-from lightautoml.transformers.base import (
-    LAMLTransformer
-)
-from pyspark.ml import Transformer, Estimator
+from lightautoml.transformers.base import LAMLTransformer
+from pyspark.ml import Estimator
+from pyspark.ml import Transformer
 from pyspark.ml.functions import array_to_vector
-from pyspark.ml.param.shared import HasInputCols, HasOutputCols, TypeConverters
-from pyspark.ml.param.shared import Param, Params
-from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable
+from pyspark.ml.param.shared import HasInputCols
+from pyspark.ml.param.shared import HasOutputCols
+from pyspark.ml.param.shared import Param
+from pyspark.ml.param.shared import Params
+from pyspark.ml.param.shared import TypeConverters
+from pyspark.ml.util import DefaultParamsReadable
+from pyspark.ml.util import DefaultParamsWritable
 from pyspark.sql import Column
 from pyspark.sql import functions as sf
 
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.mlwriters import CommonPickleMLReadable, CommonPickleMLWritable
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
 from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +42,7 @@ class HasInputRoles(Params):
     """
     Mixin for param inputCols: input column names.
     """
+
     inputRoles = Param(Params._dummy(), "inputRoles", "input roles (lama format)")
 
     def __init__(self):
@@ -402,13 +414,16 @@ class SparkChangeRolesTransformer(SparkBaseTransformer, CommonPickleMLWritable, 
     # Note: this trasnformer cannot be applied directly to input columns of a feature pipeline
     """
 
-    def __init__(self,
-                 input_cols: List[str],
-                 input_roles: RolesDict,
-                 role: Optional[ColumnRole] = None,
-                 roles: Optional[RolesDict] = None):
-        assert (role and not roles) or (not role and roles), \
-            "Either role or roles shoud be defined. Both of them cannot be set simultaneously"
+    def __init__(
+        self,
+        input_cols: List[str],
+        input_roles: RolesDict,
+        role: Optional[ColumnRole] = None,
+        roles: Optional[RolesDict] = None,
+    ):
+        assert (role and not roles) or (
+            not role and roles
+        ), "Either role or roles shoud be defined. Both of them cannot be set simultaneously"
 
         if role:
             output_roles = {f: deepcopy(role) for f in input_cols}
