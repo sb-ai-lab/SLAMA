@@ -105,7 +105,7 @@ class SparkTask(LAMATask):
 
     _supported_metrics = {
         "binary": {"auc": "areaUnderROC", "aupr": "areaUnderPR"},
-        "reg": {"r2": "rmse", "mse": "mse", "mae": "mae",},
+        "reg": {"r2": "rmse", "mse": "mse", "mae": "mae", },
         "multiclass": {
             "crossentropy": "logLoss",
             "accuracy": "accuracy",

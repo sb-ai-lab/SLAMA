@@ -722,7 +722,7 @@ class SparkReportDeco:
         s = list(labels_counts["count"])
 
         # p, r, f, s = precision_recall_fscore_support(y_true, y_pred)
-        cls_report = pd.DataFrame({"Class name": classes, "Precision": p, "Recall": r, "F1-score": f, "Support": s,})
+        cls_report = pd.DataFrame({"Class name": classes, "Precision": p, "Recall": r, "F1-score": f, "Support": s, })
         self._inference_content["classification_report"] = cls_report.to_html(
             index=False, float_format="{:.4f}".format, justify="left"
         )
@@ -826,7 +826,7 @@ class SparkReportDeco:
             # update model section
             evaluation_parameters = ["AUC-score", "Precision", "Recall", "F1-score"]
             self._model_summary = pd.DataFrame(
-                {"Evaluation parameter": evaluation_parameters, "Validation sample": [auc_score, prec, rec, f1],}
+                {"Evaluation parameter": evaluation_parameters, "Validation sample": [auc_score, prec, rec, f1], }
             )
         elif self.task == "reg":
             # filling for html

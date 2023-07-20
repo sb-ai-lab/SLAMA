@@ -180,9 +180,9 @@ def logging_config(level: int = logging.INFO, log_filename: str = "/var/log/lama
             },
         },
         "loggers": {
-            "lightautoml": {"handlers": ["console", "file"], "propagate": True, "level": level,},
-            "sparklightautoml": {"handlers": ["console", "file"], "level": level, "propagate": False,},
-            "lightautoml.ml_algo": {"handlers": ["console", "file"], "level": level, "propagate": False,},
+            "lightautoml": {"handlers": ["console", "file"], "propagate": True, "level": level, },
+            "sparklightautoml": {"handlers": ["console", "file"], "level": level, "propagate": False, },
+            "lightautoml.ml_algo": {"handlers": ["console", "file"], "level": level, "propagate": False, },
         },
     }
 

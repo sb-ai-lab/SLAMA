@@ -144,7 +144,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
     # and metric names supported by LightGBM
     _metric2lgbm = {
         "binary": {"auc": "auc", "aupr": "areaUnderPR"},
-        "reg": {"r2": "rmse", "mse": "mse", "mae": "mae",},
+        "reg": {"r2": "rmse", "mse": "mse", "mae": "mae", },
         "multiclass": {"crossentropy": "cross_entropy"},
     }
 
