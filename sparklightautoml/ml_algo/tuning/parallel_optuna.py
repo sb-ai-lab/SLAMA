@@ -46,17 +46,17 @@ class ParallelOptunaTuner(OptunaTuner):
     ) -> Tuple[Optional[SparkTabularMLAlgo], Optional[SparkDataset]]:
         """Tune model.
 
-               Args:
-                   ml_algo: Algo that is tuned.
-                   train_valid_iterator: Classic cv-iterator.
+        Args:
+            ml_algo: Algo that is tuned.
+            train_valid_iterator: Classic cv-iterator.
 
-               Returns:
-                   Tuple (None, None) if an optuna exception raised
-                   or ``fit_on_holdout=True`` and ``train_valid_iterator`` is
-                   not :class:`~lightautoml.validation.base.HoldoutIterator`.
-                   Tuple (MlALgo, preds_ds) otherwise.
+        Returns:
+            Tuple (None, None) if an optuna exception raised
+            or ``fit_on_holdout=True`` and ``train_valid_iterator`` is
+            not :class:`~lightautoml.validation.base.HoldoutIterator`.
+            Tuple (MlALgo, preds_ds) otherwise.
 
-               """
+        """
         assert not ml_algo.is_fitted, "Fitted algo cannot be tuned."
 
         estimated_tuning_time = ml_algo.timer.estimate_tuner_time(len(train_valid_iterator))
@@ -92,7 +92,6 @@ class ParallelOptunaTuner(OptunaTuner):
             )
 
         try:
-
             self._optimize(ml_algo, train_valid_iterator, update_trial_time)
 
             # need to update best params here
@@ -123,7 +122,6 @@ class ParallelOptunaTuner(OptunaTuner):
         train_valid_iterator: SparkBaseTrainValidIterator,
         update_trial_time: Callable[[optuna.study.Study, optuna.trial.FrozenTrial], None],
     ):
-
         sampler = optuna.samplers.TPESampler(seed=self.random_state)
         self.study = optuna.create_study(direction=self.direction, sampler=sampler)
 
@@ -168,7 +166,8 @@ class ParallelOptunaTuner(OptunaTuner):
 
                 if not optimization_search_space:
                     optimization_search_space = _ml_algo._get_default_search_spaces(
-                        suggested_params=_ml_algo.init_params_on_input(tv_iter), estimated_n_trials=estimated_n_trials,
+                        suggested_params=_ml_algo.init_params_on_input(tv_iter),
+                        estimated_n_trials=estimated_n_trials,
                     )
 
                 if callable(optimization_search_space):

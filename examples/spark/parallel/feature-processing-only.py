@@ -10,7 +10,7 @@ from sparklightautoml.tasks.base import SparkTask
 feature_pipelines = {
     "linear": SparkLinearFeatures(),
     "lgb_simple": SparkLGBSimpleFeatures(),
-    "lgb_adv": SparkLGBAdvancedPipeline()
+    "lgb_adv": SparkLGBAdvancedPipeline(),
 }
 
 
@@ -34,4 +34,4 @@ if __name__ == "__main__":
     ds = feature_pipe.fit_transform(ds)
 
     # save processed data
-    ds.save(f"/tmp/{dataset_name}__{feat_pipe}__features.dataset", save_mode='overwrite')
+    ds.save(f"/tmp/{dataset_name}__{feat_pipe}__features.dataset", save_mode="overwrite")

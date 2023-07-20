@@ -539,7 +539,6 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
                 )
 
             if srtd and (np.arange(srtd.shape[0]) == srtd).all():
-
                 assert srtd.shape[0] > 1, "Less than 2 unique values in target"
                 if self.task.name == "binary":
                     assert srtd.shape[0] == 2, "Binary task and more than 2 values in target"
@@ -720,7 +719,10 @@ class SparkToSparkReader(Reader, SparkReaderHelper):
         # guess roles nor numerics
 
         stat = get_numeric_roles_stat(
-            dataset, manual_roles=manual_roles, random_state=self.random_state, subsample=self.samples,
+            dataset,
+            manual_roles=manual_roles,
+            random_state=self.random_state,
+            subsample=self.samples,
         )
 
         logger.info("AdvGuessRoles: Numeric roles stats were calculated")

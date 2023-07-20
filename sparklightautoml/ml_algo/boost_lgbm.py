@@ -144,7 +144,11 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
     # and metric names supported by LightGBM
     _metric2lgbm = {
         "binary": {"auc": "auc", "aupr": "areaUnderPR"},
-        "reg": {"r2": "rmse", "mse": "mse", "mae": "mae", },
+        "reg": {
+            "r2": "rmse",
+            "mse": "mse",
+            "mae": "mae",
+        },
         "multiclass": {"crossentropy": "cross_entropy"},
     }
 
@@ -332,25 +336,47 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         optimization_search_space = dict()
 
-        optimization_search_space["featureFraction"] = SearchSpace(Distribution.UNIFORM, low=0.5, high=1.0,)
+        optimization_search_space["featureFraction"] = SearchSpace(
+            Distribution.UNIFORM,
+            low=0.5,
+            high=1.0,
+        )
 
-        optimization_search_space["numLeaves"] = SearchSpace(Distribution.INTUNIFORM, low=4, high=255,)
+        optimization_search_space["numLeaves"] = SearchSpace(
+            Distribution.INTUNIFORM,
+            low=4,
+            high=255,
+        )
 
         if self.task.name == "binary" or self.task.name == "multiclass":
             optimization_search_space["isUnbalance"] = SearchSpace(Distribution.DISCRETEUNIFORM, low=0, high=1, q=1)
 
         if estimated_n_trials > 30:
-            optimization_search_space["baggingFraction"] = SearchSpace(Distribution.UNIFORM, low=0.5, high=1.0,)
+            optimization_search_space["baggingFraction"] = SearchSpace(
+                Distribution.UNIFORM,
+                low=0.5,
+                high=1.0,
+            )
 
             optimization_search_space["minSumHessianInLeaf"] = SearchSpace(
-                Distribution.LOGUNIFORM, low=1e-3, high=10.0,
+                Distribution.LOGUNIFORM,
+                low=1e-3,
+                high=10.0,
             )
 
         if estimated_n_trials > 100:
             if self.task.name == "reg":
-                optimization_search_space["alpha"] = SearchSpace(Distribution.LOGUNIFORM, low=1e-8, high=10.0,)
+                optimization_search_space["alpha"] = SearchSpace(
+                    Distribution.LOGUNIFORM,
+                    low=1e-8,
+                    high=10.0,
+                )
 
-            optimization_search_space["lambdaL1"] = SearchSpace(Distribution.LOGUNIFORM, low=1e-8, high=10.0,)
+            optimization_search_space["lambdaL1"] = SearchSpace(
+                Distribution.LOGUNIFORM,
+                low=1e-8,
+                high=10.0,
+            )
 
         return optimization_search_space
 

@@ -104,7 +104,6 @@ def plot_curves(input_data, scores_col_name, positive_rate, true_labels_col_name
 
 
 def round_score_col(input_data, scores_col_name, true_labels_col_name, min_co=0.01, max_co=0.99, step=0.01):
-
     scores = sf.col(scores_col_name)
     _id_col = sf.col(SparkDataset.ID_COLUMN)
     true_labels = sf.col(true_labels_col_name)
@@ -123,7 +122,6 @@ def round_score_col(input_data, scores_col_name, true_labels_col_name, min_co=0.
 
 
 def plot_roc_curve_image(data, auc_score, path):
-
     sns.set(style="whitegrid", font_scale=1.5)
     plt.figure(figsize=(10, 10))
 
@@ -156,7 +154,12 @@ def plot_pr_curve_image(data, ap_score, positive_rate, path):
     lw = 2
     plt.plot(recall, precision, color="blue", lw=lw, label="Trained model")
     plt.plot(
-        [0, 1], [positive_rate, positive_rate], color="red", lw=lw, linestyle="--", label="Random model",
+        [0, 1],
+        [positive_rate, positive_rate],
+        color="red",
+        lw=lw,
+        linestyle="--",
+        label="Random model",
     )
     plt.xlim([-0.05, 1.05])
     plt.ylim([0.45, 1.05])
@@ -194,7 +197,6 @@ def plot_preds_distribution_by_bins(data, path):
 
 
 def plot_distribution_of_logits(input_data, path, scores_col_name, true_labels_col_name):
-
     prep_data = round_score_col(
         input_data=input_data,
         min_co=0.000,
@@ -247,7 +249,12 @@ def plot_pie_f1_metric(data: RDD, path):
     wedges, texts = ax.pie([tp, fp, fn, tn], wedgeprops=dict(width=0.5), startangle=-40)
 
     bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
-    kw = dict(arrowprops=dict(arrowstyle="-", color="k"), bbox=bbox_props, zorder=0, va="center",)
+    kw = dict(
+        arrowprops=dict(arrowstyle="-", color="k"),
+        bbox=bbox_props,
+        zorder=0,
+        va="center",
+    )
 
     for i, p in enumerate(wedges):
         ang = (p.theta2 - p.theta1) / 2.0 + p.theta1
@@ -271,7 +278,6 @@ def plot_pie_f1_metric(data: RDD, path):
 
 
 def f1_score_w_co(input_data, true_labels_col_name, scores_col_name, min_co=0.01, max_co=0.99, step=0.01):
-
     true_labels = sf.col(true_labels_col_name)
     rounded_scores_col_name = f"{scores_col_name}_rounded"
     rounded_scores = sf.col(rounded_scores_col_name)
@@ -339,7 +345,6 @@ def get_bins_table(data: DataFrame, n_bins=20):
 
 # Regression plots:
 def plot_target_distribution(data, path):
-
     sns.set(style="whitegrid", font_scale=1.5)
     g = sns.displot(
         data,
@@ -589,7 +594,6 @@ class SparkReportDeco:
         return auc_score, prec, rec, f1
 
     def _regression_details(self, data, true_values_col_name, predictions_col_name):
-
         true_col = sf.col(true_values_col_name)
         pred_col = sf.col(predictions_col_name)
 
@@ -629,7 +633,8 @@ class SparkReportDeco:
         )
 
         plot_error_hist(
-            err_data, path=os.path.join(self.output_path, self._inference_content["error_hist"]),
+            err_data,
+            path=os.path.join(self.output_path, self._inference_content["error_hist"]),
         )
 
         plot_reg_scatter(
@@ -673,7 +678,6 @@ class SparkReportDeco:
         return mean_ae, median_ae, mse, r2, fve
 
     def _multiclass_details(self, data, predicted_labels_col_name, true_labels_col_name):
-
         true_labels_col = sf.col(true_labels_col_name)
 
         metrics = MulticlassMetrics(
@@ -722,13 +726,22 @@ class SparkReportDeco:
         s = list(labels_counts["count"])
 
         # p, r, f, s = precision_recall_fscore_support(y_true, y_pred)
-        cls_report = pd.DataFrame({"Class name": classes, "Precision": p, "Recall": r, "F1-score": f, "Support": s, })
+        cls_report = pd.DataFrame(
+            {
+                "Class name": classes,
+                "Precision": p,
+                "Recall": r,
+                "F1-score": f,
+                "Support": s,
+            }
+        )
         self._inference_content["classification_report"] = cls_report.to_html(
             index=False, float_format="{:.4f}".format, justify="left"
         )
 
         plot_confusion_matrix(
-            metrics.confusionMatrix(), path=os.path.join(self.output_path, self._inference_content["confusion_matrix"]),
+            metrics.confusionMatrix(),
+            path=os.path.join(self.output_path, self._inference_content["confusion_matrix"]),
         )
 
         return [
@@ -826,7 +839,10 @@ class SparkReportDeco:
             # update model section
             evaluation_parameters = ["AUC-score", "Precision", "Recall", "F1-score"]
             self._model_summary = pd.DataFrame(
-                {"Evaluation parameter": evaluation_parameters, "Validation sample": [auc_score, prec, rec, f1], }
+                {
+                    "Evaluation parameter": evaluation_parameters,
+                    "Validation sample": [auc_score, prec, rec, f1],
+                }
             )
         elif self.task == "reg":
             # filling for html
@@ -1043,7 +1059,10 @@ class SparkReportDeco:
             self._plot_pdp(
                 test_data,
                 feature_name,
-                path=os.path.join(self.output_path, interpretaton_subsection["feature_interpretation_plot"],),
+                path=os.path.join(
+                    self.output_path,
+                    interpretaton_subsection["feature_interpretation_plot"],
+                ),
             )
             env = Environment(loader=FileSystemLoader(searchpath=self.template_path))
             interpretation_subsection = env.get_template(self._interpretation_subsection_path).render(
@@ -1182,7 +1201,6 @@ class SparkReportDeco:
         return sf.max(column).alias(f"max_{column_name}")
 
     def _describe_roles(self, train_data):
-
         # detect feature roles
         roles = self._model.reader._roles
         numerical_features = [feat_name for feat_name in roles if roles[feat_name].name == "Numeric"]
@@ -1352,12 +1370,16 @@ class SparkReportDeco:
         model_summary = None
         if self._model_summary is not None:
             model_summary = self._model_summary.to_html(
-                index=self.task == "multiclass", justify="left", float_format="{:.4f}".format,
+                index=self.task == "multiclass",
+                justify="left",
+                float_format="{:.4f}".format,
             )
 
         env = Environment(loader=FileSystemLoader(searchpath=self.template_path))
         model_section = env.get_template(self._model_section_path).render(
-            model_name=self._model_name, model_parameters=self._model_parameters, model_summary=model_summary,
+            model_name=self._model_name,
+            model_parameters=self._model_parameters,
+            model_summary=model_summary,
         )
         self._sections["model"] = model_section
 

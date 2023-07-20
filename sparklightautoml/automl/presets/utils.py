@@ -81,7 +81,6 @@ def calc_one_feat_imp(
     silent: bool,
     seed: int = 42,
 ):
-
     field: StructField = data.schema[feat]
 
     @pandas_udf(returnType=field.dataType)

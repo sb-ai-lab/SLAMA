@@ -196,7 +196,6 @@ class LAMLStringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, Jav
         freqLabel=False,
         nanLast=False
     ):
-
         """
         setParams(self, \\*, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
                   handleInvalid="error", stringOrderType="frequencyDesc")

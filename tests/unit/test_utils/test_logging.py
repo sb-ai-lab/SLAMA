@@ -17,7 +17,13 @@ from lightautoml.automl.presets.tabular_presets import TabularAutoML
     indirect=["sampled_app_train_test"],
 )
 def test_logging(
-    capsys, tmpdir, sampled_app_train_test, sampled_app_roles, binary_task, verbose, log_file,
+    capsys,
+    tmpdir,
+    sampled_app_train_test,
+    sampled_app_roles,
+    binary_task,
+    verbose,
+    log_file,
 ):
     train, _ = sampled_app_train_test
 
@@ -31,7 +37,10 @@ def test_logging(
     )
 
     automl.fit_predict(
-        train, roles=sampled_app_roles, verbose=verbose, log_file=log_file,
+        train,
+        roles=sampled_app_roles,
+        verbose=verbose,
+        log_file=log_file,
     )
 
     sys_out, sys_err = capsys.readouterr()

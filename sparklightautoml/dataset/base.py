@@ -72,7 +72,7 @@ DepIdentifable = Union[str, "SparkDataset"]
 
 class PersistenceLevel(Enum):
     """
-        Used for signaling types of persistence points encountered during AutoML process.
+    Used for signaling types of persistence points encountered during AutoML process.
     """
 
     READER = 0
@@ -82,8 +82,8 @@ class PersistenceLevel(Enum):
 
 class Unpersistable(ABC):
     """
-        Interface to provide for external entities to unpersist dataframes and files stored
-        by the entity that implements this interface
+    Interface to provide for external entities to unpersist dataframes and files stored
+    by the entity that implements this interface
     """
 
     def unpersist(self):
@@ -338,11 +338,11 @@ class SparkDataset(LAMLDataset, Unpersistable):
     @features.setter
     def features(self, val: List[str]):
         """
-            Set features available in this dataset.
-            Columns won't be deleted from the dataframe but won't appear throught features property.
+        Set features available in this dataset.
+        Columns won't be deleted from the dataframe but won't appear throught features property.
 
-            Args:
-                val: list of feature names.
+        Args:
+            val: list of feature names.
         """
         diff = set(val).difference(self.data.columns)
         assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
@@ -733,7 +733,7 @@ class PersistableDataFrame:
 
 class PersistenceManager(ABC):
     """
-        Base interface of an entity responsible for caching and storing intermediate results somewhere.
+    Base interface of an entity responsible for caching and storing intermediate results somewhere.
     """
 
     @staticmethod

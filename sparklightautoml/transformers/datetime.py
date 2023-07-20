@@ -182,7 +182,6 @@ class SparkBaseDiffTransformer(
         self.set(self.basicInterval, self.basic_interval)
 
     def _transform(self, df: SparkDataFrame) -> SparkDataFrame:
-
         new_cols = [
             (
                 (sf.to_timestamp(sf.col(dif)).cast("long") - sf.to_timestamp(sf.col(base)).cast("long"))

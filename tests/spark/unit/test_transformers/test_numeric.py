@@ -52,7 +52,6 @@ DATASETS = [
 
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_fill_inf(spark: SparkSession, dataset: DatasetForTest):
-
     ds = PandasDataset(dataset.dataset, roles=dataset.roles)
 
     compare_sparkml_by_content(

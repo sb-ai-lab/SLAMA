@@ -17,7 +17,7 @@ from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 
-logging.config.dictConfig(logging_config(log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,11 @@ if __name__ == "__main__":
     persistence_manager = get_persistence_manager()
 
     ml_alg_kwargs = {
-        'auto_unique_co': 10,
-        'max_intersection_depth': 3,
-        'multiclass_te_co': 3,
-        'output_categories': True,
-        'top_intersections': 4
+        "auto_unique_co": 10,
+        "max_intersection_depth": 3,
+        "multiclass_te_co": 3,
+        "output_categories": True,
+        "top_intersections": 4,
     }
 
     with log_exec_time():
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         test_score = score(test_preds_ds[:, spark_ml_algo.prediction_feature])
         logger.info(f"Test score (before saving the intermediate dataset): {test_score}")
 
-        test_sds.save("/tmp/test_sds.dataset", save_mode='overwrite')
+        test_sds.save("/tmp/test_sds.dataset", save_mode="overwrite")
         test_sds_2 = SparkDataset.load("/tmp/test_sds.dataset")
 
         test_preds_ds_2 = spark_ml_algo.predict(test_sds_2)

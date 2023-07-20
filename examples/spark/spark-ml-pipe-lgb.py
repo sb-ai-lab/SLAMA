@@ -27,7 +27,7 @@ from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,7 @@ if __name__ == "__main__":
     spark = get_spark_session(bucket_nums)
 
     persistence_manager = CompositePlainCachePersistenceManager(
-        bucketed_datasets_folder='/tmp',
-        bucket_nums=bucket_nums
+        bucketed_datasets_folder="/tmp", bucket_nums=bucket_nums
     )
 
     seed = 42
@@ -50,11 +49,11 @@ if __name__ == "__main__":
     dataset = get_dataset(dataset_name)
 
     ml_alg_kwargs = {
-        'auto_unique_co': 10,
-        'max_intersection_depth': 3,
-        'multiclass_te_co': 3,
-        'output_categories': True,
-        'top_intersections': 4
+        "auto_unique_co": 10,
+        "max_intersection_depth": 3,
+        "multiclass_te_co": 3,
+        "output_categories": True,
+        "top_intersections": 4,
     }
 
     with log_exec_time():
@@ -66,11 +65,13 @@ if __name__ == "__main__":
         spark_ml_algo = SparkBoostLGBM(freeze_defaults=False)
         spark_features_pipeline = SparkLGBAdvancedPipeline(**ml_alg_kwargs)
         spark_selector = SparkSelectionPipelineWrapper(
-            BugFixSelectionPipelineWrapper(ImportanceCutoffSelector(
-                feature_pipeline=SparkLGBSimpleFeatures(),
-                ml_algo=SparkBoostLGBM(freeze_defaults=False),
-                imp_estimator=ModelBasedImportanceEstimator()
-            ))
+            BugFixSelectionPipelineWrapper(
+                ImportanceCutoffSelector(
+                    feature_pipeline=SparkLGBSimpleFeatures(),
+                    ml_algo=SparkBoostLGBM(freeze_defaults=False),
+                    imp_estimator=ModelBasedImportanceEstimator(),
+                )
+            )
         )
 
         sdataset = sreader.fit_read(train_df, roles=dataset.roles, persistence_manager=persistence_manager)
@@ -81,7 +82,7 @@ if __name__ == "__main__":
             ml_algos=[spark_ml_algo],
             pre_selection=spark_selector,
             features_pipeline=spark_features_pipeline,
-            post_selection=None
+            post_selection=None,
         )
 
         oof_preds_ds = ml_pipe.fit_predict(iterator).persist()
@@ -99,8 +100,8 @@ if __name__ == "__main__":
         test_pred_df = transformer.transform(test_df)
         test_pred_df = test_pred_df.select(
             SparkDataset.ID_COLUMN,
-            sf.col(dataset.roles['target']).alias('target'),
-            sf.col(spark_ml_algo.prediction_feature).alias('prediction')
+            sf.col(dataset.roles["target"]).alias("target"),
+            sf.col(spark_ml_algo.prediction_feature).alias("prediction"),
         )
         test_score = score(test_pred_df)
         logger.info(f"Test score (#2 way): {test_score}")
@@ -112,8 +113,8 @@ if __name__ == "__main__":
         test_pred_df = pipeline_model.transform(test_df)
         test_pred_df = test_pred_df.select(
             SparkDataset.ID_COLUMN,
-            sf.col(dataset.roles['target']).alias('target'),
-            sf.col(spark_ml_algo.prediction_feature).alias('prediction')
+            sf.col(dataset.roles["target"]).alias("target"),
+            sf.col(spark_ml_algo.prediction_feature).alias("prediction"),
         )
         test_score = score(test_pred_df)
         logger.info(f"Test score (#3 way): {test_score}")

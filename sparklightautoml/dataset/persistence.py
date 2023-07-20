@@ -30,8 +30,8 @@ class _PersistablePair:
 
 class BasePersistenceManager(PersistenceManager):
     """
-        Abstract implementation of base persistence functionality, including registering and de-registering
-        what have been requested to persist/un-persist
+    Abstract implementation of base persistence functionality, including registering and de-registering
+    what have been requested to persist/un-persist
     """
 
     def __init__(self, parent: Optional["PersistenceManager"] = None):
@@ -168,7 +168,7 @@ class BasePersistenceManager(PersistenceManager):
 
 class PlainCachePersistenceManager(BasePersistenceManager):
     """
-        Manager that uses Spark .cache() / .persist() methods
+    Manager that uses Spark .cache() / .persist() methods
     """
 
     def __init__(self, parent: Optional["PersistenceManager"] = None, prune_history: bool = False):
@@ -204,7 +204,7 @@ class PlainCachePersistenceManager(BasePersistenceManager):
 
 class LocalCheckpointPersistenceManager(BasePersistenceManager):
     """
-        Manager that uses Spark .localCheckpoint() method
+    Manager that uses Spark .localCheckpoint() method
     """
 
     def __init__(self, parent: Optional["PersistenceManager"] = None):
@@ -237,8 +237,8 @@ class LocalCheckpointPersistenceManager(BasePersistenceManager):
 
 class BucketedPersistenceManager(BasePersistenceManager):
     """
-        Manager that uses Spark Warehouse folder to store bucketed datasets (.bucketBy ... .sortBy ... .saveAsTable)
-        To make such storing reliable, one should set 'spark.sql.warehouse.dir' to HDFS or other reliable storage.
+    Manager that uses Spark Warehouse folder to store bucketed datasets (.bucketBy ... .sortBy ... .saveAsTable)
+    To make such storing reliable, one should set 'spark.sql.warehouse.dir' to HDFS or other reliable storage.
     """
 
     def __init__(
@@ -317,11 +317,11 @@ class BucketedPersistenceManager(BasePersistenceManager):
 
 class CompositePersistenceManager(BasePersistenceManager):
     """
-        Universal composite manager that can combine other manager to apply different
-        storing strategies on different levels.
+    Universal composite manager that can combine other manager to apply different
+    storing strategies on different levels.
 
-        For BucketedPersistenceManager all unpersisting operations are delayed until the end of automl processing,
-        due to possible loss of source for downstream persistence manager if they don't use external storage and files.
+    For BucketedPersistenceManager all unpersisting operations are delayed until the end of automl processing,
+    due to possible loss of source for downstream persistence manager if they don't use external storage and files.
     """
 
     def __init__(
@@ -374,7 +374,7 @@ class CompositePersistenceManager(BasePersistenceManager):
 
 class CompositePlainCachePersistenceManager(CompositePersistenceManager):
     """
-        Combines PlainCache on READER and REGULAR levels with bucketing on CHECKPOINT level.
+    Combines PlainCache on READER and REGULAR levels with bucketing on CHECKPOINT level.
     """
 
     def __init__(self, bucketed_datasets_folder: str, bucket_nums: int):

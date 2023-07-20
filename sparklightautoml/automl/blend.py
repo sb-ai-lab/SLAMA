@@ -257,7 +257,10 @@ class SparkWeightedBlender(SparkBlender, WeightedBlender):
     """
 
     def __init__(
-        self, max_iters: int = 5, max_inner_iters: int = 7, max_nonzero_coef: float = 0.05,
+        self,
+        max_iters: int = 5,
+        max_inner_iters: int = 7,
+        max_nonzero_coef: float = 0.05,
     ):
         SparkBlender.__init__(self)
         WeightedBlender.__init__(self, max_iters, max_inner_iters, max_nonzero_coef)
@@ -305,7 +308,6 @@ class SparkWeightedBlender(SparkBlender, WeightedBlender):
     def _fit_predict(
         self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]
     ) -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
-
         self._predictions_dataset = predictions
 
         sm = self.split_models(predictions, pipes)
@@ -339,7 +341,6 @@ class SparkMeanBlender(SparkBlender):
     def _fit_predict(
         self, predictions: SparkDataset, pipes: Sequence[SparkMLPipeline]
     ) -> Tuple[SparkDataset, Sequence[SparkMLPipeline]]:
-
         pred_cols = [pred_col for pred_col, _, _ in self.split_models(predictions, pipes)]
 
         avr = AveragingTransformer(

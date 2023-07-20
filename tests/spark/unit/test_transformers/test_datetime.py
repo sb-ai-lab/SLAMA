@@ -68,14 +68,24 @@ DATASETS = [
     DatasetForTest(
         df=pd.DataFrame(
             data={
-                "night": ["2000-06-05 00:00:00", "2020-01-01 00:00:00", "2025-05-01 00:00:00", "2100-08-01 00:00:00", ],
+                "night": [
+                    "2000-06-05 00:00:00",
+                    "2020-01-01 00:00:00",
+                    "2025-05-01 00:00:00",
+                    "2100-08-01 00:00:00",
+                ],
                 "morning": [
                     "2000-03-01 06:05:00",
                     "2017-02-01 06:05:00",
                     "2020-04-01 06:05:00",
                     "2100-11-01 06:05:00",
                 ],
-                "day": ["2017-05-01 12:00:30", "2020-02-01 12:00:30", "2025-01-01 12:00:30", "2100-01-01 12:00:30", ],
+                "day": [
+                    "2017-05-01 12:00:30",
+                    "2020-02-01 12:00:30",
+                    "2025-01-01 12:00:30",
+                    "2100-01-01 12:00:30",
+                ],
                 "evening": [
                     "2000-01-01 20:00:00",
                     "2020-01-01 20:00:00",
@@ -94,7 +104,6 @@ DATASETS = [
 # noinspection PyShadowingNames
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_time_to_num(spark: SparkSession, dataset: DatasetForTest):
-
     ds = PandasDataset(dataset.dataset, roles=dataset.roles, task=Task("binary"))
 
     compare_sparkml_by_content(
@@ -105,7 +114,6 @@ def test_time_to_num(spark: SparkSession, dataset: DatasetForTest):
 # noinspection PyShadowingNames
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_base_diff(spark: SparkSession, dataset: DatasetForTest):
-
     columns: List[str] = dataset.dataset.columns
     middle = int(len(columns) / 2)
     base_names = columns[:middle]

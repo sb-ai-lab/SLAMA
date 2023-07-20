@@ -39,7 +39,7 @@ from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -68,8 +68,8 @@ if __name__ == "__main__":
 
     # Fix dates and convert to date type
     logger.info("Fix dates and convert to date type")
-    data["BIRTH_DATE"] = (
-        (np.datetime64("2018-01-01") + data["DAYS_BIRTH"].astype(np.dtype("timedelta64[D]"))).astype(str)
+    data["BIRTH_DATE"] = (np.datetime64("2018-01-01") + data["DAYS_BIRTH"].astype(np.dtype("timedelta64[D]"))).astype(
+        str
     )
     data["EMP_DATE"] = (
         np.datetime64("2018-01-01") + np.clip(data["DAYS_EMPLOYED"], None, 0).astype(np.dtype("timedelta64[D]"))
@@ -85,14 +85,10 @@ if __name__ == "__main__":
     logger.info(data.head())
 
     dataset_sdf = spark.createDataFrame(data)
+    dataset_sdf = dataset_sdf.select("*", sf.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN)).cache()
+    dataset_sdf.write.mode("overwrite").format("noop").save()
     dataset_sdf = dataset_sdf.select(
-        '*',
-        sf.monotonically_increasing_id().alias(SparkDataset.ID_COLUMN)
-    ).cache()
-    dataset_sdf.write.mode('overwrite').format('noop').save()
-    dataset_sdf = dataset_sdf.select(
-        sf.col("__fold__").cast("int").alias("__fold__"),
-        *[c for c in dataset_sdf.columns if c != "__fold__"]
+        sf.col("__fold__").cast("int").alias("__fold__"), *[c for c in dataset_sdf.columns if c != "__fold__"]
     )
 
     # # Set roles for columns

@@ -664,7 +664,10 @@ all_datastes = {
         "task_type": "reg",
         "metric_name": "mse",
         "target_col": "price",
-        "roles": {"target": "price", "drop": ["Unnamed: 0", "_c0"], },
+        "roles": {
+            "target": "price",
+            "drop": ["Unnamed: 0", "_c0"],
+        },
         "dtype": {
             "fleet": "str",
             "frame_damaged": "str",
@@ -793,7 +796,6 @@ all_datastes = {
 
 
 def datasets() -> Dict[str, Any]:
-
     return all_datastes
 
 

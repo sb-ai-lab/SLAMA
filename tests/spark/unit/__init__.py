@@ -384,16 +384,16 @@ def compare_sparkml_by_content(
     rtol: float = 1.0e-5,
 ) -> Transformer:
     """
-        Args:
-            spark: session to be used for calculating the example
-            ds: a dataset to be transformered by LAMA and Spark transformers
-            t_lama: LAMA's version of the transformer
-            t_spark: spark's version of the transformer
-            rtol: tolerance level when comparing by content
+    Args:
+        spark: session to be used for calculating the example
+        ds: a dataset to be transformered by LAMA and Spark transformers
+        t_lama: LAMA's version of the transformer
+        t_spark: spark's version of the transformer
+        rtol: tolerance level when comparing by content
 
-        Returns:
-            A tuple of (LAMA transformed dataset, Spark transformed dataset)
-        """
+    Returns:
+        A tuple of (LAMA transformed dataset, Spark transformed dataset)
+    """
     return compare_sparkml_transformers_results(spark, ds, t_lama, t_spark, rtol=rtol)
 
 
@@ -405,17 +405,17 @@ def compare_sparkml_by_metadata(
     compare_feature_distributions: bool = False,
 ) -> Transformer:
     """
-        Args:
-            spark: session to be used for calculating the example
-            ds: a dataset to be transformered by LAMA and Spark transformers
-            t_lama: LAMA's version of the transformer
-            t_spark: spark's version of the transformer
-            compare_feature_distributions: whatever or not
-            to compare statistics of individual features between spark and lama
+    Args:
+        spark: session to be used for calculating the example
+        ds: a dataset to be transformered by LAMA and Spark transformers
+        t_lama: LAMA's version of the transformer
+        t_spark: spark's version of the transformer
+        compare_feature_distributions: whatever or not
+        to compare statistics of individual features between spark and lama
 
-        Returns:
-            A tuple of (LAMA transformed dataset, Spark transformed dataset)
-        """
+    Returns:
+        A tuple of (LAMA transformed dataset, Spark transformed dataset)
+    """
     return compare_sparkml_transformers_results(
         spark, ds, t_lama, t_spark, compare_feature_distributions=compare_feature_distributions, compare_content=False
     )
@@ -507,15 +507,15 @@ def compare_by_content(
     spark: SparkSession, ds: PandasDataset, t_lama: LAMLTransformer, t_spark: ObsoleteSparkTransformer
 ) -> Tuple[NumpyDataset, NumpyDataset]:
     """
-        Args:
-            spark: session to be used for calculating the example
-            ds: a dataset to be transformered by LAMA and Spark transformers
-            t_lama: LAMA's version of the transformer
-            t_spark: spark's version of the transformer
+    Args:
+        spark: session to be used for calculating the example
+        ds: a dataset to be transformered by LAMA and Spark transformers
+        t_lama: LAMA's version of the transformer
+        t_spark: spark's version of the transformer
 
-        Returns:
-            A tuple of (LAMA transformed dataset, Spark transformed dataset)
-        """
+    Returns:
+        A tuple of (LAMA transformed dataset, Spark transformed dataset)
+    """
     return compare_transformers_results(spark, ds, t_lama, t_spark, compare_metadata_only=False)
 
 
@@ -524,17 +524,17 @@ def compare_by_metadata(
 ) -> Tuple[NumpyDataset, NumpyDataset]:
     """
 
-        Args:
-            spark: session to be used for calculating the example
-            ds: a dataset to be transformered by LAMA and Spark transformers
-            t_lama: LAMA's version of the transformer
-            t_spark: spark's version of the transformer
+    Args:
+        spark: session to be used for calculating the example
+        ds: a dataset to be transformered by LAMA and Spark transformers
+        t_lama: LAMA's version of the transformer
+        t_spark: spark's version of the transformer
 
-        Returns:
-            A tuple of (LAMA transformed dataset, Spark transformed dataset)
+    Returns:
+        A tuple of (LAMA transformed dataset, Spark transformed dataset)
 
-        NOTE: Content of the datasets WON'T be checked for equality.
-        This function should be used only to compare stochastic-based transformers
+    NOTE: Content of the datasets WON'T be checked for equality.
+    This function should be used only to compare stochastic-based transformers
     """
     return compare_transformers_results(spark, ds, t_lama, t_spark, compare_metadata_only=True)
 
@@ -559,7 +559,6 @@ class DatasetForTest:
         roles: Optional[Dict] = None,
         default_role: Optional[ColumnRole] = None,
     ):
-
         if path is not None:
             self.dataset = pd.read_csv(path)
         else:

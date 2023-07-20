@@ -142,7 +142,11 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
 
         """
         optimization_search_space = dict()
-        optimization_search_space["regParam"] = SearchSpace(Distribution.UNIFORM, low=1e-5, high=100000,)
+        optimization_search_space["regParam"] = SearchSpace(
+            Distribution.UNIFORM,
+            low=1e-5,
+            high=100000,
+        )
 
         return optimization_search_space
 
@@ -316,7 +320,8 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         non_cat_feats = [feat for feat, role in train_valid_iterator.train.roles.items() if role.name != "Category"]
 
         self._assembler = VectorAssembler(
-            inputCols=non_cat_feats + cat_feats, outputCol=f"{self._name}_vassembler_features",
+            inputCols=non_cat_feats + cat_feats,
+            outputCol=f"{self._name}_vassembler_features",
         )
 
         result = super().fit_predict(train_valid_iterator)

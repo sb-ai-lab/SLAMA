@@ -11,7 +11,7 @@ from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
 
 
-logging.config.dictConfig(logging_config(log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -37,17 +37,14 @@ if __name__ == "__main__":
         automl = SparkTabularAutoML(
             spark=spark,
             task=task,
-            lgb_params={'use_single_dataset_mode': True},
+            lgb_params={"use_single_dataset_mode": True},
             linear_l2_params={"default_params": {"regParam": [1]}},
             general_params={"use_algos": use_algos},
             reader_params={"cv": cv, "advanced_roles": False},
-            tuning_params={'fit_on_holdout': True, 'max_tuning_iter': 50, 'max_tuning_time': 3600}
+            tuning_params={"fit_on_holdout": True, "max_tuning_iter": 50, "max_tuning_time": 3600},
         )
 
-        oof_predictions = automl.fit_predict(
-            train_data,
-            roles=dataset.roles
-        ).persist()
+        oof_predictions = automl.fit_predict(train_data, roles=dataset.roles).persist()
 
     logger.info("Predicting on out of fold")
 

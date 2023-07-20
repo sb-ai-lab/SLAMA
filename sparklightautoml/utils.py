@@ -108,7 +108,6 @@ def spark_session(
 
 @contextmanager
 def log_exec_time(name: Optional[str] = None, write_log=True):
-
     # Add file handler for INFO
     if write_log:
         file_handler_info = logging.FileHandler(f"/tmp/{name}_log.log.log", mode="a")
@@ -180,9 +179,21 @@ def logging_config(level: int = logging.INFO, log_filename: str = "/var/log/lama
             },
         },
         "loggers": {
-            "lightautoml": {"handlers": ["console", "file"], "propagate": True, "level": level, },
-            "sparklightautoml": {"handlers": ["console", "file"], "level": level, "propagate": False, },
-            "lightautoml.ml_algo": {"handlers": ["console", "file"], "level": level, "propagate": False, },
+            "lightautoml": {
+                "handlers": ["console", "file"],
+                "propagate": True,
+                "level": level,
+            },
+            "sparklightautoml": {
+                "handlers": ["console", "file"],
+                "level": level,
+                "propagate": False,
+            },
+            "lightautoml.ml_algo": {
+                "handlers": ["console", "file"],
+                "level": level,
+                "propagate": False,
+            },
         },
     }
 

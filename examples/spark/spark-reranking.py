@@ -14,7 +14,7 @@ from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
 
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -45,11 +45,11 @@ def main(spark: SparkSession, seed: int):
     use_algos = [["lgb"]]
     cv = 3
     dataset = Dataset(
-        path='/opt/experiments/test_exp/full_second_level_train.parquet',
-        task_type='binary',
+        path="/opt/experiments/test_exp/full_second_level_train.parquet",
+        task_type="binary",
         roles={"target": "target"},
-        file_format='parquet',
-        file_format_options={}
+        file_format="parquet",
+        file_format_options={},
     )
 
     persistence_manager = get_persistence_manager()
@@ -65,20 +65,12 @@ def main(spark: SparkSession, seed: int):
             spark=spark,
             task=task,
             general_params={"use_algos": use_algos},
-            lgb_params={
-                'use_single_dataset_mode': True,
-                'convert_to_onnx': False,
-                'mini_batch_size': 1000
-            },
-            linear_l2_params={'default_params': {'regParam': [1e-5]}},
-            reader_params={"cv": cv, "advanced_roles": False}
+            lgb_params={"use_single_dataset_mode": True, "convert_to_onnx": False, "mini_batch_size": 1000},
+            linear_l2_params={"default_params": {"regParam": [1e-5]}},
+            reader_params={"cv": cv, "advanced_roles": False},
         )
 
-        oof_predictions = automl.fit_predict(
-            train_data,
-            roles=dataset.roles,
-            persistence_manager=persistence_manager
-        )
+        oof_predictions = automl.fit_predict(train_data, roles=dataset.roles, persistence_manager=persistence_manager)
 
     logger.info("Predicting on out of fold")
 

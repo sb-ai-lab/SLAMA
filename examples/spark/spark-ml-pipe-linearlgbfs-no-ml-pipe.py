@@ -15,7 +15,7 @@ from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
 
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,11 @@ if __name__ == "__main__":
     dataset = get_dataset(dataset_name)
 
     ml_alg_kwargs = {
-        'auto_unique_co': 10,
-        'max_intersection_depth': 3,
-        'multiclass_te_co': 3,
-        'output_categories': True,
-        'top_intersections': 4
+        "auto_unique_co": 10,
+        "max_intersection_depth": 3,
+        "multiclass_te_co": 3,
+        "output_categories": True,
+        "top_intersections": 4,
     }
 
     with log_exec_time():
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         sreader = SparkToSparkReader(task=task, cv=cv, advanced_roles=False)
 
         spark_features_pipeline = SparkLinearFeatures(**ml_alg_kwargs)
-        spark_ml_algo = SparkLinearLBFGS(default_params={'regParam': [1e-5]})
+        spark_ml_algo = SparkLinearLBFGS(default_params={"regParam": [1e-5]})
 
         sdataset = sreader.fit_read(train_df, roles=dataset.roles, persistence_manager=persistence_manager)
         sdataset = spark_features_pipeline.fit_transform(sdataset)

@@ -86,5 +86,6 @@ def test_invalid_distributions():
 
     with pytest.raises(ValueError):
         params_tuner.fit(
-            ml_algo=model, train_valid_iterator=iterator_mock,
+            ml_algo=model,
+            train_valid_iterator=iterator_mock,
         )

@@ -201,7 +201,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             self.nested_cv_params["cv"] = 1
 
     def get_time_score(self, n_level: int, model_type: str, nested: Optional[bool] = None):
-
         if nested is None:
             nested = self.general_params["nested_cv"]
 
@@ -288,7 +287,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     def get_linear(
         self, n_level: int = 1, pre_selector: Optional[SparkSelectionPipelineWrapper] = None
     ) -> SparkNestedTabularMLPipeline:
-
         # linear model with l2
         time_score = self.get_time_score(n_level, "linear_l2")
         linear_l2_timer = self.timer.get_task_timer("reg_l2", time_score)
@@ -312,9 +310,11 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         return linear_l2_pipe
 
     def get_gbms(
-        self, keys: Sequence[str], n_level: int = 1, pre_selector: Optional[SparkSelectionPipelineWrapper] = None,
+        self,
+        keys: Sequence[str],
+        n_level: int = 1,
+        pre_selector: Optional[SparkSelectionPipelineWrapper] = None,
     ):
-
         gbm_feats = SparkLGBAdvancedPipeline(**self.gbm_pipeline_params)
 
         ml_algos = []
@@ -552,7 +552,13 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         read_csv_params = self._get_read_csv_params()
         data = self._read_data(data, features_names, read_csv_params)
         used_feats = self.collect_used_feats()
-        fi = calc_feats_permutation_imps(self, used_feats, data, self.task.get_dataset_metric(), silent=silent,)
+        fi = calc_feats_permutation_imps(
+            self,
+            used_feats,
+            data,
+            self.task.get_dataset_metric(),
+            silent=silent,
+        )
         return fi
 
     @staticmethod
@@ -673,7 +679,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                 preds = np.squeeze(preds, axis=1)
             ys.append(preds)
         if len(feature_cnt) > n_top_cats:
-
             # unique other categories
             unique_other_categories = [row[feature_name] for row in feature_cnt[n_top_cats:]]
 
@@ -868,5 +873,13 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         else:
             test_data = test_data.select(feature_name).toPandas()
         plot_pdp_with_distribution(
-            test_data, grid, ys, counts, self.reader, feature_name, individual, top_n_classes, datetime_level,
+            test_data,
+            grid,
+            ys,
+            counts,
+            self.reader,
+            feature_name,
+            individual,
+            top_n_classes,
+            datetime_level,
         )

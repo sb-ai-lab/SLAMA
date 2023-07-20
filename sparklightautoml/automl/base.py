@@ -536,7 +536,6 @@ class SparkAutoML(TransformerInputOutputRoles):
     def _parallel_level(
         self, level: Sequence[SparkMLPipeline], train_valid_iterator: SparkBaseTrainValidIterator
     ) -> Tuple[List[SparkMLPipeline], List[SparkDataset], bool]:
-
         fit_tasks = [functools.partial(_do_fit, ml_pipe, copy(train_valid_iterator)) for k, ml_pipe in enumerate(level)]
 
         results = self._computations_manager.compute(fit_tasks)

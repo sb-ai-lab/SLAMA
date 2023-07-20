@@ -60,7 +60,6 @@ class SparkNaNFlagsEstimator(SparkBaseEstimator):
         # self._features: Optional[List[str]] = None
 
     def _fit(self, sdf: SparkDataFrame) -> "Transformer":
-
         row = sdf.select([sf.mean(sf.isnan(c).astype(FloatType())).alias(c) for c in self.getInputCols()]).first()
 
         self._nan_cols = [
@@ -104,7 +103,6 @@ class SparkNaNFlagsTransformer(SparkBaseTransformer, CommonPickleMLWritable, Com
     #     self._nan_cols = nan_cols
 
     def _transform(self, sdf: SparkDataFrame) -> SparkDataFrame:
-
         new_cols = [
             sf.isnan(in_c).astype(FloatType()).alias(out_c)
             for in_c, out_c in zip(self.getInputCols(), self.getOutputCols())

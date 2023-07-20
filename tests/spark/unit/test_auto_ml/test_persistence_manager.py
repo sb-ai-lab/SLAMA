@@ -84,9 +84,9 @@ def test_bucketed_persistence_manager(spark: SparkSession):
 )
 def test_bucketed_persistence_manager_with_hdfs(spark_hdfs: SparkSession):
     """
-        This test requires configured access to HDFS
-        which may not be available for every enviroment
-        env var 'DO_HDFS_BASED_TESTS' signals that the environment is propely configured and is ready to run this test
-        otherwise we skip it
+    This test requires configured access to HDFS
+    which may not be available for every enviroment
+    env var 'DO_HDFS_BASED_TESTS' signals that the environment is propely configured and is ready to run this test
+    otherwise we skip it
     """
     do_test_bucketed_persistence_manager(spark_hdfs)

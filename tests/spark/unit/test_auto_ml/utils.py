@@ -77,7 +77,6 @@ class DummyReader(SparkToSparkReader):
         persistence_manager: Optional[PersistenceManager] = None,
         **kwargs: Any,
     ) -> SparkDataset:
-
         self.target_col = roles["target"]
         self._roles = {c: NumericRole() for c in train_data.columns if c != self.target_col}
         self._used_features = list(self._roles.keys())
@@ -222,7 +221,12 @@ class DummyTabularAutoML(SparkAutoMLPreset):
         blender = SparkWeightedBlender(max_iters=0, max_inner_iters=1)
 
         self._initialize(
-            reader, levels, skip_conn=True, blender=blender, return_all_predictions=False, timer=self.timer,
+            reader,
+            levels,
+            skip_conn=True,
+            blender=blender,
+            return_all_predictions=False,
+            timer=self.timer,
         )
 
     def get_individual_pdp(

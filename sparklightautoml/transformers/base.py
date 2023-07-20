@@ -257,7 +257,6 @@ class SparkSequentialTransformer:
 
 
 class ObsoleteSparkTransformer(LAMLTransformer):
-
     _features = []
 
     _can_unwind_parents: bool = True
@@ -268,7 +267,6 @@ class ObsoleteSparkTransformer(LAMLTransformer):
         return [f"{self._fname_prefix}__{feat}" for feat in input_cols]
 
     def fit(self, dataset: SparkDataset, use_features: Optional[List[str]] = None) -> "ObsoleteSparkTransformer":
-
         logger.info(f"SparkTransformer of type: {type(self)}")
 
         if use_features:

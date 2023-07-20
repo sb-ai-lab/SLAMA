@@ -39,7 +39,6 @@ class SparkNestedTabularMLPipeline(SparkMLPipeline, LAMANestedTabularMLPipeline)
             new_ml_algos = []
 
             for n, mt_pair in enumerate(ml_algos):
-
                 try:
                     mod, tuner = mt_pair
                 except (TypeError, ValueError):

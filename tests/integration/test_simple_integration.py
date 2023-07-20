@@ -21,7 +21,6 @@ from lightautoml.validation.np_iterators import FoldsIterator
 
 @pytest.mark.integtest
 def test_manual_pipeline(sampled_app_train_test, sampled_app_roles, binary_task):
-
     train, test = sampled_app_train_test
 
     pd_dataset = PandasDataset(train, roles_parser(sampled_app_roles), task=binary_task)
@@ -30,7 +29,14 @@ def test_manual_pipeline(sampled_app_train_test, sampled_app_roles, binary_task)
 
     pipe = LGBSimpleFeatures()
 
-    model0 = BoostLGBM(default_params={"learning_rate": 0.05, "num_leaves": 64, "seed": 0, "num_threads": 5, })
+    model0 = BoostLGBM(
+        default_params={
+            "learning_rate": 0.05,
+            "num_leaves": 64,
+            "seed": 0,
+            "num_threads": 5,
+        }
+    )
 
     mbie = ModelBasedImportanceEstimator()
     selector = ImportanceCutoffSelector(pipe, model0, mbie, cutoff=10)

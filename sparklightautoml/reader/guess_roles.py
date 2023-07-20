@@ -246,7 +246,14 @@ def get_category_roles_stat(
             dtypes.append(role.dtype)
 
     res = pd.DataFrame(
-        columns=["unique", "top_freq_values", "dtype", "encoded_scores", "freq_scores", "ord_scores", ],
+        columns=[
+            "unique",
+            "top_freq_values",
+            "dtype",
+            "encoded_scores",
+            "freq_scores",
+            "ord_scores",
+        ],
         index=roles_to_identify,
     )
 

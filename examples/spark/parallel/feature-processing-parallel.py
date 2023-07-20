@@ -13,7 +13,7 @@ from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import logging_config
 
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 feature_pipelines = {
     "linear": SparkLinearFeatures(),
     "lgb_simple": SparkLGBSimpleFeatures(),
-    "lgb_adv": SparkLGBAdvancedPipeline()
+    "lgb_adv": SparkLGBAdvancedPipeline(),
 }
 
 
@@ -45,8 +45,9 @@ if __name__ == "__main__":
     def build_task(name: str, feature_pipe: SparkFeaturesPipeline):
         def func():
             logger.info(f"Calculating feature pipeline: {name}")
-            feature_pipe.fit_transform(ds).data.write.mode('overwrite').format('noop').save()
+            feature_pipe.fit_transform(ds).data.write.mode("overwrite").format("noop").save()
             logger.info(f"Finished calculating pipeline: {name}")
+
         return func
 
     tasks = [build_task(name, feature_pipe) for name, feature_pipe in feature_pipelines.items()]

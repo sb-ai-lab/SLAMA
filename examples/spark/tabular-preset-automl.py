@@ -22,7 +22,7 @@ from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
 
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -59,22 +59,17 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             general_params={"use_algos": use_algos},
             # execution mode only available for synapseml 0.11.1
             lgb_params={
-                'use_single_dataset_mode': True,
-                'execution_mode': 'streaming',
-                'convert_to_onnx': False,
-                'mini_batch_size': 1000,
-
+                "use_single_dataset_mode": True,
+                "execution_mode": "streaming",
+                "convert_to_onnx": False,
+                "mini_batch_size": 1000,
             },
-            linear_l2_params={'default_params': {'regParam': [1e-5]}},
+            linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False},
-            computation_settings=("parallelism", 3)
+            computation_settings=("parallelism", 3),
         )
 
-        oof_predictions = automl.fit_predict(
-            train_data,
-            roles=dataset.roles,
-            persistence_manager=persistence_manager
-        )
+        oof_predictions = automl.fit_predict(train_data, roles=dataset.roles, persistence_manager=persistence_manager)
 
     logger.info("Predicting on out of fold")
 
@@ -106,13 +101,15 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         check_columns(test_data_dropped, te_pred)
 
-        pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
+        pred_column = next(c for c in te_pred.columns if c.startswith("prediction"))
         score = task.get_dataset_metric()
-        test_metric_value = score(te_pred.select(
-            SparkDataset.ID_COLUMN,
-            sf.col(dataset.roles['target']).alias('target'),
-            sf.col(pred_column).alias('prediction')
-        ))
+        test_metric_value = score(
+            te_pred.select(
+                SparkDataset.ID_COLUMN,
+                sf.col(dataset.roles["target"]).alias("target"),
+                sf.col(pred_column).alias("prediction"),
+            )
+        )
 
         logger.info(f"score for test predictions: {test_metric_value}")
 
@@ -131,13 +128,15 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         check_columns(test_data_dropped, te_pred)
 
-        pred_column = next(c for c in te_pred.columns if c.startswith('prediction'))
+        pred_column = next(c for c in te_pred.columns if c.startswith("prediction"))
         score = task.get_dataset_metric()
-        test_metric_value = score(te_pred.select(
-            SparkDataset.ID_COLUMN,
-            sf.col(dataset.roles['target']).alias('target'),
-            sf.col(pred_column).alias('prediction')
-        ))
+        test_metric_value = score(
+            te_pred.select(
+                SparkDataset.ID_COLUMN,
+                sf.col(dataset.roles["target"]).alias("target"),
+                sf.col(pred_column).alias("prediction"),
+            )
+        )
 
     logger.info(f"score for test predictions via loaded pipeline: {test_metric_value}")
 
@@ -152,7 +151,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
         "train_duration_secs": train_timer.duration,
         "predict_duration_secs": predict_timer.duration,
         "saving_duration_secs": saving_timer.duration,
-        "loading_duration_secs": loading_timer.duration
+        "loading_duration_secs": loading_timer.duration,
     }
 
     print(f"EXP-RESULT: {result}")
@@ -169,7 +168,7 @@ def multirun(spark: SparkSession, dataset_name: str):
 
     df = pd.DataFrame(results)
 
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+    with pd.option_context("display.max_rows", None, "display.max_columns", None):
         print(df)
 
     df.to_csv(f"spark-lama_results_{dataset_name}_{uuid.uuid4()}.csv")

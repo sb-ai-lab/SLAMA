@@ -416,7 +416,10 @@ class SparkTabularDataFeatures:
         return date_as_cat
 
     def get_numeric_data(
-        self, train: SparkDataset, feats_to_select: Optional[List[str]] = None, prob: Optional[bool] = None,
+        self,
+        train: SparkDataset,
+        feats_to_select: Optional[List[str]] = None,
+        prob: Optional[bool] = None,
     ) -> Optional[SparkBaseTransformer]:
         """Select numeric features.
 
@@ -449,7 +452,6 @@ class SparkTabularDataFeatures:
     def get_numeric_vectors_data(
         self, train: SparkDataset, feats_to_select: Optional[List[str]] = None, prob: Optional[bool] = None
     ):
-
         if feats_to_select is None:
             if prob is None:
                 feats_to_select = self._cols_by_role(train, "NumericVectorOrArray")
@@ -700,7 +702,10 @@ class SparkTabularDataFeatures:
         # check for cardinality
         df["cardinality"] = self.get_uniques_cnt(train, cats)
         # sort
-        df = df.sort_values(by=["importance", "cardinality"], ascending=[False, self.ascending_by_cardinality],)
+        df = df.sort_values(
+            by=["importance", "cardinality"],
+            ascending=[False, self.ascending_by_cardinality],
+        )
         # get top n
         top = list(df.index[:top_n])
 

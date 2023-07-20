@@ -34,7 +34,7 @@ from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import logging_config
 
 
-logging.config.dictConfig(logging_config(level=logging.INFO, log_filename='/tmp/slama.log'))
+logging.config.dictConfig(logging_config(level=logging.INFO, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,9 @@ if __name__ == "__main__":
     logger.info("Data loaded")
 
     logger.info("Features modification from user side...")
-    data["BIRTH_DATE"] = \
-        (np.datetime64("2018-01-01") + data["DAYS_BIRTH"].astype(np.dtype("timedelta64[D]"))).astype(str)
+    data["BIRTH_DATE"] = (np.datetime64("2018-01-01") + data["DAYS_BIRTH"].astype(np.dtype("timedelta64[D]"))).astype(
+        str
+    )
     data["EMP_DATE"] = (
         np.datetime64("2018-01-01") + np.clip(data["DAYS_EMPLOYED"], None, 0).astype(np.dtype("timedelta64[D]"))
     ).astype(str)
@@ -78,8 +79,8 @@ if __name__ == "__main__":
 
     train_data_sdf = spark.createDataFrame(train_data).cache()
     test_data_sdf = spark.createDataFrame(test_data).cache()
-    train_data_sdf.write.mode('overwrite').format('noop').save()
-    test_data_sdf.write.mode('overwrite').format('noop').save()
+    train_data_sdf.write.mode("overwrite").format("noop").save()
+    test_data_sdf.write.mode("overwrite").format("noop").save()
 
     logger.info("Create task..")
     task = SparkTask("binary")
@@ -117,12 +118,7 @@ if __name__ == "__main__":
 
     logger.info("\t ParamsTuner1 and Model1...")
     params_tuner1 = OptunaTuner(n_trials=1, timeout=100)
-    model1 = SparkBoostLGBM(
-        default_params={
-            "learningRate": 0.05,
-            "numLeaves": 128
-        }
-    )
+    model1 = SparkBoostLGBM(default_params={"learningRate": 0.05, "numLeaves": 128})
     logger.info("\t Tuner1 and model1 created")
 
     logger.info("\t ParamsTuner2 and Model2...")
@@ -160,12 +156,7 @@ if __name__ == "__main__":
     logger.info("\t Tuner and model created")
 
     logger.info("\t Pipeline2...")
-    pipeline_lvl2 = SparkMLPipeline(
-        ml_algos=[model],
-        pre_selection=None,
-        features_pipeline=pipe1,
-        post_selection=None
-    )
+    pipeline_lvl2 = SparkMLPipeline(ml_algos=[model], pre_selection=None, features_pipeline=pipe1, post_selection=None)
     logger.info("Pipeline2 created")
 
     logger.info("Create AutoML pipeline...")
@@ -175,7 +166,7 @@ if __name__ == "__main__":
             [pipeline_lvl1],
             [pipeline_lvl2],
         ],
-        skip_conn=False
+        skip_conn=False,
     )
 
     logger.info("AutoML pipeline created...")
