@@ -6,7 +6,7 @@ Running spark lama app on Spark YARN
 .. ^^^^^^^^^^^^^^^
 Next, it will be shown how to run the ``examples/spark/tabular-preset-automl.py`` script for execution on local Hadoop YARN.
 
-Local deployment of Hadoop YARN is done using the docker-hadoop project from the https://github.com/big-data-europe/docker-hadoop repository. It consists of the following services: datanode, historyserver, namenode, nodemanager, resourcemanager. The files ``docker-hadoop/nodemanager/Dockerfile``, ``docker-hadoop/docker-compose.yml`` have been modified and a description of the new service ``docker-hadoop/spark-submit`` has been added. Required tools to get started to work with docker-hadoop project: Docker, Docker Compose and GNU Make. 
+Local deployment of Hadoop YARN is done using the docker-hadoop project from the https://github.com/big-data-europe/docker-hadoop repository. It consists of the following services: datanode, historyserver, namenode, nodemanager, resourcemanager. The files ``docker-hadoop/nodemanager/Dockerfile``, ``docker-hadoop/docker-compose.yml`` have been modified and a description of the new service ``docker-hadoop/spark-submit`` has been added. Required tools to get started to work with docker-hadoop project: Docker, Docker Compose and GNU Make.
 
 1. First, let's go to the LightAutoML project directory
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -43,7 +43,7 @@ We copy the lama wheel assembly to the nodemanager Docker file, because later it
 ^^^^^^^^^^^^^^^
 
 ::
-    
+
     nano docker-compose.yml
 
 Edit ``volumes`` setting to mount directory with datasets to ``nodemanager`` service.
@@ -60,7 +60,7 @@ Pay attention to the highlighted settings. They need to be set in accordance wit
 ^^^^^^^^^^^^^^^
 The following command will build the ``nodemanager`` image according to ``docker-hadoop/nodemanager/Dockerfile``. Python 3.9 and the installation of the lama wheel package has been added to this Dockerfile.
 ::
-    
+
     make build-nodemanager-with-python
 
 
@@ -100,7 +100,7 @@ If one of the services did not up, then you need to look at its logs. For exampl
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ::
-    
+
     docker exec -ti spark-submit bash -c "./bin/slamactl.sh submit-job-yarn dist/LightAutoML-0.3.0.tar.gz,examples/spark/examples_utils.py examples/spark/tabular-preset-automl.py"
 
 10. Monitoring application execution
@@ -130,4 +130,3 @@ HDFS Web UI is available at http://localhost:9870.
 Here you can browse your files in HDFS http://localhost:9870/explorer.html. HDFS stores trained pipelines and Spark application files.
 
 .. image:: imgs/hdfs_web_ui.png
-

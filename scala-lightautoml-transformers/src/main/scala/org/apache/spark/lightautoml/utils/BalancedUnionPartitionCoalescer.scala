@@ -52,4 +52,3 @@ class BalancedUnionPartitionCoalescer extends PartitionCoalescer with Serializab
     pgs.toArray
   }
 }
-
