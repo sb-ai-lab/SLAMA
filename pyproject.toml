@@ -49,7 +49,7 @@ onnxmltools = "^1.11.0"
 weasyprint = {version = "52.5", optional = true}
 hdfs = "^2.7.0"
 
-numpy = "^1.23.0"
+numpy = "<1.24.0"
 
 
 [tool.poetry.dev-dependencies]
@@ -125,7 +125,7 @@ PLATFORM =
     ubuntu-latest: linux
 
 [testenv]
-whitelist_externals = poetry
+allowlist_externals = poetry
 commands =
     poetry install
     poetry run pytest tests -v --ignore=tests/spark/unit/test_computations

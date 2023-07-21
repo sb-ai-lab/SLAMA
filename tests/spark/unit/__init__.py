@@ -73,11 +73,9 @@ def create_spark_session(warehouse_path: str, spark_local_dir: str):
 
     spark = (
         SparkSession.builder.appName("LAMA-test-app")
-        # .master("local-cluster[2,2,2048]")
         .master("local[4]")
-        .config("spark.driver.memory", "8g")
+        .config("spark.driver.memory", "2g")
         .config("spark.jars", JAR_PATH)
-        # .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
         .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.11.1")
         .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
         .config("spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
