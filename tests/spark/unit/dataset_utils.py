@@ -1,7 +1,6 @@
 import os
 import pickle
 import shutil
-
 from typing import Any
 from typing import Dict
 from typing import List
@@ -9,15 +8,11 @@ from typing import Optional
 from typing import Tuple
 
 import pyspark.sql.functions as sf
-
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import PersistenceManager
 from sparklightautoml.dataset.base import SparkDataset
-from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
-from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-
 
 DUMP_METADATA_NAME = "metadata.pickle"
 DUMP_DATA_NAME = "data.parquet"
