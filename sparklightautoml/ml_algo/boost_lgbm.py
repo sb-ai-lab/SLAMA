@@ -473,10 +473,13 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         rows_count = full_data.count()
         if (run_params["executionMode"] == "streaming") and (rows_count <= 25_000):
-            warnings.warn(f"The fitting of lightgbm in streaming execution mode "
-                          f"may fail with SEGSIGV / SIGBUS error (probably due to a bug in synapse ml) "
-                          f"if too few data available per core. Train data rows count: {rows_count} "
-                          f"Consider switching to bulk execution mode if such crashes happen", RuntimeWarning)
+            warnings.warn(
+                f"The fitting of lightgbm in streaming execution mode "
+                f"may fail with SEGSIGV / SIGBUS error (probably due to a bug in synapse ml) "
+                f"if too few data available per core. Train data rows count: {rows_count} "
+                f"Consider switching to bulk execution mode if such crashes happen",
+                RuntimeWarning,
+            )
 
         # fitting the model
         ml_model = lgbm.fit(self._assembler.transform(full_data))

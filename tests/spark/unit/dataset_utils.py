@@ -1,6 +1,7 @@
 import os
 import pickle
 import shutil
+
 from typing import Any
 from typing import Dict
 from typing import List
@@ -8,11 +9,13 @@ from typing import Optional
 from typing import Tuple
 
 import pyspark.sql.functions as sf
+
 from pyspark.sql import SparkSession
 
 from sparklightautoml.dataset.base import PersistenceManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.tasks.base import SparkTask
+
 
 DUMP_METADATA_NAME = "metadata.pickle"
 DUMP_DATA_NAME = "data.parquet"
@@ -117,7 +120,6 @@ all_datastes = {
             "franchise_dealer": "str",
         },
     },
-
     "used_cars_dataset_no_cols_limit": {
         "path": "examples/data/small_used_cars_data.csv",
         "task_type": "reg",
@@ -140,7 +142,6 @@ all_datastes = {
             "franchise_dealer": "str",
         },
     },
-
     "lama_test_dataset": {
         "path": "examples/data/sampled_app_train.csv",
         "task_type": "binary",
@@ -148,7 +149,6 @@ all_datastes = {
         "target_col": "TARGET",
         "roles": {"target": "TARGET", "drop": ["SK_ID_CURR"]},
     },
-
     # https://www.openml.org/d/734
     "ailerons_dataset": {
         "path": "examples/data/ailerons.csv",
@@ -157,7 +157,6 @@ all_datastes = {
         "target_col": "binaryClass",
         "roles": {"target": "binaryClass"},
     },
-
     # https://www.openml.org/d/4534
     "phishing_websites_dataset": {
         "path": "examples/data/PhishingWebsites.csv",
@@ -166,7 +165,6 @@ all_datastes = {
         "target_col": "Result",
         "roles": {"target": "Result"},
     },
-
     # https://www.openml.org/d/981
     "kdd_internet_usage": {
         "path": "examples/data/kdd_internet_usage.csv",
@@ -175,7 +173,6 @@ all_datastes = {
         "target_col": "Who_Pays_for_Access_Work",
         "roles": {"target": "Who_Pays_for_Access_Work"},
     },
-
     # https://www.openml.org/d/42821
     "nasa_dataset": {
         "path": "examples/data/nasa_phm2008.csv",
@@ -184,7 +181,6 @@ all_datastes = {
         "target_col": "class",
         "roles": {"target": "class"},
     },
-
     # https://www.openml.org/d/4549
     "buzz_dataset": {
         "path": "examples/data/Buzzinsocialmedia_Twitter_25k.csv",
@@ -193,7 +189,6 @@ all_datastes = {
         "target_col": "Annotation",
         "roles": {"target": "Annotation"},
     },
-
     # https://www.openml.org/d/372
     "internet_usage": {
         "path": "examples/data/internet_usage.csv",
@@ -202,7 +197,6 @@ all_datastes = {
         "target_col": "Actual_Time",
         "roles": {"target": "Actual_Time"},
     },
-
     # https://www.openml.org/d/4538
     "gesture_segmentation": {
         "path": "examples/data/gesture_segmentation.csv",
@@ -211,7 +205,6 @@ all_datastes = {
         "target_col": "Phase",
         "roles": {"target": "Phase"},
     },
-
     # https://www.openml.org/d/382
     "ipums_97": {
         "path": "examples/data/ipums_97.csv",
@@ -219,7 +212,7 @@ all_datastes = {
         "metric_name": "crossentropy",
         "target_col": "movedin",
         "roles": {"target": "movedin"},
-    }
+    },
 }
 
 
