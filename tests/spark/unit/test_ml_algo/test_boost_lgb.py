@@ -31,7 +31,7 @@ spark = spark_sess
 def test_boost_lgb_oof_preds(spark: SparkSession, config: Dict[str, Any], cv: int):
     task_type = cast(str, config["task_type"])
     roles = cast(RolesDict, config["roles"])
-    train_path = cast(str, config["train_path"])
+    train_path = cast(str, config["path"])
 
     task = SparkTask(task_type)
     persistence_manager = PlainCachePersistenceManager()

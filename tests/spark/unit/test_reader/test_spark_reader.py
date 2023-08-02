@@ -95,11 +95,11 @@ def test_spark_reader_advanced_guess_roles(spark: SparkSession, config: Dict[str
     task_type = config["task_type"]
 
     read_csv_args = {"dtype": config["dtype"]} if "dtype" in config else dict()
-    train_pdf = pd.read_csv(config["train_path"], **read_csv_args)
+    train_pdf = pd.read_csv(config["path"], **read_csv_args)
     preader = PandasToPandasReader(task=Task(task_type), cv=cv)
     pdataset = preader.fit_read(train_pdf, roles=config["roles"])
 
-    train_df = spark.read.csv(config["train_path"], header=True, escape='"')
+    train_df = spark.read.csv(config["path"], header=True, escape='"')
     persistence_manager = PlainCachePersistenceManager()
     sreader = SparkToSparkReader(task=SparkTask(task_type), cv=cv)
     sdataset = sreader.fit_read(train_df, roles=config["roles"], persistence_manager=persistence_manager)

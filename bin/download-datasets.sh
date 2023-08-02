@@ -2,7 +2,7 @@
 
 set -ex
 
-dataset_dir="/opt/spark_data/"
+dataset_dir="examples/data"
 
 mkdir -p "${dataset_dir}"
 
@@ -17,5 +17,4 @@ wget https://www.openml.org/data/get_csv/52422/ipums_la_97-small.arff -O ${datas
 
 head -n 25001 ${dataset_dir}/Buzzinsocialmedia_Twitter.csv > ${dataset_dir}/Buzzinsocialmedia_Twitter_25k.csv
 
-cp examples/data/sampled_app_train.csv ${dataset_dir}
-unzip examples/data/small_used_cars_data.zip -d ${dataset_dir}
+unzip ${dataset_dir}/small_used_cars_data.zip -d ${dataset_dir}

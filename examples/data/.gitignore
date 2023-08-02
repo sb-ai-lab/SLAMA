@@ -1,1 +1,3 @@
 small_used_cars_data.csv
+*.csv
+!sampled_app_train.csv
