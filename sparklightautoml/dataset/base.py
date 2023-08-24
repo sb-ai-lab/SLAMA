@@ -5,49 +5,76 @@ import logging
 import os
 import uuid
 import warnings
-from abc import ABC, abstractmethod
+
+from abc import ABC
+from abc import abstractmethod
 from collections import Counter
-from copy import copy, deepcopy
+from copy import copy
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from json import JSONEncoder, JSONDecoder
-from typing import Sequence, Any, Tuple, Union, Optional, List, cast, Dict, Set, Callable
+from json import JSONDecoder
+from json import JSONEncoder
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Set
+from typing import Tuple
+from typing import Union
+from typing import cast
 
 import numpy as np
 import pandas as pd
-from lightautoml.dataset.base import (
-    LAMLDataset,
-    IntIdx,
-    RowSlice,
-    ColSlice,
-    LAMLColumn,
-    RolesDict,
-    valid_array_attributes,
-    array_attr_roles,
-)
-from lightautoml.dataset.np_pd_dataset import PandasDataset, NumpyDataset, NpRoles
-from lightautoml.dataset.roles import ColumnRole, NumericRole, DropRole, DatetimeRole, GroupRole, WeightsRole, \
-    FoldsRole, PathRole, TreatmentRole, DateRole
+
+from lightautoml.dataset.base import ColSlice
+from lightautoml.dataset.base import IntIdx
+from lightautoml.dataset.base import LAMLColumn
+from lightautoml.dataset.base import LAMLDataset
+from lightautoml.dataset.base import RolesDict
+from lightautoml.dataset.base import RowSlice
+from lightautoml.dataset.base import array_attr_roles
+from lightautoml.dataset.base import valid_array_attributes
+from lightautoml.dataset.np_pd_dataset import NpRoles
+from lightautoml.dataset.np_pd_dataset import NumpyDataset
+from lightautoml.dataset.np_pd_dataset import PandasDataset
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import DateRole
+from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import DropRole
+from lightautoml.dataset.roles import FoldsRole
+from lightautoml.dataset.roles import GroupRole
+from lightautoml.dataset.roles import NumericRole
+from lightautoml.dataset.roles import PathRole
+from lightautoml.dataset.roles import TreatmentRole
+from lightautoml.dataset.roles import WeightsRole
 from lightautoml.tasks import Task
 from pyspark.ml.functions import vector_to_array
-from pyspark.sql import functions as sf, Column
+from pyspark.sql import Column
+from pyspark.sql import functions as sf
 from pyspark.sql.session import SparkSession
 
 from sparklightautoml import VALIDATION_COLUMN
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.utils import SparkDataFrame, create_directory, get_current_session
+from sparklightautoml.utils import SparkDataFrame
+from sparklightautoml.utils import create_directory
+from sparklightautoml.utils import get_current_session
+
 
 logger = logging.getLogger(__name__)
 
-Dependency = Union[str, 'SparkDataset', 'Unpersistable', Callable]
-DepIdentifable = Union[str, 'SparkDataset']
+Dependency = Union[str, "SparkDataset", "Unpersistable", Callable]
+DepIdentifable = Union[str, "SparkDataset"]
 
 
 class PersistenceLevel(Enum):
     """
-        Used for signaling types of persistence points encountered during AutoML process.
+    Used for signaling types of persistence points encountered during AutoML process.
     """
+
     READER = 0
     REGULAR = 1
     CHECKPOINT = 2
@@ -55,9 +82,10 @@ class PersistenceLevel(Enum):
 
 class Unpersistable(ABC):
     """
-        Interface to provide for external entities to unpersist dataframes and files stored
-        by the entity that implements this interface
+    Interface to provide for external entities to unpersist dataframes and files stored
+    by the entity that implements this interface
     """
+
     def unpersist(self):
         ...
 
@@ -67,12 +95,12 @@ class SparkDatasetMetadataJsonEncoder(JSONEncoder):
         if isinstance(o, ColumnRole):
             dct = deepcopy(o.__dict__)
             dct["__type__"] = ".".join([type(o).__module__, type(o).__name__])
-            dct['dtype'] = o.dtype.__name__
+            dct["dtype"] = o.dtype.__name__
 
             if isinstance(o, DatetimeRole):
-                dct['date_format'] = dct['format']
-                del dct['format']
-                dct['origin'] = o.origin.timestamp() if isinstance(o.origin, datetime) else o.origin
+                dct["date_format"] = dct["format"]
+                del dct["format"]
+                dct["origin"] = o.origin.timestamp() if isinstance(o.origin, datetime) else o.origin
 
             return dct
 
@@ -85,7 +113,7 @@ class SparkDatasetMetadataJsonEncoder(JSONEncoder):
                 "loss": o.loss_name,
                 "metric": o.metric_name,
                 # convert to python bool from numpy.bool_
-                "greater_is_better": True if o.greater_is_better else False
+                "greater_is_better": True if o.greater_is_better else False,
             }
 
             return dct
@@ -97,6 +125,7 @@ class SparkDatasetMetadataJsonDecoder(JSONDecoder):
     @staticmethod
     def _column_roles_object_hook(json_object):
         from sparklightautoml.tasks.base import SparkTask
+
         if json_object.get("__type__", None) == "SparkTask":
             del json_object["__type__"]
             return SparkTask(**json_object)
@@ -152,12 +181,14 @@ class SparkDataset(LAMLDataset, Unpersistable):
     ID_COLUMN = "_id"
 
     @classmethod
-    def load(cls,
-             path: str,
-             file_format: str = 'parquet',
-             file_format_options: Optional[Dict[str, Any]] = None,
-             persistence_manager: Optional['PersistenceManager'] = None,
-             partitions_num: Optional[int] = None) -> 'SparkDataset':
+    def load(
+        cls,
+        path: str,
+        file_format: str = "parquet",
+        file_format_options: Optional[Dict[str, Any]] = None,
+        persistence_manager: Optional["PersistenceManager"] = None,
+        partitions_num: Optional[int] = None,
+    ) -> "SparkDataset":
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
         file_format_options = file_format_options or dict()
@@ -165,11 +196,13 @@ class SparkDataset(LAMLDataset, Unpersistable):
 
         # reading metadata
         metadata_df = spark.read.format(file_format).options(**file_format_options).load(metadata_file_path)
-        metadata = json.loads(metadata_df.select('metadata').first().asDict()['metadata'], cls=SparkDatasetMetadataJsonDecoder)
+        metadata = json.loads(
+            metadata_df.select("metadata").first().asDict()["metadata"], cls=SparkDatasetMetadataJsonDecoder
+        )
 
         # reading data
         data_df = spark.read.format(file_format).options(**file_format_options).load(file_path)
-        name_fixed_cols = (sf.col(c).alias(c.replace('[', '(').replace(']', ')')) for c in data_df.columns)
+        name_fixed_cols = (sf.col(c).alias(c.replace("[", "(").replace("]", ")")) for c in data_df.columns)
         data_df = data_df.select(*name_fixed_cols)
 
         if partitions_num:
@@ -180,10 +213,10 @@ class SparkDataset(LAMLDataset, Unpersistable):
     # TODO: SLAMA - implement filling dependencies
     @classmethod
     def concatenate(
-            cls,
-            datasets: Sequence["SparkDataset"],
-            name: Optional[str] = None,
-            extra_dependencies: Optional[List[Dependency]] = None
+        cls,
+        datasets: Sequence["SparkDataset"],
+        name: Optional[str] = None,
+        extra_dependencies: Optional[List[Dependency]] = None,
     ) -> "SparkDataset":
         """
         Concat multiple datasets by joining their internal ``pyspark.sql.DataFrame``
@@ -202,41 +235,44 @@ class SparkDataset(LAMLDataset, Unpersistable):
 
         if any(not d.bucketized for d in datasets):
             warnings.warn(
-                f"NOT bucketized datasets are requested to be joined. It may severely affect performance",
-                RuntimeWarning
+                "NOT bucketized datasets are requested to be joined. It may severely affect performance", RuntimeWarning
             )
 
         # we should join datasets only with unique features
         features = [feat for ds in datasets for feat in ds.features]
         feat_counter = Counter(features)
 
-        assert all(count == 1 for el, count in feat_counter.items()), \
-            f"Different datasets being joined contain columns with the same names: {feat_counter}"
+        assert all(
+            count == 1 for el, count in feat_counter.items()
+        ), f"Different datasets being joined contain columns with the same names: {feat_counter}"
 
         roles = {col: role for ds in datasets for col, role in ds.roles.items()}
 
         except_cols = [c for c in datasets[0].service_columns if c != SparkDataset.ID_COLUMN]
         concatenated_sdf = functools.reduce(
-            lambda acc, sdf: acc.join(sdf.drop(*except_cols), on=cls.ID_COLUMN, how='left'),
-            (d.data for d in datasets)
+            lambda acc, sdf: acc.join(sdf.drop(*except_cols), on=cls.ID_COLUMN, how="left"), (d.data for d in datasets)
         )
 
         output = datasets[0].empty()
-        output.set_data(concatenated_sdf, features, roles, dependencies=[*datasets, *(extra_dependencies or [])], name=name)
+        output.set_data(
+            concatenated_sdf, features, roles, dependencies=[*datasets, *(extra_dependencies or [])], name=name
+        )
 
         return output
 
-    def __init__(self,
-                 data: SparkDataFrame,
-                 roles: Optional[RolesDict],
-                 persistence_manager: Optional['PersistenceManager'] = None,
-                 task: Optional[Task] = None,
-                 bucketized: bool = False,
-                 dependencies: Optional[List[Dependency]] = None,
-                 name: Optional[str] = None,
-                 target: Optional[str] = None,
-                 folds: Optional[str] = None,
-                 **kwargs: Any):
+    def __init__(
+        self,
+        data: SparkDataFrame,
+        roles: Optional[RolesDict],
+        persistence_manager: Optional["PersistenceManager"] = None,
+        task: Optional[Task] = None,
+        bucketized: bool = False,
+        dependencies: Optional[List[Dependency]] = None,
+        name: Optional[str] = None,
+        target: Optional[str] = None,
+        folds: Optional[str] = None,
+        **kwargs: Any,
+    ):
         self._validate_dataframe(data)
 
         roles = roles if roles else dict()
@@ -302,11 +338,11 @@ class SparkDataset(LAMLDataset, Unpersistable):
     @features.setter
     def features(self, val: List[str]):
         """
-            Set features available in this dataset.
-            Columns won't be deleted from the dataframe but won't appear throught features property.
+        Set features available in this dataset.
+        Columns won't be deleted from the dataframe but won't appear throught features property.
 
-            Args:
-                val: list of feature names.
+        Args:
+            val: list of feature names.
         """
         diff = set(val).difference(self.data.columns)
         assert len(diff) == 0, f"Not all roles have features in the dataset. Absent features: {diff}."
@@ -377,7 +413,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
         return self.data.select(self.folds_column).distinct().count()
 
     @property
-    def persistence_manager(self) -> 'PersistenceManager':
+    def persistence_manager(self) -> "PersistenceManager":
         return self._persistence_manager
 
     def __repr__(self):
@@ -481,15 +517,15 @@ class SparkDataset(LAMLDataset, Unpersistable):
         return dataset
 
     def set_data(
-            self,
-            data: SparkDataFrame,
-            features: List[str],
-            roles: NpRoles = None,
-            persistence_manager: Optional['PersistenceManager'] = None,
-            dependencies: Optional[List[Dependency]] = None,
-            uid: Optional[str] = None,
-            name: Optional[str] = None,
-            frozen: bool = False
+        self,
+        data: SparkDataFrame,
+        features: List[str],
+        roles: NpRoles = None,
+        persistence_manager: Optional["PersistenceManager"] = None,
+        dependencies: Optional[List[Dependency]] = None,
+        uid: Optional[str] = None,
+        name: Optional[str] = None,
+        frozen: bool = False,
     ):
         """Inplace set data, features, roles for empty dataset.
 
@@ -506,7 +542,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
         self._name = name or self._name
         self._frozen = frozen
 
-    def persist(self, level: Optional[PersistenceLevel] = None, force: bool=False) -> 'SparkDataset':
+    def persist(self, level: Optional[PersistenceLevel] = None, force: bool = False) -> "SparkDataset":
         """
         Materializes current Spark DataFrame and unpersists all its dependencies
         Args:
@@ -557,7 +593,7 @@ class SparkDataset(LAMLDataset, Unpersistable):
         #     self._unpersist_dependencies()
 
     def _unpersist_dependencies(self):
-        for dep in (self.dependencies or []):
+        for dep in self.dependencies or []:
             if isinstance(dep, str):
                 self.persistence_manager.unpersist(dep)
             elif isinstance(dep, Unpersistable):
@@ -573,16 +609,18 @@ class SparkDataset(LAMLDataset, Unpersistable):
     def frozen(self, val: bool):
         self._frozen = val
 
-    def freeze(self) -> 'SparkDataset':
+    def freeze(self) -> "SparkDataset":
         ds = self.empty()
         ds.set_data(self.data, self.features, self.roles, frozen=True)
         return ds
 
-    def save(self,
-             path: str,
-             save_mode: str = 'error',
-             file_format: str = 'parquet',
-             file_format_options: Optional[Dict[str, Any]] = None):
+    def save(
+        self,
+        path: str,
+        save_mode: str = "error",
+        file_format: str = "parquet",
+        file_format_options: Optional[Dict[str, Any]] = None,
+    ):
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
         file_format_options = file_format_options or dict()
@@ -599,18 +637,16 @@ class SparkDataset(LAMLDataset, Unpersistable):
         metadata_df = self.spark_session.createDataFrame([{"metadata": metadata_str}])
 
         # create directory that will store data and metadata as separate files of dataframes
-        create_directory(path, spark=self.spark_session, exists_ok=(save_mode in ['overwrite', 'append']))
+        create_directory(path, spark=self.spark_session, exists_ok=(save_mode in ["overwrite", "append"]))
 
         # writing dataframes
         metadata_df.write.format(file_format).mode(save_mode).options(**file_format_options).save(metadata_file_path)
         # fix name of columns: parquet cannot have columns with '(' or ')' in the name
-        name_fixed_cols = (sf.col(c).alias(c.replace('(', '[').replace(')', ']')) for c in self.data.columns)
+        name_fixed_cols = (sf.col(c).alias(c.replace("(", "[").replace(")", "]")) for c in self.data.columns)
         # write dataframe with fixed column names
         (
-            self.data
-            .select(*name_fixed_cols)
-            .write
-            .format(file_format)
+            self.data.select(*name_fixed_cols)
+            .write.format(file_format)
             .mode(save_mode)
             .options(**file_format_options)
             .save(file_path)
@@ -685,7 +721,7 @@ class PersistableDataFrame:
             self.base_dataset.roles,
             dependencies=list(self.base_dataset.dependencies or []),
             uid=self.uid,
-            name=self.base_dataset.name
+            name=self.base_dataset.name,
         )
         return ds
 
@@ -697,8 +733,9 @@ class PersistableDataFrame:
 
 class PersistenceManager(ABC):
     """
-        Base interface of an entity responsible for caching and storing intermediate results somewhere.
+    Base interface of an entity responsible for caching and storing intermediate results somewhere.
     """
+
     @staticmethod
     def to_persistable_dataframe(dataset: SparkDataset) -> PersistableDataFrame:
         # we intentially create new uid to use to distinguish a persisted and unpersisted dataset
@@ -711,7 +748,7 @@ class PersistenceManager(ABC):
 
     @property
     @abstractmethod
-    def children(self) -> List['PersistenceManager']:
+    def children(self) -> List["PersistenceManager"]:
         ...
 
     @property
@@ -729,9 +766,9 @@ class PersistenceManager(ABC):
         ...
 
     @abstractmethod
-    def persist(self,
-                dataset: Union[SparkDataset, PersistableDataFrame],
-                level: PersistenceLevel = PersistenceLevel.REGULAR) -> PersistableDataFrame:
+    def persist(
+        self, dataset: Union[SparkDataset, PersistableDataFrame], level: PersistenceLevel = PersistenceLevel.REGULAR
+    ) -> PersistableDataFrame:
         ...
 
     @abstractmethod
@@ -747,11 +784,11 @@ class PersistenceManager(ABC):
         ...
 
     @abstractmethod
-    def child(self) -> 'PersistenceManager':
+    def child(self) -> "PersistenceManager":
         ...
 
     @abstractmethod
-    def remove_child(self, child: Union['PersistenceManager', str]):
+    def remove_child(self, child: Union["PersistenceManager", str]):
         ...
 
     @abstractmethod

@@ -1,7 +1,10 @@
-from typing import Union, List
+from typing import List
+from typing import Union
 
-from lightautoml.dataset.roles import NumericRole, Dtype
 import numpy as np
+
+from lightautoml.dataset.roles import Dtype
+from lightautoml.dataset.roles import NumericRole
 
 
 class NumericVectorOrArrayRole(NumericRole):

@@ -1,7 +1,10 @@
 import logging.config
 
+from examples_utils import get_dataset
 from examples_utils import get_persistence_manager
-from examples_utils import get_spark_session, prepare_test_and_train, get_dataset
+from examples_utils import get_spark_session
+from examples_utils import prepare_test_and_train
+
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.report import SparkReportDeco
 from sparklightautoml.tasks.base import SparkTask
@@ -9,7 +12,8 @@ from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
 
-logging.config.dictConfig(logging_config(log_filename='/tmp/slama.log'))
+
+logging.config.dictConfig(logging_config(log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -34,22 +38,18 @@ if __name__ == "__main__":
         automl = SparkTabularAutoML(
             spark=spark,
             task=task,
-            lgb_params={'use_single_dataset_mode': True, "default_params": {"numIterations": 3000}},
+            lgb_params={"use_single_dataset_mode": True, "default_params": {"numIterations": 3000}},
             linear_l2_params={"default_params": {"regParam": [1]}},
             general_params={"use_algos": use_algos},
-            reader_params={"cv": cv, "advanced_roles": False, 'random_state': seed}
+            reader_params={"cv": cv, "advanced_roles": False, "random_state": seed},
         )
 
         report_automl = SparkReportDeco(
-            output_path="/tmp/spark",
-            report_file_name="spark_lama_report.html",
-            interpretation=True
+            output_path="/tmp/spark", report_file_name="spark_lama_report.html", interpretation=True
         )(automl)
 
         oof_preds = report_automl.fit_predict(
-            train_data,
-            roles=dataset.roles,
-            persistence_manager=get_persistence_manager()
+            train_data, roles=dataset.roles, persistence_manager=get_persistence_manager()
         ).persist()
         report_automl.predict(test_data, add_reader_attrs=True)
         oof_preds.unpersist()

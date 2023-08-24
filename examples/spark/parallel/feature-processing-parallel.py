@@ -1,15 +1,19 @@
 import logging.config
 
-from examples.spark.examples_utils import get_spark_session, get_dataset
+from examples.spark.examples_utils import get_dataset
+from examples.spark.examples_utils import get_spark_session
 from sparklightautoml.computations.parallel import ParallelComputationsManager
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
-from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline, SparkLGBSimpleFeatures
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.utils import logging_config, VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
+from sparklightautoml.utils import logging_config
 
-logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename='/tmp/slama.log'))
+
+logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -17,7 +21,7 @@ logger = logging.getLogger(__name__)
 feature_pipelines = {
     "linear": SparkLinearFeatures(),
     "lgb_simple": SparkLGBSimpleFeatures(),
-    "lgb_adv": SparkLGBAdvancedPipeline()
+    "lgb_adv": SparkLGBAdvancedPipeline(),
 }
 
 
@@ -41,8 +45,9 @@ if __name__ == "__main__":
     def build_task(name: str, feature_pipe: SparkFeaturesPipeline):
         def func():
             logger.info(f"Calculating feature pipeline: {name}")
-            feature_pipe.fit_transform(ds).data.write.mode('overwrite').format('noop').save()
+            feature_pipe.fit_transform(ds).data.write.mode("overwrite").format("noop").save()
             logger.info(f"Finished calculating pipeline: {name}")
+
         return func
 
     tasks = [build_task(name, feature_pipe) for name, feature_pipe in feature_pipelines.items()]

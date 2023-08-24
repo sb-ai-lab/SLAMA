@@ -1,4 +1,5 @@
 import pytest
+
 from pyspark.sql import SparkSession
 
 from sparklightautoml.computations.base import ComputationsManager
@@ -6,27 +7,32 @@ from sparklightautoml.computations.parallel import ParallelComputationsManager
 from sparklightautoml.computations.sequential import SequentialComputationsManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
-from sparklightautoml.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
+from sparklightautoml.pipelines.selection.permutation_importance_based import (
+    SparkNpPermutationImportanceEstimator,
+)
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import spark as spark_sess, dataset as spark_dataset
 
-spark = spark_sess
+from .. import dataset as spark_dataset
+from .. import spark_for_function
+
+
+spark = spark_for_function
 dataset = spark_dataset
 
 
-@pytest.mark.parametrize("manager", [
-    None,
-    SequentialComputationsManager(),
-    ParallelComputationsManager(parallelism=5, use_location_prefs_mode=False),
-    ParallelComputationsManager(parallelism=5, use_location_prefs_mode=True)
-])
+@pytest.mark.parametrize(
+    "manager",
+    [
+        None,
+        SequentialComputationsManager(),
+        ParallelComputationsManager(parallelism=5, use_location_prefs_mode=False),
+        ParallelComputationsManager(parallelism=5, use_location_prefs_mode=True),
+    ],
+)
 def test_selector(spark: SparkSession, dataset: SparkDataset, manager: ComputationsManager):
     iterator = SparkFoldsIterator(dataset)
 
-    ml_algo = SparkBoostLGBM(
-        default_params={'numIterations': 25},
-        use_barrier_execution_mode=True
-    )
+    ml_algo = SparkBoostLGBM(default_params={"numIterations": 25}, use_barrier_execution_mode=True)
     ml_algo.fit(iterator.convert_to_holdout_iterator())
     preds = ml_algo.predict(dataset)
 

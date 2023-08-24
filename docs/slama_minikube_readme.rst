@@ -41,9 +41,9 @@ Environment setup
 
 
 5. Create several folders to be used for data storage and particulary for pv (PersistentVolume) and pvc (PersistentVolumeClaim):
-   One may choose different paths. All described below is just a suggestion. 
+   One may choose different paths. All described below is just a suggestion.
 
-    * /opt/data-slama - dataset folder. All required datasets, one is planning to work with, 
+    * /opt/data-slama - dataset folder. All required datasets, one is planning to work with,
       should be copied in this folder.
 
     * /opt/result-slama - service folder for intermediate data
@@ -67,8 +67,8 @@ Results of the command execution should look like:
 
 Instead of 'unchanged' state there may be 'created' state if nothing existed before this command was executed.
 
-8. Create pv and pvc to be used by spark application with SLAMA. It is assumed that the folders previously created 
-   will be used for this purpose. One may take a look on the example 
+8. Create pv and pvc to be used by spark application with SLAMA. It is assumed that the folders previously created
+   will be used for this purpose. One may take a look on the example
    ~/LightAutoML/dev-tools/config/spark-lama-data-pv-pvc.yaml to create pv and pvc. ::
 
     kubectl apply -f ./dev-tools/config/spark-lama-data-pv-pvc.yaml
@@ -84,7 +84,7 @@ Instead of 'unchanged' state there may be 'created' state if nothing existed bef
     ./bin/slamactl.sh build-lama-image
 
 10. One can check resulting images with the command: ::
-    
+
     docker images
 
 .. image:: imgs/image4.png
@@ -94,7 +94,7 @@ Instead of 'unchanged' state there may be 'created' state if nothing existed bef
 Run examples in minikube
 ========================
 
-1. Ensure that REPO and KUBE_NAMESPACE variables are set. 
+1. Ensure that REPO and KUBE_NAMESPACE variables are set.
    Ensure that all required docker images and kubernetes objects have been created.
 
 2. Go to LigthAutoML folder.
@@ -116,7 +116,7 @@ An example of the result:
 
 .. image:: imgs/image6.png
 
-6. One can open Spark Web UI of SLAMA application on localhost. 
+6. One can open Spark Web UI of SLAMA application on localhost.
    That requires to execute a command for port forwarding to one of localhost ports: ::
 
     kubectl -n spark-lama-exps port-forward svc/$(kubectl -n spark-lama-exps get svc -o jsonpath='{.items[0].metadata.name}') 9040:4040 --address='0.0.0.0'
@@ -125,4 +125,4 @@ To open Spark WebUI follow the link <http://localhost:9040>
 
 .. image:: imgs/image7.png
 
-Note: SLAMA application should be in running state. 
+Note: SLAMA application should be in running state.

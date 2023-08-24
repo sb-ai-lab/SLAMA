@@ -5,17 +5,22 @@ from sparklightautoml.computations.parallel import ParallelComputationsManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-from .. import spark as spark_sess, dataset as spark_dataset
 
+from .. import dataset as spark_dataset
+from .. import make_spark
+from .. import spark as spark_sess
+
+
+make_spark = make_spark
 spark = spark_sess
 dataset = spark_dataset
 
 ml_alg_kwargs = {
-    'auto_unique_co': 10,
-    'max_intersection_depth': 3,
-    'multiclass_te_co': 3,
-    'output_categories': True,
-    'top_intersections': 4
+    "auto_unique_co": 10,
+    "max_intersection_depth": 3,
+    "multiclass_te_co": 3,
+    "output_categories": True,
+    "top_intersections": 4,
 }
 
 
@@ -29,8 +34,7 @@ def test_parallel_timer_exceeded(spark: SparkSession, dataset: SparkDataset):
 
     tv_iter = SparkFoldsIterator(dataset)
     ml_algo = SparkBoostLGBM(
-        timer=pipeline_timer.get_task_timer(),
-        computations_settings=ParallelComputationsManager(parallelism=2)
+        timer=pipeline_timer.get_task_timer(), computations_settings=ParallelComputationsManager(parallelism=2)
     )
     oof_preds = ml_algo.fit_predict(tv_iter)
 

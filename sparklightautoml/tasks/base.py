@@ -1,20 +1,22 @@
-from typing import Optional, Union, cast
+from typing import Optional
+from typing import Union
+from typing import cast
 
 import numpy as np
 import pandas as pd
+
 from lightautoml.tasks import Task as LAMATask
 from lightautoml.tasks.base import LAMLMetric
-from pyspark.ml.evaluation import (
-    BinaryClassificationEvaluator,
-    RegressionEvaluator,
-    MulticlassClassificationEvaluator,
-)
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.functions import vector_to_array
 from pyspark.sql.pandas.functions import pandas_udf
 
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.tasks.losses.base import SparkLoss
 from sparklightautoml.utils import SparkDataFrame
+
 
 DEFAULT_PREDICTION_COL_NAME = "prediction"
 DEFAULT_TARGET_COL_NAME = "target"
@@ -123,7 +125,6 @@ class SparkTask(LAMATask):
         metric: Optional[str] = None,
         greater_is_better: Optional[bool] = None,
     ):
-
         super().__init__(name, loss, None, metric, None, greater_is_better)
 
         if metric is None:

@@ -1,14 +1,22 @@
 import logging
-from abc import ABC, abstractmethod
-from contextlib import contextmanager, ContextDecorator
+
+from abc import ABC
+from abc import abstractmethod
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional, Any, Union, Dict
-from typing import TypeVar, List
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import TypeVar
+from typing import Union
 
 from sparklightautoml.computations.utils import deecopy_tviter_without_dataset
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +71,11 @@ class ComputationsManager(ABC):
 
     def compute_on_dataset(self, dataset: SparkDataset, tasks: List[Callable[[ComputationSlot], T]]) -> List[T]:
         with self.session(dataset) as session:
+
             def _task_wrap(task):
                 with session.allocate() as slot:
                     return task(slot)
+
             return session.map_and_compute(_task_wrap, tasks)
 
     def compute(self, tasks: List[Callable[[], T]]) -> List[T]:
@@ -73,11 +83,13 @@ class ComputationsManager(ABC):
         with self.session() as session:
             return session.compute(tasks)
 
-    def compute_folds(self, train_val_iter: SparkBaseTrainValidIterator, task: Callable[[int, ComputationSlot], T])\
-            -> List[T]:
+    def compute_folds(
+        self, train_val_iter: SparkBaseTrainValidIterator, task: Callable[[int, ComputationSlot], T]
+    ) -> List[T]:
         tv_iter = deecopy_tviter_without_dataset(train_val_iter)
 
         with self.session(train_val_iter.train) as session:
+
             def _task_wrap(fold_id: int):
                 with session.allocate() as slot:
                     local_tv_iter = deepcopy(tv_iter)

@@ -2,6 +2,7 @@ import random
 
 from lightautoml.dataset.roles import NumericRole
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as sf
 
 from sparklightautoml.automl.blend import SparkWeightedBlender
 from sparklightautoml.dataset.base import SparkDataset
@@ -11,11 +12,13 @@ from sparklightautoml.pipelines.ml.base import SparkMLPipeline
 from sparklightautoml.tasks.base import SparkTask as SparkTask
 from sparklightautoml.utils import log_exec_time
 from sparklightautoml.validation.iterators import SparkFoldsIterator
+
+from .. import make_spark
 from .. import spark as spark_sess
 from ..test_auto_ml.utils import DummyMLAlgo
 
-from pyspark.sql import functions as sf
 
+make_spark = make_spark
 spark = spark_sess
 
 
@@ -30,9 +33,11 @@ def test_weighted_blender(spark: SparkSession):
     data = [
         {
             SparkDataset.ID_COLUMN: i,
-            "a": i, "b": 100 + i, "c": 100 * i,
+            "a": i,
+            "b": 100 + i,
+            "c": 100 * i,
             target_col: random.randint(0, n_classes),
-            folds_col: random.randint(0, 2)
+            folds_col: random.randint(0, 2),
         }
         for i in range(100)
     ]
@@ -48,7 +53,7 @@ def test_weighted_blender(spark: SparkSession):
         roles=roles,
         target=target_col,
         folds=folds_col,
-        name="WeightedBlenderData"
+        name="WeightedBlenderData",
     ).persist()
 
     train_valid_iterator = SparkFoldsIterator(original_data_sds)
@@ -62,15 +67,15 @@ def test_weighted_blender(spark: SparkSession):
     data_sds = SparkDataset.concatenate(pipes_preds, name="concatanated").persist()
 
     swb = SparkWeightedBlender(max_iters=1, max_inner_iters=1)
-    with log_exec_time('Blender fit_predict'):
+    with log_exec_time("Blender fit_predict"):
         blended_sds, filtered_pipes = swb.fit_predict(data_sds, pipes)
         blended_sds.persist()
 
-    with log_exec_time('Blender predict'):
+    with log_exec_time("Blender predict"):
         test_col = "do_not_drop_it"
         df = data_sds.data.withColumn(test_col, sf.lit(42.0))
         transformed_preds_sdf = swb.transformer().transform(df)
-        transformed_preds_sdf.write.mode('overwrite').format('noop').save()
+        transformed_preds_sdf.write.mode("overwrite").format("noop").save()
         assert test_col in transformed_preds_sdf.columns
 
     assert len(swb.output_roles) == 1

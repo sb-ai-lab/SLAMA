@@ -1,38 +1,56 @@
 import itertools
 import logging
+
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Optional, Sequence, List, Tuple, Dict, Any
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
-from lightautoml.dataset.roles import CategoryRole, NumericRole, ColumnRole
+
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import ColumnRole
+from lightautoml.dataset.roles import NumericRole
 from lightautoml.reader.base import RolesDict
-from lightautoml.transformers.categorical import (
-    categorical_check,
-    encoding_check,
-    oof_task_check,
-    multiclass_task_check,
-)
+from lightautoml.transformers.categorical import categorical_check
+from lightautoml.transformers.categorical import encoding_check
+from lightautoml.transformers.categorical import multiclass_task_check
+from lightautoml.transformers.categorical import oof_task_check
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder
-from pyspark.sql import functions as sf, Window, Column
+from pyspark.sql import Column
+from pyspark.sql import Window
+from pyspark.sql import functions as sf
 from pyspark.sql.types import IntegerType
 from sklearn.utils.murmurhash import murmurhash3_32
 
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
-from sparklightautoml.mlwriters import (
-    CommonPickleMLReadable,
-    CommonPickleMLWritable,
-    SparkLabelEncoderTransformerMLReadable,
-    SparkLabelEncoderTransformerMLWritable,
+from sparklightautoml.mlwriters import CommonPickleMLReadable
+from sparklightautoml.mlwriters import CommonPickleMLWritable
+from sparklightautoml.mlwriters import SparkLabelEncoderTransformerMLReadable
+from sparklightautoml.mlwriters import SparkLabelEncoderTransformerMLWritable
+from sparklightautoml.transformers.base import SparkBaseEstimator
+from sparklightautoml.transformers.base import SparkBaseTransformer
+from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import (
+    LAMLStringIndexer,
 )
-from sparklightautoml.transformers.base import SparkBaseEstimator, SparkBaseTransformer
-from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import LAMLStringIndexer, LAMLStringIndexerModel
-from sparklightautoml.transformers.scala_wrappers.target_encoder_transformer import TargetEncoderTransformer, \
-    SparkTargetEncodeTransformer
+from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import (
+    LAMLStringIndexerModel,
+)
+from sparklightautoml.transformers.scala_wrappers.target_encoder_transformer import (
+    SparkTargetEncodeTransformer,
+)
+from sparklightautoml.transformers.scala_wrappers.target_encoder_transformer import (
+    TargetEncoderTransformer,
+)
 from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +198,6 @@ class SparkLabelEncoderTransformer(
         self._input_intermediate_roles = self.get_input_roles()
 
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
-
         logger.info(f"[{type(self)} (LE)] transform is started")
 
         columns = self._input_intermediate_columns
@@ -227,7 +244,6 @@ class SparkOrdinalEncoderEstimator(SparkLabelEncoderEstimator):
         self._use_cols = self.getInputCols()
 
     def _fit(self, dataset: SparkDataFrame) -> "Transformer":
-
         logger.info(f"[{type(self)} (ORD)] fit is started")
 
         cols_to_process = [
@@ -285,7 +301,6 @@ class SparkOrdinalEncoderTransformer(SparkLabelEncoderTransformer):
         super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns, indexer_model)
 
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
-
         logger.info(f"[{type(self)} (ORD)] transform is started")
 
         input_columns = self.getInputCols()
@@ -338,7 +353,6 @@ class SparkFreqEncoderEstimator(SparkLabelEncoderEstimator):
         super().__init__(input_cols, input_roles, do_replace_columns, output_role=NumericRole(np.float32))
 
     def _fit(self, dataset: SparkDataFrame) -> "SparkFreqEncoderTransformer":
-
         logger.info(f"[{type(self)} (FE)] fit is started")
 
         indexer = LAMLStringIndexer(
@@ -411,12 +425,12 @@ class SparkCatIntersectionsHelper:
         # return murmurhash3_32_udf(sf.concat(*columns_for_concat)).alias(col_name)
         return sf.hash(sf.concat(*columns_for_concat)).alias(col_name)
 
-    def _build_df(self, df: SparkDataFrame, intersections: Optional[Sequence[Sequence[str]]]) \
-            -> Tuple[SparkDataFrame, List[str]]:
+    def _build_df(
+        self, df: SparkDataFrame, intersections: Optional[Sequence[Sequence[str]]]
+    ) -> Tuple[SparkDataFrame, List[str]]:
         col_names = [self._make_col_name(comb) for comb in intersections]
         columns_to_select = [
-            self._make_category(comb).alias(col_name)
-            for comb, col_name in zip(intersections, col_names)
+            self._make_category(comb).alias(col_name) for comb, col_name in zip(intersections, col_names)
         ]
         df = df.select("*", *columns_to_select)
         return df, col_names
@@ -441,7 +455,6 @@ class SparkCatIntersectionsEstimator(SparkCatIntersectionsHelper, SparkLabelEnco
         max_depth: int = 2,
         do_replace_columns: bool = False,
     ):
-
         super().__init__(
             input_cols,
             input_roles,
@@ -478,8 +491,7 @@ class SparkCatIntersectionsEstimator(SparkCatIntersectionsHelper, SparkLabelEnco
         inter_df, inter_cols = self._build_df(df, self.intersections)
 
         self._input_intermediate_roles = {
-            col: self.get_input_roles()[elts[0]]
-            for col, elts in zip(inter_cols, self.intersections)
+            col: self.get_input_roles()[elts[0]] for col, elts in zip(inter_cols, self.intersections)
         }
         self._input_intermediate_columns = inter_cols
 
@@ -518,7 +530,6 @@ class SparkCatIntersectionsTransformer(SparkCatIntersectionsHelper, SparkLabelEn
         indexer_model: LAMLStringIndexerModel,
         intersections: Optional[Sequence[Sequence[str]]] = None,
     ):
-
         super().__init__(input_cols, output_cols, input_roles, output_roles, do_replace_columns, indexer_model)
         self.intersections = intersections
 
@@ -816,10 +827,10 @@ class SparkTargetEncoderEstimator(SparkBaseEstimator):
                 fold_column=self._folds_column,
                 apply_oof=True,
                 input_cols=list(self.get_input_roles().keys()),
-                output_cols=list(self.get_output_roles().keys())
+                output_cols=list(self.get_output_roles().keys()),
             ),
             input_roles=self.get_input_roles(),
-            output_roles=self.get_output_roles()
+            output_roles=self.get_output_roles(),
         )
 
 
@@ -898,7 +909,6 @@ class SparkMulticlassTargetEncoderEstimator(SparkBaseEstimator):
         # cols_to_select = []
 
         for ccn in self.getInputCols():
-
             logger.debug(f"[{type(self)} (MCTE)] column {ccn}")
 
             _cc = sf.col(ccn)
@@ -994,7 +1004,6 @@ class SparkMultiTargetEncoderTransformer(SparkBaseTransformer, CommonPickleMLWri
         self._encodings = encodings
 
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
-
         cols_to_select = []
         logger.info(f"[{type(self)} (MCTE)] transform is started")
 

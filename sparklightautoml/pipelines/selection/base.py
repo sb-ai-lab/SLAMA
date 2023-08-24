@@ -1,10 +1,16 @@
 """Base class for selection pipelines."""
 from abc import ABC
 from copy import copy
-from typing import Any, Optional, List, cast
+from typing import List
+from typing import Optional
+from typing import cast
 
-from lightautoml.dataset.base import LAMLDataset, RolesDict
-from lightautoml.pipelines.selection.base import SelectionPipeline, EmptySelector, ImportanceEstimator, ComposedSelector
+from lightautoml.dataset.base import LAMLDataset
+from lightautoml.dataset.base import RolesDict
+from lightautoml.pipelines.selection.base import ComposedSelector
+from lightautoml.pipelines.selection.base import EmptySelector
+from lightautoml.pipelines.selection.base import ImportanceEstimator
+from lightautoml.pipelines.selection.base import SelectionPipeline
 from lightautoml.validation.base import TrainValidIterator
 from pandas import Series
 from pyspark.ml import Transformer
@@ -12,8 +18,9 @@ from pyspark.ml import Transformer
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.pipelines.base import TransformerInputOutputRoles
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
-from sparklightautoml.utils import ColumnsSelectorTransformer, NoOpTransformer
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator, SparkSelectionPipeline
+from sparklightautoml.utils import NoOpTransformer
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import SparkSelectionPipeline
 
 
 class SparkImportanceEstimator(ImportanceEstimator, ABC):
@@ -38,11 +45,15 @@ class SparkSelectionPipelineWrapper(SparkSelectionPipeline, TransformerInputOutp
     def _validate_sel_pipe(self, sel_pipe: SelectionPipeline):
         selectors = sel_pipe.selectors if isinstance(sel_pipe, ComposedSelector) else [sel_pipe]
         for selp in selectors:
-            assert isinstance(selp, EmptySelector) \
-                   or isinstance(selp, BugFixSelectionPipelineWrapper) \
-                   or isinstance(selp.features_pipeline, SparkFeaturesPipeline), \
-                    "SelectionPipeline should either be EmptySelector or have SparkFeaturePipeline as " \
-                    "features_pipeline, but it is {type(selp)} and have {type(selp.features_pipeline)}"
+            msg = (
+                f"SelectionPipeline should either be EmptySelector or have SparkFeaturePipeline as "
+                f"features_pipeline, but it is {type(selp)} and have {type(selp.features_pipeline)}"
+            )
+            assert (
+                isinstance(selp, EmptySelector)
+                or isinstance(selp, BugFixSelectionPipelineWrapper)
+                or isinstance(selp.features_pipeline, SparkFeaturesPipeline)
+            ), msg
 
     def _build_transformer(self, *args, **kwargs) -> Optional[Transformer]:
         if not self._sel_pipe.is_fitted:
@@ -90,9 +101,7 @@ class SparkSelectionPipelineWrapper(SparkSelectionPipeline, TransformerInputOutp
 
         self._input_roles = copy(train_valid.train.roles)
         self._output_roles = {
-            feat: role
-            for feat, role in self._input_roles.items()
-            if feat in self._sel_pipe.selected_features
+            feat: role for feat, role in self._input_roles.items() if feat in self._sel_pipe.selected_features
         }
         self._service_columns = train_valid.train.service_columns
 
@@ -153,4 +162,3 @@ class BugFixSelectionPipelineWrapper(SelectionPipeline):
                     selected_features.append(col)
 
         return dataset[:, selected_features]
-

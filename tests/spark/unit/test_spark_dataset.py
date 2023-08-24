@@ -1,21 +1,40 @@
 import json
 import os
 import shutil
+
 from datetime import datetime
 from typing import Optional
 
 import numpy as np
-from lightautoml.dataset.roles import NumericRole, CategoryRole, DatetimeRole, DropRole, TextRole, DateRole, IdRole, \
-    TargetRole, GroupRole, WeightsRole, FoldsRole, PathRole, TreatmentRole
+
+from lightautoml.dataset.roles import CategoryRole
+from lightautoml.dataset.roles import DateRole
+from lightautoml.dataset.roles import DatetimeRole
+from lightautoml.dataset.roles import DropRole
+from lightautoml.dataset.roles import FoldsRole
+from lightautoml.dataset.roles import GroupRole
+from lightautoml.dataset.roles import IdRole
+from lightautoml.dataset.roles import NumericRole
+from lightautoml.dataset.roles import PathRole
+from lightautoml.dataset.roles import TargetRole
+from lightautoml.dataset.roles import TextRole
+from lightautoml.dataset.roles import TreatmentRole
+from lightautoml.dataset.roles import WeightsRole
 from lightautoml.tasks import Task
 from pandas.testing import assert_frame_equal
 from pyspark.sql import SparkSession
 
-from sparklightautoml.dataset.base import SparkDataset, SparkDatasetMetadataJsonEncoder, SparkDatasetMetadataJsonDecoder
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.base import SparkDatasetMetadataJsonDecoder
+from sparklightautoml.dataset.base import SparkDatasetMetadataJsonEncoder
 from sparklightautoml.dataset.roles import NumericVectorOrArrayRole
 from sparklightautoml.tasks.base import SparkTask
+
+from . import make_spark
 from . import spark as spark_sess
 
+
+make_spark = make_spark
 spark = spark_sess
 
 
@@ -50,7 +69,7 @@ def test_column_roles_json_encoder_and_decoder():
         "weights_role": WeightsRole(),
         "folds_role": FoldsRole(),
         "path_role": PathRole(),
-        "treatment_role": TreatmentRole()
+        "treatment_role": TreatmentRole(),
     }
 
     js_roles = json.dumps(roles, cls=SparkDatasetMetadataJsonEncoder)
@@ -66,8 +85,12 @@ def test_spark_task_json_encoder_decoder():
     deser_stask = json.loads(js_stask, cls=SparkDatasetMetadataJsonDecoder)
 
     stask_internals = [stask.name, stask.loss_name, stask.metric_name, stask.greater_is_better]
-    deser_stask_internals = [deser_stask.name, deser_stask.loss_name,
-                             deser_stask.metric_name, deser_stask.greater_is_better]
+    deser_stask_internals = [
+        deser_stask.name,
+        deser_stask.loss_name,
+        deser_stask.metric_name,
+        deser_stask.greater_is_better,
+    ]
 
     assert deser_stask_internals == stask_internals
 
@@ -81,14 +104,19 @@ def test_spark_dataset_save_load(spark: SparkSession):
         shutil.rmtree(path)
 
     # creating test data
-    df = spark.createDataFrame([{
-        SparkDataset.ID_COLUMN: i,
-        "a": i + 1,
-        "b": i * 10 + 1,
-        "this_is_target": 0,
-        "this_is_fold": 0,
-        "scaler__fillnamed__fillinf__logodds__oof__inter__(CODE_GENDER__EMERGENCYSTATE_MODE)": 12.0
-    } for i in range(10)])
+    df = spark.createDataFrame(
+        [
+            {
+                SparkDataset.ID_COLUMN: i,
+                "a": i + 1,
+                "b": i * 10 + 1,
+                "this_is_target": 0,
+                "this_is_fold": 0,
+                "scaler__fillnamed__fillinf__logodds__oof__inter__(CODE_GENDER__EMERGENCYSTATE_MODE)": 12.0,
+            }
+            for i in range(10)
+        ]
+    )
 
     ds = SparkDataset(
         data=df,
@@ -98,8 +126,8 @@ def test_spark_dataset_save_load(spark: SparkSession):
         roles={
             "a": NumericRole(dtype=np.int32),
             "b": NumericRole(dtype=np.int32),
-            "scaler__fillnamed__fillinf__logodds__oof__inter__(CODE_GENDER__EMERGENCYSTATE_MODE)": NumericRole()
-        }
+            "scaler__fillnamed__fillinf__logodds__oof__inter__(CODE_GENDER__EMERGENCYSTATE_MODE)": NumericRole(),
+        },
     )
 
     ds.save(path=path)

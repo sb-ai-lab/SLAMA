@@ -8,13 +8,13 @@ To run examples locally one needs just ensure that data files lay in appropriate
 These locations typically /opt/spark_data directory.
 (Data for the examples can be found in examples/data)
 
-To run examples remotely on a cluster under Kubernetes control one needs 
+To run examples remotely on a cluster under Kubernetes control one needs
 to have installed and configured **kubectl** utility.
 
 1. Establish nfs / S3
 """""""""""""""""""""
 
-This step is necessary to make uploading of script file  
+This step is necessary to make uploading of script file
 (e.g. executable of Spark LAMA) into a location that is accessible from anywhere on cluster.
 This file will be used by spark driver which is also submitted to the cluster.
 Upon configuring set appropriate value for *spark.kubernetes.file.upload.path* in ``./bin/slamactl.sh`` or mount it to ``/mnt/nfs`` on the localhost.
@@ -29,11 +29,11 @@ Examples required 2 PVC for their functioning (defined in slamactl.sh, spark-sub
 3. Define required env variables
 """"""""""""""""""""""""""""""""
 
-Define required environment variables to use appropriate kubernetes namespace 
+Define required environment variables to use appropriate kubernetes namespace
 and remote docker repository accessible from anywhere in the cluster. ::
 
-    export KUBE_NAMESPACE=spark-lama-exps 
-    export REPO=node2.bdcl:5000 
+    export KUBE_NAMESPACE=spark-lama-exps
+    export REPO=node2.bdcl:5000
 
 
 4. Build spark lama dependencies and docker images.
@@ -46,15 +46,15 @@ On this step use slamactl.sh utility to build dependencies and docker images: ::
 
 It will:
 
-    - compile jars containing Scala-based components 
+    - compile jars containing Scala-based components
     (currently only LAMLStringIndexer required for LE-family transformers)
-  
+
     - download Spark distro and use dockerfiles from there to build base pyspark images
     (and push these images to the remote docker repo)
-  
+
     - compile lama wheel (including spark subpackage) and build a docker image based upon mentioned above pyspark images
     (this image will be pushed to the remote repository too)
-  
+
 5. Run an example on the remote cluster
 """""""""""""""""""""""""""""""""""""""
 

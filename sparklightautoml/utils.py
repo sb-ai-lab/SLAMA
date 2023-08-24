@@ -3,22 +3,38 @@ import os
 import socket
 import time
 import warnings
+
 from contextlib import contextmanager
 from datetime import datetime
 from logging import Logger
-from typing import Optional, Tuple, Dict, List, cast
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import cast
 
 import pyspark
+
 from py4j.java_gateway import java_import
 from pyspark import RDD
-from pyspark.ml import Transformer, Estimator
+from pyspark.ml import Estimator
+from pyspark.ml import Transformer
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasInputCols, HasOutputCols
-from pyspark.ml.pipeline import PipelineModel, PipelineSharedReadWrite
-from pyspark.ml.util import DefaultParamsWritable, DefaultParamsReadable, MLWriter, \
-    DefaultParamsWriter, MLReader, DefaultParamsReader
+from pyspark.ml.param import Param
+from pyspark.ml.param import Params
+from pyspark.ml.param import TypeConverters
+from pyspark.ml.param.shared import HasInputCols
+from pyspark.ml.param.shared import HasOutputCols
+from pyspark.ml.pipeline import PipelineModel
+from pyspark.ml.pipeline import PipelineSharedReadWrite
+from pyspark.ml.util import DefaultParamsReadable
+from pyspark.ml.util import DefaultParamsReader
+from pyspark.ml.util import DefaultParamsWritable
+from pyspark.ml.util import DefaultParamsWriter
+from pyspark.ml.util import MLReader
+from pyspark.ml.util import MLWriter
 from pyspark.sql import SparkSession
+
 
 VERBOSE_LOGGING_FORMAT = "%(asctime)s %(threadName)s %(levelname)s %(module)s %(filename)s:%(lineno)d %(message)s"
 
@@ -92,7 +108,6 @@ def spark_session(
 
 @contextmanager
 def log_exec_time(name: Optional[str] = None, write_log=True):
-
     # Add file handler for INFO
     if write_log:
         file_handler_info = logging.FileHandler(f"/tmp/{name}_log.log.log", mode="a")
@@ -208,20 +223,26 @@ class ColumnsSelectorTransformer(
     )
 
     transformOnlyFirstTime = Param(
-        Params._dummy(), "transformOnlyFirstTime", "whatever to transform only once or each time",
-        typeConverter=TypeConverters.toBoolean
+        Params._dummy(),
+        "transformOnlyFirstTime",
+        "whatever to transform only once or each time",
+        typeConverter=TypeConverters.toBoolean,
     )
 
     _alreadyTransformed = Param(
-        Params._dummy(), "_alreadyTransformed", "is it first time to transform or not",
-        typeConverter=TypeConverters.toBoolean
+        Params._dummy(),
+        "_alreadyTransformed",
+        "is it first time to transform or not",
+        typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self,
-                 name: Optional[str] = None,
-                 input_cols: Optional[List[str]] = None,
-                 optional_cols: Optional[List[str]] = None,
-                 transform_only_first_time: bool = False):
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        input_cols: Optional[List[str]] = None,
+        optional_cols: Optional[List[str]] = None,
+        transform_only_first_time: bool = False,
+    ):
         super().__init__()
         input_cols = input_cols if input_cols else []
         optional_cols = optional_cols if optional_cols else []
@@ -242,8 +263,7 @@ class ColumnsSelectorTransformer(
     def _transform(self, dataset: SparkDataFrame) -> SparkDataFrame:
         logger.debug(f"In {type(self)}. Name: {self._name}. Columns: {sorted(dataset.columns)}")
 
-        if not self.getOrDefault(self.transformOnlyFirstTime) \
-                or not self.getOrDefault(self._alreadyTransformed):
+        if not self.getOrDefault(self.transformOnlyFirstTime) or not self.getOrDefault(self._alreadyTransformed):
             ds_cols = set(dataset.columns)
             present_opt_cols = [c for c in self.get_optional_cols() if c in ds_cols]
             input_cols = self._treat_columns_pattern(dataset, self.getInputCols())
@@ -258,10 +278,11 @@ class ColumnsSelectorTransformer(
     @staticmethod
     def _treat_columns_pattern(df: SparkDataFrame, cols: List[str]) -> List[str]:
         def treat(col: str):
-            if col.endswith('*'):
+            if col.endswith("*"):
                 pattern = col[:-1]
                 return [c for c in df.columns if c.startswith(pattern)]
             return [col]
+
         cols = [cc for c in cols for cc in treat(c)]
         return cols
 
@@ -282,7 +303,7 @@ class WrappingSelectingPipelineModelWriter(MLWriter):
     (Private) Specialization of :py:class:`MLWriter` for :py:class:`PipelineModel` types
     """
 
-    def __init__(self, instance: 'WrappingSelectingPipelineModel'):
+    def __init__(self, instance: "WrappingSelectingPipelineModel"):
         super(WrappingSelectingPipelineModelWriter, self).__init__()
         self.instance = instance
 
@@ -292,9 +313,9 @@ class WrappingSelectingPipelineModelWriter(MLWriter):
 
         stageUids = [stage.uid for stage in stages]
         jsonParams = {
-            'stageUids': stageUids,
-            'language': 'Python',
-            'instance_params': {param.name: value for param, value in self.instance.extractParamMap().items()}
+            "stageUids": stageUids,
+            "language": "Python",
+            "instance_params": {param.name: value for param, value in self.instance.extractParamMap().items()},
         }
         DefaultParamsWriter.saveMetadata(self.instance, path, self.sc, paramMap=jsonParams)
         stagesDir = os.path.join(path, "stages")
@@ -316,7 +337,7 @@ class WrappingSelectionPipelineModelReader(MLReader):
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
 
         uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
-        instance_params_map = cast(Dict, metadata['paramMap']['instance_params'])
+        instance_params_map = cast(Dict, metadata["paramMap"]["instance_params"])
 
         wspm = WrappingSelectingPipelineModel(stages=stages)
         wspm._resetUid(uid)
@@ -328,19 +349,19 @@ class WrappingSelectionPipelineModelReader(MLReader):
 
 
 class WrappingSelectingPipelineModel(PipelineModel, HasInputCols):
-    name = Param(
-        Params._dummy(), "name", "name.", typeConverter=TypeConverters.toString
-    )
+    name = Param(Params._dummy(), "name", "name.", typeConverter=TypeConverters.toString)
 
     optionalCols = Param(
         Params._dummy(), "optionalCols", "optional column names.", typeConverter=TypeConverters.toListString
     )
 
-    def __init__(self,
-                 stages: List[Transformer],
-                 input_columns: Optional[List[str]] = None,
-                 optional_columns: Optional[List[str]] = None,
-                 name: Optional[str] = None):
+    def __init__(
+        self,
+        stages: List[Transformer],
+        input_columns: Optional[List[str]] = None,
+        optional_columns: Optional[List[str]] = None,
+        name: Optional[str] = None,
+    ):
         super().__init__(stages)
         self.set(self.inputCols, input_columns or [])
         self.set(self.optionalCols, optional_columns or [])
@@ -350,7 +371,7 @@ class WrappingSelectingPipelineModel(PipelineModel, HasInputCols):
         cstr = ColumnsSelectorTransformer(
             name=f"{type(self).__name__}({self.getOrDefault(self.name)})",
             input_cols=list({*dataset.columns, *self.getInputCols()}),
-            optional_cols=self.getOrDefault(self.optionalCols)
+            optional_cols=self.getOrDefault(self.optionalCols),
         )
         ds = super()._transform(dataset)
         return cstr.transform(ds)
@@ -398,10 +419,12 @@ class Cacher(Estimator):
         # # using plain caching
         # ds = get_current_session().createDataFrame(dataset.rdd, schema=dataset.schema).cache()
         ds = dataset.cache()
-        ds.write.mode('overwrite').format('noop').save()
+        ds.write.mode("overwrite").format("noop").save()
 
-        logger.info(f"Cacher {self._key} (RDD Id: {ds.rdd.id()}, Column nums: {len(ds.columns)}). "
-                    f"Finished data materialization.")
+        logger.info(
+            f"Cacher {self._key} (RDD Id: {ds.rdd.id()}, Column nums: {len(ds.columns)}). "
+            f"Finished data materialization."
+        )
 
         previous_ds = self._cacher_dict.get(self._key, None)
         if previous_ds is not None and ds != previous_ds:
@@ -437,7 +460,9 @@ def log_exception(logger: Logger):
                 logger.error("Error wrapper caught error", exc_info=True)
                 raise ex
             return result
+
         return wrapped_f
+
     return wrap
 
 
@@ -451,16 +476,18 @@ def JobGroup(group_id: str, description: str, spark: SparkSession):
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
 def create_directory(path: str, spark: SparkSession, exists_ok: bool = False):
-    java_import(spark._jvm, 'org.apache.hadoop.fs.Path')
-    java_import(spark._jvm, 'java.net.URI')
-    java_import(spark._jvm, 'org.apache.hadoop.fs.FileSystem')
+    java_import(spark._jvm, "org.apache.hadoop.fs.Path")
+    java_import(spark._jvm, "java.net.URI")
+    java_import(spark._jvm, "org.apache.hadoop.fs.FileSystem")
 
     juri = spark._jvm.Path(path).toUri()
     jpath = spark._jvm.Path(juri.getPath())
-    jscheme = spark._jvm.URI(f"{juri.getScheme()}://{juri.getAuthority() or ''}/") \
-        if juri.getScheme() else None
-    fs = spark._jvm.FileSystem.get(jscheme, spark._jsc.hadoopConfiguration()) \
-        if jscheme else spark._jvm.FileSystem.get(spark._jsc.hadoopConfiguration())
+    jscheme = spark._jvm.URI(f"{juri.getScheme()}://{juri.getAuthority() or ''}/") if juri.getScheme() else None
+    fs = (
+        spark._jvm.FileSystem.get(jscheme, spark._jsc.hadoopConfiguration())
+        if jscheme
+        else spark._jvm.FileSystem.get(spark._jsc.hadoopConfiguration())
+    )
 
     if not fs.exists(jpath):
         fs.mkdirs(jpath)

@@ -7,10 +7,10 @@ It requires:
 2. PySpark 3.2+ (installed as a dependency)
 3. [Synapse ML library](https://microsoft.github.io/SynapseML/)
    (It will be downloaded by Spark automatically)
-   
-Currently, only tabular Preset is supported. See demo with spark-based tabular automl 
-preset in [examples/spark/tabular-preset-automl.py](https://github.com/fonhorst/LightAutoML_Spark/blob/distributed/master/examples/spark/tabular-preset-automl.py). 
-For further information check docs in the root of the project containing dedicated SLAMA section. 
+
+Currently, only tabular Preset is supported. See demo with spark-based tabular automl
+preset in [examples/spark/tabular-preset-automl.py](https://github.com/fonhorst/LightAutoML_Spark/blob/distributed/master/examples/spark/tabular-preset-automl.py).
+For further information check docs in the root of the project containing dedicated SLAMA section.
 
 <a name="apache"></a>
 # License

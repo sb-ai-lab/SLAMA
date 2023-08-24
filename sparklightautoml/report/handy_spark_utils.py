@@ -2,7 +2,8 @@
 The following methods have been copied from the HandySpark project and modified.
 https://github.com/dvgodoy/handyspark
 """
-from pyspark.mllib.common import _java2py, _py2java
+from pyspark.mllib.common import _java2py
+from pyspark.mllib.common import _py2java
 
 
 # noinspection PyProtectedMember

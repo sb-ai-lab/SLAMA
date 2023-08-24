@@ -1,25 +1,44 @@
 """Linear models for tabular datasets."""
 
 import logging
+
 from copy import copy
-from typing import Tuple, Optional, List, Dict, Any
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import numpy as np
-from lightautoml.ml_algo.tuning.base import SearchSpace, Distribution
+
+from lightautoml.ml_algo.tuning.base import Distribution
+from lightautoml.ml_algo.tuning.base import SearchSpace
 from lightautoml.utils.timer import TaskTimer
-from pyspark.ml import Pipeline, Transformer, PipelineModel, Estimator
-from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel
+from pyspark.ml import Estimator
+from pyspark.ml import Pipeline
+from pyspark.ml import PipelineModel
+from pyspark.ml import Transformer
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.classification import LogisticRegressionModel
 from pyspark.ml.feature import VectorAssembler
-from pyspark.ml.regression import LinearRegression, LinearRegressionModel
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.regression import LinearRegressionModel
 from pyspark.sql import functions as sf
 
-from sparklightautoml.ml_algo.base import SparkTabularMLAlgo, SparkMLModel, AveragingTransformer, \
-    ComputationalParameters
-from sparklightautoml.validation.base import SparkBaseTrainValidIterator, split_out_train, split_out_val
+from sparklightautoml.ml_algo.base import AveragingTransformer
+from sparklightautoml.ml_algo.base import ComputationalParameters
+from sparklightautoml.ml_algo.base import SparkMLModel
+from sparklightautoml.ml_algo.base import SparkTabularMLAlgo
+from sparklightautoml.validation.base import SparkBaseTrainValidIterator
+from sparklightautoml.validation.base import split_out_train
+from sparklightautoml.validation.base import split_out_val
+
 from ..dataset.base import SparkDataset
 from ..transformers.base import DropColumnsTransformer
-from ..utils import SparkDataFrame, log_exception
+from ..utils import SparkDataFrame
+from ..utils import log_exception
+
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +108,17 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
         timer: Optional[TaskTimer] = None,
         optimization_search_space: Optional[dict] = None,
         persist_output_dataset: bool = True,
-        computations_settings: Optional[ComputationalParameters] = None
+        computations_settings: Optional[ComputationalParameters] = None,
     ):
         optimization_search_space = optimization_search_space if optimization_search_space else dict()
-        super().__init__(default_params, freeze_defaults, timer,
-                         optimization_search_space, persist_output_dataset, computations_settings)
+        super().__init__(
+            default_params,
+            freeze_defaults,
+            timer,
+            optimization_search_space,
+            persist_output_dataset,
+            computations_settings,
+        )
 
         self._prediction_col = f"prediction_{self._name}"
         self.task = None
@@ -172,12 +197,13 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
 
         return estimators, es
 
-    def fit_predict_single_fold(self,
-                                fold_prediction_column: str,
-                                validation_column: str,
-                                train: SparkDataset,
-                                runtime_settings: Optional[Dict[str, Any]] = None) \
-            -> Tuple[SparkMLModel, SparkDataFrame, str]:
+    def fit_predict_single_fold(
+        self,
+        fold_prediction_column: str,
+        validation_column: str,
+        train: SparkDataset,
+        runtime_settings: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[SparkMLModel, SparkDataFrame, str]:
         logger.info(f"fit_predict single fold in LinearLBGFS. Num of features: {len(self.input_roles.keys())} ")
 
         if self.task is None:
@@ -250,12 +276,14 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
                 ),
             ]
         ]
-        averaging_model = PipelineModel(stages=[
-            self._assembler,
-            *models,
-            avr,
-            self._build_vector_size_hint(self.prediction_feature, self.prediction_role)
-        ])
+        averaging_model = PipelineModel(
+            stages=[
+                self._assembler,
+                *models,
+                avr,
+                self._build_vector_size_hint(self.prediction_feature, self.prediction_role),
+            ]
+        )
         return averaging_model
 
     def _build_averaging_transformer(self) -> Transformer:

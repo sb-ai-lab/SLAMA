@@ -1,9 +1,13 @@
-from typing import Union, Tuple, Optional, Sequence
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
+from typing import Union
 
-from lightautoml.ml_algo.tuning.base import ParamsTuner, DefaultTuner
+from lightautoml.ml_algo.tuning.base import DefaultTuner
+from lightautoml.ml_algo.tuning.base import ParamsTuner
+from lightautoml.pipelines.ml.nested_ml_pipe import NestedTabularMLAlgo
 from lightautoml.pipelines.ml.nested_ml_pipe import (
     NestedTabularMLPipeline as LAMANestedTabularMLPipeline,
-    NestedTabularMLAlgo,
 )
 
 from sparklightautoml.computations.base import ComputationsSettings
@@ -29,13 +33,12 @@ class SparkNestedTabularMLPipeline(SparkMLPipeline, LAMANestedTabularMLPipeline)
         n_folds: Optional[int] = None,
         inner_tune: bool = False,
         refit_tuner: bool = False,
-        computations_settings: Optional[ComputationsSettings] = None
+        computations_settings: Optional[ComputationsSettings] = None,
     ):
         if cv > 1:
             new_ml_algos = []
 
             for n, mt_pair in enumerate(ml_algos):
-
                 try:
                     mod, tuner = mt_pair
                 except (TypeError, ValueError):

@@ -1,46 +1,64 @@
 import logging
 import os
-from copy import deepcopy, copy
-from typing import Optional, Sequence, Iterable, Tuple, List
+
+from copy import copy
+from copy import deepcopy
+from typing import Iterable
+from typing import List
+from typing import Optional
+from typing import Sequence
+from typing import Tuple
 
 import numpy as np
+
 from lightautoml.automl.presets.base import upd_params
 from lightautoml.automl.presets.utils import plot_pdp_with_distribution
 from lightautoml.pipelines.selection.base import ComposedSelector
-from lightautoml.pipelines.selection.importance_based import ModelBasedImportanceEstimator, ImportanceCutoffSelector
-from lightautoml.pipelines.selection.permutation_importance_based import NpIterativeFeatureSelector
+from lightautoml.pipelines.selection.importance_based import ImportanceCutoffSelector
+from lightautoml.pipelines.selection.importance_based import (
+    ModelBasedImportanceEstimator,
+)
+from lightautoml.pipelines.selection.permutation_importance_based import (
+    NpIterativeFeatureSelector,
+)
 from lightautoml.reader.tabular_batch_generator import ReadableToDf
 from lightautoml.utils.timer import TaskTimer
-from pyspark.ml import PipelineModel, Transformer
+from pyspark.ml import Transformer
 from pyspark.sql import SparkSession
-from pyspark.sql import functions as sf, Window
-from pyspark.sql.types import DateType, StringType
+from pyspark.sql import Window
+from pyspark.sql import functions as sf
+from pyspark.sql.types import DateType
+from pyspark.sql.types import StringType
 from tqdm import tqdm
 
 from sparklightautoml.automl.base import ReadableIntoSparkDf
 from sparklightautoml.automl.blend import SparkWeightedBlender
 from sparklightautoml.automl.presets.base import SparkAutoMLPreset
-from sparklightautoml.automl.presets.utils import (
-    calc_feats_permutation_imps,
-    replace_dayofweek_in_date,
-    replace_month_in_date,
-    replace_year_in_date,
-)
-from sparklightautoml.computations.builder import AutoMLComputationsSettings, ComputationsManagerFactory
-from sparklightautoml.dataset.base import SparkDataset, PersistenceManager
+from sparklightautoml.automl.presets.utils import calc_feats_permutation_imps
+from sparklightautoml.automl.presets.utils import replace_dayofweek_in_date
+from sparklightautoml.automl.presets.utils import replace_month_in_date
+from sparklightautoml.automl.presets.utils import replace_year_in_date
+from sparklightautoml.computations.builder import AutoMLComputationsSettings
+from sparklightautoml.computations.builder import ComputationsManagerFactory
+from sparklightautoml.dataset.base import PersistenceManager
+from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.ml_algo.linear_pyspark import SparkLinearLBFGS
 from sparklightautoml.ml_algo.tuning.parallel_optuna import ParallelOptunaTuner
-from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures, SparkLGBAdvancedPipeline
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.pipelines.ml.nested_ml_pipe import SparkNestedTabularMLPipeline
 from sparklightautoml.pipelines.selection.base import BugFixSelectionPipelineWrapper
 from sparklightautoml.pipelines.selection.base import SparkSelectionPipelineWrapper
-from sparklightautoml.pipelines.selection.permutation_importance_based import SparkNpPermutationImportanceEstimator
+from sparklightautoml.pipelines.selection.permutation_importance_based import (
+    SparkNpPermutationImportanceEstimator,
+)
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.utils import SparkDataFrame
+
 
 logger = logging.getLogger(__name__)
 base_dir = os.path.dirname(__file__)
@@ -99,17 +117,27 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         gbm_pipeline_params: Optional[dict] = None,
         linear_pipeline_params: Optional[dict] = None,
         persistence_manager: Optional[PersistenceManager] = None,
-        computation_settings: AutoMLComputationsSettings = ("no_parallelism", -1)
+        computation_settings: AutoMLComputationsSettings = ("no_parallelism", -1),
     ):
         if config_path is None:
             config_path = os.path.join(base_dir, self._default_config_path)
 
-        self._computation_managers_factory = computation_settings \
-            if isinstance(computation_settings, ComputationsManagerFactory) \
+        self._computation_managers_factory = (
+            computation_settings
+            if isinstance(computation_settings, ComputationsManagerFactory)
             else ComputationsManagerFactory(computation_settings)
+        )
 
-        super().__init__(task, timeout, memory_limit, cpu_limit, gpu_ids,
-                         timing_params, config_path, self._computation_managers_factory.get_ml_pipelines_manager())
+        super().__init__(
+            task,
+            timeout,
+            memory_limit,
+            cpu_limit,
+            gpu_ids,
+            timing_params,
+            config_path,
+            self._computation_managers_factory.get_ml_pipelines_manager(),
+        )
 
         self._persistence_manager = persistence_manager or PlainCachePersistenceManager()
 
@@ -173,7 +201,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             self.nested_cv_params["cv"] = 1
 
     def get_time_score(self, n_level: int, model_type: str, nested: Optional[bool] = None):
-
         if nested is None:
             nested = self.general_params["nested_cv"]
 
@@ -260,22 +287,17 @@ class SparkTabularAutoML(SparkAutoMLPreset):
     def get_linear(
         self, n_level: int = 1, pre_selector: Optional[SparkSelectionPipelineWrapper] = None
     ) -> SparkNestedTabularMLPipeline:
-
         # linear model with l2
         time_score = self.get_time_score(n_level, "linear_l2")
         linear_l2_timer = self.timer.get_task_timer("reg_l2", time_score)
-        linear_l2_params = {
-            **self.linear_l2_params
-        }
+        linear_l2_params = {**self.linear_l2_params}
 
         linear_l2_model = SparkLinearLBFGS(
             timer=linear_l2_timer,
             computations_settings=self._computation_managers_factory.get_linear_manager(),
-            **linear_l2_params
+            **linear_l2_params,
         )
-        linear_l2_feats = SparkLinearFeatures(
-            output_categories=True, **self.linear_pipeline_params
-        )
+        linear_l2_feats = SparkLinearFeatures(output_categories=True, **self.linear_pipeline_params)
 
         linear_l2_pipe = SparkNestedTabularMLPipeline(
             [linear_l2_model],
@@ -293,7 +315,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         n_level: int = 1,
         pre_selector: Optional[SparkSelectionPipelineWrapper] = None,
     ):
-
         gbm_feats = SparkLGBAdvancedPipeline(**self.gbm_pipeline_params)
 
         ml_algos = []
@@ -315,7 +336,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                     timeout=self.tuning_params["max_tuning_time"],
                     fit_on_holdout=self.tuning_params["fit_on_holdout"],
                     parallelism=tuner_comp_manager.parallelism,
-                    computations_manager=tuner_comp_manager
+                    computations_manager=tuner_comp_manager,
                 )
                 gbm_model = (gbm_model, gbm_tuner)
 
@@ -328,21 +349,19 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             pre_selection=pre_selector,
             features_pipeline=gbm_feats,
             computations_settings=self._computation_managers_factory.get_ml_algo_manager(),
-            **self.nested_cv_params
+            **self.nested_cv_params,
         )
 
         return gbm_pipe
 
     def _get_boosting_model(self, algo_key: str, gbm_timer: Optional[TaskTimer] = None):
         if algo_key == "lgb":
-            lgb_params = {
-                **self.lgb_params
-            }
+            lgb_params = {**self.lgb_params}
 
             gbm_model = SparkBoostLGBM(
                 timer=gbm_timer,
                 computations_settings=self._computation_managers_factory.get_lgb_manager(),
-                **lgb_params
+                **lgb_params,
             )
             return gbm_model, lgb_params
         elif algo_key == "cb":
@@ -434,7 +453,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
         valid_features: Optional[Sequence[str]] = None,
         log_file: str = None,
         verbose: int = 0,
-        persistence_manager: Optional[PersistenceManager] = None
+        persistence_manager: Optional[PersistenceManager] = None,
     ) -> SparkDataset:
         """Fit and get prediction on validation dataset.
 
@@ -490,7 +509,7 @@ class SparkTabularAutoML(SparkAutoMLPreset):
             cv_iter=cv_iter,
             valid_data=valid_data,
             verbose=verbose,
-            persistence_manager=persistence_manager
+            persistence_manager=persistence_manager,
         )
 
         return oof_pred
@@ -660,7 +679,6 @@ class SparkTabularAutoML(SparkAutoMLPreset):
                 preds = np.squeeze(preds, axis=1)
             ys.append(preds)
         if len(feature_cnt) > n_top_cats:
-
             # unique other categories
             unique_other_categories = [row[feature_name] for row in feature_cnt[n_top_cats:]]
 

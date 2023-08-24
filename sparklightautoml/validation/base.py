@@ -1,20 +1,27 @@
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
 from contextlib import contextmanager
 from copy import copy
-from typing import Tuple, cast, Sequence, Optional, Union, Any
+from typing import Any
+from typing import Optional
+from typing import Tuple
+from typing import Union
+from typing import cast
 
-from lightautoml.dataset.base import LAMLDataset
 from lightautoml.ml_algo.base import MLAlgo
 from lightautoml.ml_algo.tuning.base import ParamsTuner
 from lightautoml.pipelines.features.base import FeaturesPipeline
-from lightautoml.pipelines.selection.base import SelectionPipeline, ImportanceEstimator
+from lightautoml.pipelines.selection.base import ImportanceEstimator
+from lightautoml.pipelines.selection.base import SelectionPipeline
 from lightautoml.validation.base import TrainValidIterator
 from pyspark.sql import functions as sf
 
 from sparklightautoml import VALIDATION_COLUMN
-from sparklightautoml.dataset.base import SparkDataset, Unpersistable
+from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.base import Unpersistable
 from sparklightautoml.pipelines.features.base import SparkFeaturesPipeline
 from sparklightautoml.utils import SparkDataFrame
+
 
 TrainVal = SparkDataset
 
@@ -36,12 +43,14 @@ def split_out_val(sdf: SparkDataFrame, is_val_col: str):
 
 
 class SparkSelectionPipeline(SelectionPipeline, ABC):
-    def __init__(self,
-                 features_pipeline: Optional[FeaturesPipeline] = None,
-                 ml_algo: Optional[Union[MLAlgo, Tuple[MLAlgo, ParamsTuner]]] = None,
-                 imp_estimator: Optional[ImportanceEstimator] = None,
-                 fit_on_holdout: bool = False,
-                 **kwargs: Any):
+    def __init__(
+        self,
+        features_pipeline: Optional[FeaturesPipeline] = None,
+        ml_algo: Optional[Union[MLAlgo, Tuple[MLAlgo, ParamsTuner]]] = None,
+        imp_estimator: Optional[ImportanceEstimator] = None,
+        fit_on_holdout: bool = False,
+        **kwargs: Any,
+    ):
         super().__init__(features_pipeline, ml_algo, imp_estimator, fit_on_holdout, **kwargs)
 
 
@@ -72,11 +81,11 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
         ...
 
     @contextmanager
-    def frozen(self) -> 'SparkBaseTrainValidIterator':
+    def frozen(self) -> "SparkBaseTrainValidIterator":
         yield self.freeze()
 
     @abstractmethod
-    def freeze(self) -> 'SparkBaseTrainValidIterator':
+    def freeze(self) -> "SparkBaseTrainValidIterator":
         ...
 
     @abstractmethod
@@ -110,9 +119,7 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
 
         return train_valid
 
-    def apply_feature_pipeline(
-            self,
-            features_pipeline: SparkFeaturesPipeline) -> "SparkBaseTrainValidIterator":
+    def apply_feature_pipeline(self, features_pipeline: SparkFeaturesPipeline) -> "SparkBaseTrainValidIterator":
         train_valid = copy(self)
         train_valid.train = features_pipeline.fit_transform(train_valid.train)
 
@@ -124,7 +131,8 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
     def _split_by_fold(self, fold: int) -> Tuple[SparkDataset, SparkDataset, SparkDataset]:
         train = cast(SparkDataset, self.train)
         is_val_col = (
-            sf.when(sf.col(self.train.folds_column) != fold, sf.lit(0)).otherwise(sf.lit(1))
+            sf.when(sf.col(self.train.folds_column) != fold, sf.lit(0))
+            .otherwise(sf.lit(1))
             .alias(self.TRAIN_VAL_COLUMN)
         )
 
@@ -138,24 +146,18 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
 
         train_part_ds = cast(SparkDataset, self.train.empty())
         train_part_ds.set_data(
-            train_part_sdf,
-            self.train.features,
-            self.train.roles,
-            name=f"{self.train.name}_train_{fold}"
+            train_part_sdf, self.train.features, self.train.roles, name=f"{self.train.name}_train_{fold}"
         )
 
         valid_part_ds = cast(SparkDataset, self.train.empty())
         valid_part_ds.set_data(
-            valid_part_sdf,
-            self.train.features,
-            self.train.roles,
-            name=f"{self.train.name}_val_{fold}"
+            valid_part_sdf, self.train.features, self.train.roles, name=f"{self.train.name}_val_{fold}"
         )
 
         return train_ds, train_part_ds, valid_part_ds
 
     @contextmanager
-    def _child_persistence_context(self) -> 'SparkBaseTrainValidIterator':
+    def _child_persistence_context(self) -> "SparkBaseTrainValidIterator":
         train_valid = copy(self)
         train = train_valid.train.empty()
         pm = train_valid.train.persistence_manager
@@ -166,7 +168,7 @@ class SparkBaseTrainValidIterator(TrainValidIterator, Unpersistable, ABC):
             train_valid.train.features,
             train_valid.train.roles,
             persistence_manager=child_manager,
-            dependencies=[]
+            dependencies=[],
         )
         train_valid.train = train
 

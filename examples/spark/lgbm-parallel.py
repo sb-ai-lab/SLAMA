@@ -3,52 +3,57 @@ import logging
 import os
 import pickle
 import shutil
+
 from multiprocessing.pool import ThreadPool
-from typing import Tuple, List, Dict, Any
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
 
 # noinspection PyUnresolvedReferences
 from pyspark import inheritable_thread_target
 from pyspark.ml.feature import VectorAssembler
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as sf
-from synapse.ml.lightgbm import LightGBMClassifier, LightGBMRegressor
+from synapse.ml.lightgbm import LightGBMClassifier
+from synapse.ml.lightgbm import LightGBMRegressor
 
-from examples.spark.examples_utils import get_spark_session, get_dataset, prepare_test_and_train
+from examples.spark.examples_utils import get_dataset
+from examples.spark.examples_utils import get_spark_session
+from examples.spark.examples_utils import prepare_test_and_train
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
-from sparklightautoml.transformers.scala_wrappers.balanced_union_partitions_coalescer import \
-    BalancedUnionPartitionsCoalescerTransformer
+from sparklightautoml.transformers.scala_wrappers.balanced_union_partitions_coalescer import (
+    BalancedUnionPartitionsCoalescerTransformer,
+)
 from sparklightautoml.utils import log_exec_timer
+
 
 logger = logging.getLogger(__name__)
 
 
 params = {
-    'learningRate': 0.01,
-    'numLeaves': 32,
-    'featureFraction': 0.7,
-    'baggingFraction': 0.7,
-    'baggingFreq': 1,
-    'maxDepth': -1,
-    'minGainToSplit': 0.0,
-    'maxBin': 255,
-    'minDataInLeaf': 5,
-    'numIterations': 3000,
-    'earlyStoppingRound': 200,
-    'objective': 'binary',
-    'metric': 'auc'
+    "learningRate": 0.01,
+    "numLeaves": 32,
+    "featureFraction": 0.7,
+    "baggingFraction": 0.7,
+    "baggingFreq": 1,
+    "maxDepth": -1,
+    "minGainToSplit": 0.0,
+    "maxBin": 255,
+    "minDataInLeaf": 5,
+    "numIterations": 3000,
+    "earlyStoppingRound": 200,
+    "objective": "binary",
+    "metric": "auc",
 }
 
 
 class ParallelExperiment:
-    def __init__(self,
-                 spark: SparkSession,
-                 dataset_name: str,
-                 partitions_num: int = 4,
-                 seed: int = 42,
-                 cv: int = 5):
+    def __init__(self, spark: SparkSession, dataset_name: str, partitions_num: int = 4, seed: int = 42, cv: int = 5):
         self.spark = spark
         self.dataset_name = dataset_name
         self.partitions_num = partitions_num
@@ -60,15 +65,17 @@ class ParallelExperiment:
         self.metadata_path = os.path.join(self.base_dataset_path, "metadata.pickle")
 
     def prepare_dataset(self, force=True):
-        logger.info(f"Preparing dataset {self.dataset_name}. "
-                    f"Writing train, test and metadata to {self.base_dataset_path}")
+        logger.info(
+            f"Preparing dataset {self.dataset_name}. " f"Writing train, test and metadata to {self.base_dataset_path}"
+        )
 
         if os.path.exists(self.base_dataset_path) and not force:
             logger.info(f"Found existing {self.base_dataset_path}. Skipping writing dataset files")
             return
         elif os.path.exists(self.base_dataset_path):
-            logger.info(f"Found existing {self.base_dataset_path}. "
-                        f"Removing existing files because force is set to True")
+            logger.info(
+                f"Found existing {self.base_dataset_path}. " f"Removing existing files because force is set to True"
+            )
             shutil.rmtree(self.base_dataset_path)
 
         dataset = get_dataset(self.dataset_name)
@@ -93,11 +100,7 @@ class ParallelExperiment:
         train_sdataset.data.write.parquet(self.train_path)
         test_sdataset.data.write.parquet(self.test_path)
 
-        metadata = {
-            "roles": train_sdataset.roles,
-            "task_type": dataset.task_type,
-            "target": dataset.roles["target"]
-        }
+        metadata = {"roles": train_sdataset.roles, "task_type": dataset.task_type, "target": dataset.roles["target"]}
 
         with open(self.metadata_path, "wb") as f:
             pickle.dump(metadata, f)
@@ -127,11 +130,11 @@ class ParallelExperiment:
 
         train_df.sql_ctx.sparkSession.sparkContext.setLocalProperty("spark.scheduler.mode", "FAIR")
 
-        prediction_col = 'LightGBM_prediction_0'
+        prediction_col = "LightGBM_prediction_0"
         if task_type in ["binary", "multiclass"]:
-            params["rawPredictionCol"] = 'raw_prediction'
+            params["rawPredictionCol"] = "raw_prediction"
             params["probabilityCol"] = prediction_col
-            params["predictionCol"] = 'prediction'
+            params["predictionCol"] = "prediction"
             params["isUnbalance"] = True
         else:
             params["predictionCol"] = prediction_col
@@ -157,9 +160,7 @@ class ParallelExperiment:
                 del params["lambdaL2"]
 
         assembler = VectorAssembler(
-            inputCols=list(md['roles'].keys()),
-            outputCol=f"LightGBM_vassembler_features",
-            handleInvalid="keep"
+            inputCols=list(md["roles"].keys()), outputCol="LightGBM_vassembler_features", handleInvalid="keep"
         )
 
         lgbm_booster = LightGBMRegressor if task_type == "reg" else LightGBMClassifier
@@ -167,39 +168,38 @@ class ParallelExperiment:
         lgbm = lgbm_booster(
             **params,
             featuresCol=assembler.getOutputCol(),
-            labelCol=md['target'],
-            validationIndicatorCol='is_val',
+            labelCol=md["target"],
+            validationIndicatorCol="is_val",
             verbosity=1,
             useSingleDatasetMode=True,
             isProvideTrainingMetric=True,
             chunkSize=4_000_000,
             useBarrierExecutionMode=True,
             numTasks=2,
-            numThreads=2
+            numThreads=2,
         )
 
         if task_type == "reg":
             lgbm.setAlpha(0.5).setLambdaL1(0.0).setLambdaL2(0.0)
 
-        train_df = train_df.withColumn('is_val', sf.col('reader_fold_num') == fold)
+        train_df = train_df.withColumn("is_val", sf.col("reader_fold_num") == fold)
 
-        valid_df = train_df.where('is_val')
-        train_df = train_df.where(~sf.col('is_val'))
+        valid_df = train_df.where("is_val")
+        train_df = train_df.where(~sf.col("is_val"))
         full_data = valid_df.unionByName(train_df)
         full_data = BalancedUnionPartitionsCoalescerTransformer().transform(full_data)
 
         transformer = lgbm.fit(assembler.transform(full_data))
         preds_df = transformer.transform(assembler.transform(test_df))
 
-        logger.info(f"Props #{fold}:"
-                    f" {full_data.sql_ctx.sparkSession.sparkContext.getLocalProperty('spark.task.cpus')}")
+        logger.info(
+            f"Props #{fold}:" f" {full_data.sql_ctx.sparkSession.sparkContext.getLocalProperty('spark.task.cpus')}"
+        )
 
         score = SparkTask(task_type).get_dataset_metric()
         metric_value = score(
             preds_df.select(
-                SparkDataset.ID_COLUMN,
-                sf.col(md['target']).alias('target'),
-                sf.col(prediction_col).alias('prediction')
+                SparkDataset.ID_COLUMN, sf.col(md["target"]).alias("target"), sf.col(prediction_col).alias("prediction")
             )
         )
 
@@ -211,13 +211,7 @@ class ParallelExperiment:
         with log_exec_timer("Parallel experiment runtime"):
             logger.info("Starting to run the experiment")
 
-            tasks = [
-                functools.partial(
-                    self.train_model,
-                    fold
-                )
-                for fold in range(parallelism)
-            ]
+            tasks = [functools.partial(self.train_model, fold) for fold in range(parallelism)]
 
             pool = ThreadPool(processes=parallelism)
             tasks = map(inheritable_thread_target, tasks)

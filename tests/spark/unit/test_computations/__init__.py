@@ -1,5 +1,7 @@
 import collections
 import threading
+import time
+
 from typing import Optional
 
 from sparklightautoml.computations.base import ComputationSlot
@@ -11,10 +13,13 @@ class TestWorkerException(Exception):
         super(TestWorkerException, self).__init__(f"Intentional exception in task {id}")
 
 
-def build_func(acc: collections.deque, seq_id: int):
+def build_func(acc: collections.deque, seq_id: int, delay: Optional[float] = None):
     def _func() -> int:
         acc.append(threading.get_ident())
+        if delay:
+            time.sleep(delay)
         return seq_id
+
     return _func
 
 
@@ -22,14 +27,15 @@ def build_func_with_exception(acc: collections.deque, seq_id: int):
     def _func():
         acc.append(threading.get_ident())
         raise TestWorkerException(seq_id)
+
     return _func
 
 
 def build_func_on_dataset(
-        acc: collections.deque,
-        seq_id: int,
-        use_location_prefs_mode: bool = False,
-        base_dataset: Optional[SparkDataset] = None
+    acc: collections.deque,
+    seq_id: int,
+    use_location_prefs_mode: bool = False,
+    base_dataset: Optional[SparkDataset] = None,
 ):
     def _func(slot: ComputationSlot) -> int:
         assert slot.dataset is not None
@@ -44,6 +50,7 @@ def build_func_on_dataset(
             assert slot.dataset.roles == base_dataset.roles
         acc.append(threading.get_ident())
         return seq_id
+
     return _func
 
 
@@ -53,11 +60,12 @@ def build_fold_func(acc: collections.deque, base_dataset: Optional[SparkDataset]
         if base_dataset is not None:
             assert slot.dataset.uid != base_dataset.uid
             assert slot.dataset.data.count() > 0
-            assert [c for c in slot.dataset.data.columns if c != 'is_val'] == base_dataset.data.columns
+            assert [c for c in slot.dataset.data.columns if c != "is_val"] == base_dataset.data.columns
             assert slot.dataset.features == base_dataset.features
             assert slot.dataset.roles == base_dataset.roles
         acc.append(threading.get_ident())
         return fold_id
+
     return _func
 
 
@@ -65,4 +73,5 @@ def build_idx_func(acc: collections.deque):
     def _func(idx: int) -> int:
         acc.append(threading.get_ident())
         return idx
+
     return _func

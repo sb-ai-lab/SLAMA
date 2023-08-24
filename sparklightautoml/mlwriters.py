@@ -3,6 +3,7 @@ import logging
 import os
 import pickle
 import time
+
 from collections import namedtuple
 from typing import Union
 
@@ -17,6 +18,7 @@ from pyspark.sql.session import SparkSession
 from synapse.ml.lightgbm import LightGBMClassificationModel
 from synapse.ml.lightgbm import LightGBMRegressionModel
 from synapse.ml.onnx import ONNXModel
+
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +164,9 @@ class SparkLabelEncoderTransformerMLReader(MLReader):
         pickled_instance = df.rdd.map(lambda row: bytes(row.pipeline)).first()
         instance = pickle.loads(pickled_instance)
 
-        from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import LAMLStringIndexerModel
+        from sparklightautoml.transformers.scala_wrappers.laml_string_indexer import (
+            LAMLStringIndexerModel,
+        )
 
         indexer_model = LAMLStringIndexerModel.load(os.path.join(path, "indexer_model"))
         instance.indexer_model = indexer_model
@@ -269,9 +273,13 @@ class LightGBMModelWrapperMLReader(MLReader):
 
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
         if metadata["modelClass"].endswith("LightGBMRegressionModel"):
-            from synapse.ml.lightgbm.LightGBMRegressionModel import LightGBMRegressionModel as model_class
+            from synapse.ml.lightgbm.LightGBMRegressionModel import (
+                LightGBMRegressionModel as model_class,
+            )
         elif metadata["modelClass"].endswith("LightGBMClassificationModel"):
-            from synapse.ml.lightgbm.LightGBMClassificationModel import LightGBMClassificationModel as model_class
+            from synapse.ml.lightgbm.LightGBMClassificationModel import (
+                LightGBMClassificationModel as model_class,
+            )
         else:
             raise NotImplementedError("Unknown model type.")
 

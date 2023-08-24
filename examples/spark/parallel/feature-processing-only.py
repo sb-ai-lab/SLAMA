@@ -1,5 +1,7 @@
-from examples.spark.examples_utils import get_spark_session, get_dataset
-from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline, SparkLGBSimpleFeatures
+from examples.spark.examples_utils import get_dataset
+from examples.spark.examples_utils import get_spark_session
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBAdvancedPipeline
+from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.pipelines.features.linear_pipeline import SparkLinearFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
 from sparklightautoml.tasks.base import SparkTask
@@ -8,7 +10,7 @@ from sparklightautoml.tasks.base import SparkTask
 feature_pipelines = {
     "linear": SparkLinearFeatures(),
     "lgb_simple": SparkLGBSimpleFeatures(),
-    "lgb_adv": SparkLGBAdvancedPipeline()
+    "lgb_adv": SparkLGBAdvancedPipeline(),
 }
 
 
@@ -32,4 +34,4 @@ if __name__ == "__main__":
     ds = feature_pipe.fit_transform(ds)
 
     # save processed data
-    ds.save(f"/tmp/{dataset_name}__{feat_pipe}__features.dataset", save_mode='overwrite')
+    ds.save(f"/tmp/{dataset_name}__{feat_pipe}__features.dataset", save_mode="overwrite")

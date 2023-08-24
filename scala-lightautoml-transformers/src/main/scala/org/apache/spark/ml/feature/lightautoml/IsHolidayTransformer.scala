@@ -161,4 +161,3 @@ object IsHolidayTransformer extends MLReadable[IsHolidayTransformer] {
     }
   }
 }
-

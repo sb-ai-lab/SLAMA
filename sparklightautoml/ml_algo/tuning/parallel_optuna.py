@@ -1,13 +1,19 @@
 import logging
+
 from copy import deepcopy
-from typing import Optional, Tuple, Callable, Union
+from typing import Callable
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import optuna
-from lightautoml.ml_algo.tuning.optuna import OptunaTuner, TunableAlgo
+
+from lightautoml.ml_algo.tuning.optuna import OptunaTuner
+from lightautoml.ml_algo.tuning.optuna import TunableAlgo
 from lightautoml.validation.base import HoldoutIterator
 
-from sparklightautoml.computations.base import ComputationsSettings, \
-    ComputationsSession
+from sparklightautoml.computations.base import ComputationsSession
+from sparklightautoml.computations.base import ComputationsSettings
 from sparklightautoml.computations.builder import build_computations_manager
 from sparklightautoml.computations.sequential import SequentialComputationsManager
 from sparklightautoml.computations.utils import deecopy_tviter_without_dataset
@@ -15,38 +21,42 @@ from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.base import SparkTabularMLAlgo
 from sparklightautoml.validation.base import SparkBaseTrainValidIterator
 
+
 logger = logging.getLogger(__name__)
 
 
 class ParallelOptunaTuner(OptunaTuner):
-    def __init__(self,
-                 timeout: Optional[int] = 1000,
-                 n_trials: Optional[int] = 100,
-                 direction: Optional[str] = "maximize",
-                 fit_on_holdout: bool = True,
-                 random_state: int = 42,
-                 parallelism: int = 1,
-                 computations_manager: Optional[ComputationsSettings] = None):
+    def __init__(
+        self,
+        timeout: Optional[int] = 1000,
+        n_trials: Optional[int] = 100,
+        direction: Optional[str] = "maximize",
+        fit_on_holdout: bool = True,
+        random_state: int = 42,
+        parallelism: int = 1,
+        computations_manager: Optional[ComputationsSettings] = None,
+    ):
         super().__init__(timeout, n_trials, direction, fit_on_holdout, random_state)
         self._parallelism = parallelism
         self._computations_manager = build_computations_manager(computations_settings=computations_manager)
         self._session: Optional[ComputationsSession] = None
 
-    def fit(self, ml_algo: SparkTabularMLAlgo, train_valid_iterator: Optional[SparkBaseTrainValidIterator] = None) \
-            -> Tuple[Optional[SparkTabularMLAlgo], Optional[SparkDataset]]:
+    def fit(
+        self, ml_algo: SparkTabularMLAlgo, train_valid_iterator: Optional[SparkBaseTrainValidIterator] = None
+    ) -> Tuple[Optional[SparkTabularMLAlgo], Optional[SparkDataset]]:
         """Tune model.
 
-               Args:
-                   ml_algo: Algo that is tuned.
-                   train_valid_iterator: Classic cv-iterator.
+        Args:
+            ml_algo: Algo that is tuned.
+            train_valid_iterator: Classic cv-iterator.
 
-               Returns:
-                   Tuple (None, None) if an optuna exception raised
-                   or ``fit_on_holdout=True`` and ``train_valid_iterator`` is
-                   not :class:`~lightautoml.validation.base.HoldoutIterator`.
-                   Tuple (MlALgo, preds_ds) otherwise.
+        Returns:
+            Tuple (None, None) if an optuna exception raised
+            or ``fit_on_holdout=True`` and ``train_valid_iterator`` is
+            not :class:`~lightautoml.validation.base.HoldoutIterator`.
+            Tuple (MlALgo, preds_ds) otherwise.
 
-               """
+        """
         assert not ml_algo.is_fitted, "Fitted algo cannot be tuned."
 
         estimated_tuning_time = ml_algo.timer.estimate_tuner_time(len(train_valid_iterator))
@@ -82,7 +92,6 @@ class ParallelOptunaTuner(OptunaTuner):
             )
 
         try:
-
             self._optimize(ml_algo, train_valid_iterator, update_trial_time)
 
             # need to update best params here
@@ -107,11 +116,12 @@ class ParallelOptunaTuner(OptunaTuner):
             logger.error("Error during parameters optimization", exc_info=True)
             raise
 
-    def _optimize(self,
-                  ml_algo: SparkTabularMLAlgo,
-                  train_valid_iterator: SparkBaseTrainValidIterator,
-                  update_trial_time: Callable[[optuna.study.Study, optuna.trial.FrozenTrial], None]):
-
+    def _optimize(
+        self,
+        ml_algo: SparkTabularMLAlgo,
+        train_valid_iterator: SparkBaseTrainValidIterator,
+        update_trial_time: Callable[[optuna.study.Study, optuna.trial.FrozenTrial], None],
+    ):
         sampler = optuna.samplers.TPESampler(seed=self.random_state)
         self.study = optuna.create_study(direction=self.direction, sampler=sampler)
 
@@ -132,16 +142,14 @@ class ParallelOptunaTuner(OptunaTuner):
                 n_jobs=self._parallelism,
                 n_trials=self.n_trials,
                 timeout=self.timeout,
-                callbacks=[update_trial_time]
+                callbacks=[update_trial_time],
             )
 
         self._session = None
 
-    def _get_objective(self,
-                       ml_algo: TunableAlgo,
-                       estimated_n_trials: int,
-                       train_valid_iterator: SparkBaseTrainValidIterator) \
-            -> Callable[[optuna.trial.Trial], Union[float, int]]:
+    def _get_objective(
+        self, ml_algo: TunableAlgo, estimated_n_trials: int, train_valid_iterator: SparkBaseTrainValidIterator
+    ) -> Callable[[optuna.trial.Trial], Union[float, int]]:
         assert isinstance(ml_algo, SparkTabularMLAlgo)
 
         def objective(trial: optuna.trial.Trial) -> float:
@@ -149,8 +157,7 @@ class ParallelOptunaTuner(OptunaTuner):
                 assert slot.dataset is not None
                 _ml_algo = deepcopy(ml_algo)
                 _ml_algo.computations_manager = SequentialComputationsManager(
-                    num_tasks=slot.num_tasks,
-                    num_threads_per_executor=slot.num_threads_per_executor
+                    num_tasks=slot.num_tasks, num_threads_per_executor=slot.num_threads_per_executor
                 )
                 tv_iter = deecopy_tviter_without_dataset(train_valid_iterator)
                 tv_iter.train = slot.dataset

@@ -1,17 +1,20 @@
-from pyspark import since, keyword_only, SparkContext
-from pyspark.ml.param.shared import (
-    HasInputCol,
-    HasOutputCol,
-    HasInputCols,
-    HasOutputCols,
-    HasHandleInvalid,
-    TypeConverters,
-    Param,
-    Params,
-)
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
+from pyspark import SparkContext
+from pyspark import keyword_only
+from pyspark import since
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.param.shared import HasHandleInvalid
+from pyspark.ml.param.shared import HasInputCol
+from pyspark.ml.param.shared import HasInputCols
+from pyspark.ml.param.shared import HasOutputCol
+from pyspark.ml.param.shared import HasOutputCols
+from pyspark.ml.param.shared import Param
+from pyspark.ml.param.shared import Params
+from pyspark.ml.param.shared import TypeConverters
+from pyspark.ml.util import JavaMLReadable
+from pyspark.ml.util import JavaMLWritable
+from pyspark.ml.wrapper import JavaEstimator
+from pyspark.ml.wrapper import JavaModel
+from pyspark.ml.wrapper import JavaParams
 
 from sparklightautoml.mlwriters import CommonJavaToPythonMLReadable
 
@@ -193,7 +196,6 @@ class LAMLStringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, Jav
         freqLabel=False,
         nanLast=False
     ):
-
         """
         setParams(self, \\*, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
                   handleInvalid="error", stringOrderType="frequencyDesc")
@@ -274,9 +276,7 @@ class LAMLStringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, Jav
         return self._set(nanLast=value)
 
 
-class LAMLStringIndexerModel(
-    JavaModel, _StringIndexerModelParams, CommonJavaToPythonMLReadable, JavaMLWritable
-):
+class LAMLStringIndexerModel(JavaModel, _StringIndexerModelParams, CommonJavaToPythonMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StringIndexer`.
 
