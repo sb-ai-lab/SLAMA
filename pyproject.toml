@@ -17,7 +17,7 @@ authors = [
 readme = "README.md"
 license = "Apache-2.0"
 homepage = "https://lightautoml.readthedocs.io/en/latest/"
-repository = "https://github.com/fonhorst/LightAutoML_Spark"
+repository = "https://github.com/sb-ai-lab/SLAMA"
 classifiers = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
