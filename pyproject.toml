@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "SparkLightAutoML_DEV"
-version = "0.3.2"
+name = "SparkLightAutoML"
+version = "0.4.0"
 description = "Spark-based distribution version of fast and customizable framework for automatic ML model creation (AutoML)"
 authors = [
     "Alexander Ryzhkov <alexmryzhkov@gmail.com>",
