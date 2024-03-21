@@ -12,8 +12,17 @@ from typing import Union
 
 import numpy as np
 
-from lightautoml.ml_algo.tuning.base import Distribution
-from lightautoml.ml_algo.tuning.base import SearchSpace
+try:
+    # lightautoml version < 0.3.7.3
+    from lightautoml.ml_algo.tuning.base import Distribution
+    from lightautoml.ml_algo.tuning.base import SearchSpace
+    USE_OLD_TUNING_CLASSES = True
+
+except ImportError:
+     # lightautoml version >= 0.3.7.3
+    from lightautoml.ml_algo.tuning.base import Uniform
+    USE_OLD_TUNING_CLASSES = False
+
 from lightautoml.utils.timer import TaskTimer
 from pyspark.ml import Estimator
 from pyspark.ml import Pipeline
@@ -142,11 +151,17 @@ class SparkLinearLBFGS(SparkTabularMLAlgo):
 
         """
         optimization_search_space = dict()
-        optimization_search_space["regParam"] = SearchSpace(
-            Distribution.UNIFORM,
-            low=1e-5,
-            high=100000,
-        )
+        if USE_OLD_TUNING_CLASSES:
+            optimization_search_space["regParam"] = SearchSpace(
+                Distribution.UNIFORM,
+                low=1e-5,
+                high=100000,
+            )
+        else:
+            optimization_search_space["regParam"] = Uniform(
+                low=1e-5,
+                high=100000,
+            )
 
         return optimization_search_space
 
