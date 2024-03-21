@@ -16,18 +16,18 @@ from typing import cast
 import lightgbm as lgb
 import pandas as pd
 import pyspark.sql.functions as sf
-import lightautoml
-LIGHTAUTOML_VERSION = lightautoml.__version__
 
 try:
     # lightautoml version < 0.3.7.3
     from lightautoml.ml_algo.tuning.base import Distribution
     from lightautoml.ml_algo.tuning.base import SearchSpace
+    USE_OLD_TUNING_CLASSES = True
 
 except ImportError:
-     # lightautoml version >= 0.3.7.3
+    # lightautoml version >= 0.3.7.3
     from lightautoml.ml_algo.tuning.base import Choice
     from lightautoml.ml_algo.tuning.base import Uniform
+    USE_OLD_TUNING_CLASSES = False
 
 from lightautoml.pipelines.selection.base import ImportanceEstimator
 from lightautoml.utils.timer import TaskTimer
@@ -346,7 +346,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
 
         optimization_search_space = dict()
 
-        if LIGHTAUTOML_VERSION < '0.3.7.3':
+        if USE_OLD_TUNING_CLASSES:
             optimization_search_space["featureFraction"] = SearchSpace(
                 Distribution.UNIFORM,
                 low=0.5,
@@ -389,45 +389,23 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
                     high=10.0,
                 )
         else:
-            optimization_search_space["featureFraction"] = Uniform(
-                low=0.5,
-                high=1.0,
-            )
+            optimization_search_space["featureFraction"] = Uniform(low=0.5, high=1.0)
             
-            optimization_search_space["numLeaves"] = Uniform(
-                low=4,
-                high=255,
-                q = 1
-            )
+            optimization_search_space["numLeaves"] = Uniform(low=4, high=255, q=1)
 
             if self.task.name == "binary" or self.task.name == "multiclass":
                 optimization_search_space["isUnbalance"] = Choice(choices=[0, 1])
 
             if estimated_n_trials > 30:
-                optimization_search_space["baggingFraction"] = Uniform(
-                    low=0.5,
-                    high=1.0,
-                )
+                optimization_search_space["baggingFraction"] = Uniform(low=0.5, high=1.0)
 
-                optimization_search_space["minSumHessianInLeaf"] = Uniform(
-                    low=1e-3,
-                    high=10.0,
-                    log=True
-                )
+                optimization_search_space["minSumHessianInLeaf"] = Uniform(low=1e-3, high=10.0, log=True)
 
             if estimated_n_trials > 100:
                 if self.task.name == "reg":
-                    optimization_search_space["alpha"] = Uniform(
-                        low=1e-8,
-                        high=10.0,
-                        log=True
-                    )
+                    optimization_search_space["alpha"] = Uniform(low=1e-8, high=10.0, log=True)
 
-                optimization_search_space["lambdaL1"] = Uniform(
-                    low=1e-8,
-                    high=10.0,
-                    log=True
-                )
+                optimization_search_space["lambdaL1"] = Uniform(low=1e-8, high=10.0, log=True)
 
         return optimization_search_space
 
