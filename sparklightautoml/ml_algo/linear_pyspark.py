@@ -12,15 +12,18 @@ from typing import Union
 
 import numpy as np
 
+
 try:
     # lightautoml version < 0.3.7.3
     from lightautoml.ml_algo.tuning.base import Distribution
     from lightautoml.ml_algo.tuning.base import SearchSpace
+
     USE_OLD_TUNING_CLASSES = True
 
 except ImportError:
-     # lightautoml version >= 0.3.7.3
+    # lightautoml version >= 0.3.7.3
     from lightautoml.ml_algo.tuning.base import Uniform
+
     USE_OLD_TUNING_CLASSES = False
 
 from lightautoml.utils.timer import TaskTimer

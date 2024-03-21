@@ -17,16 +17,19 @@ import lightgbm as lgb
 import pandas as pd
 import pyspark.sql.functions as sf
 
+
 try:
     # lightautoml version < 0.3.7.3
     from lightautoml.ml_algo.tuning.base import Distribution
     from lightautoml.ml_algo.tuning.base import SearchSpace
+
     USE_OLD_TUNING_CLASSES = True
 
 except ImportError:
     # lightautoml version >= 0.3.7.3
     from lightautoml.ml_algo.tuning.base import Choice
     from lightautoml.ml_algo.tuning.base import Uniform
+
     USE_OLD_TUNING_CLASSES = False
 
 from lightautoml.pipelines.selection.base import ImportanceEstimator
@@ -390,7 +393,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
                 )
         else:
             optimization_search_space["featureFraction"] = Uniform(low=0.5, high=1.0)
-            
+
             optimization_search_space["numLeaves"] = Uniform(low=4, high=255, q=1)
 
             if self.task.name == "binary" or self.task.name == "multiclass":
