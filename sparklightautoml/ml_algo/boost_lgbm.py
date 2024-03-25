@@ -397,7 +397,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
             optimization_search_space["numLeaves"] = Uniform(low=4, high=255, q=1)
 
             if self.task.name == "binary" or self.task.name == "multiclass":
-                optimization_search_space["isUnbalance"] = Choice(choices=[0, 1])
+                optimization_search_space["isUnbalance"] = Choice(options=[0, 1])
 
             if estimated_n_trials > 30:
                 optimization_search_space["baggingFraction"] = Uniform(low=0.5, high=1.0)
