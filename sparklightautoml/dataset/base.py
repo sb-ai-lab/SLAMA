@@ -620,7 +620,9 @@ class SparkDataset(LAMLDataset, Unpersistable):
         save_mode: str = "error",
         file_format: str = "parquet",
         file_format_options: Optional[Dict[str, Any]] = None,
+        num_partitions: Optional[int] = None
     ):
+        assert not num_partitions or num_partitions > 0
         metadata_file_path = os.path.join(path, f"metadata.{file_format}")
         file_path = os.path.join(path, f"data.{file_format}")
         file_format_options = file_format_options or dict()
@@ -644,8 +646,11 @@ class SparkDataset(LAMLDataset, Unpersistable):
         # fix name of columns: parquet cannot have columns with '(' or ')' in the name
         name_fixed_cols = (sf.col(c).alias(c.replace("(", "[").replace(")", "]")) for c in self.data.columns)
         # write dataframe with fixed column names
+        data = self.data.select(*name_fixed_cols)
+        if num_partitions:
+            data = data.repartition(num_partitions)
         (
-            self.data.select(*name_fixed_cols)
+            data
             .write.format(file_format)
             .mode(save_mode)
             .options(**file_format_options)

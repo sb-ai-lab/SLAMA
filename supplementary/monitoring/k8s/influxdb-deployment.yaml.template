@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb
+spec:
+  selector:
+    matchLabels:
+      app: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      containers:
+      - name: influxdb
+        image: influxdb:1.8
+        ports:
+        - containerPort: 8086
+        env:
+        - name: INFLUXDB_DB
+          value: "${INFLUXDB_DATABASE_NAME}"
+        - name: INFLUXDB_ADMIN_USER
+          value: "${INFLUXDB_ADMIN_USER}"
+        - name: INFLUXDB_ADMIN_PASSWORD
+          value: "${INFLUXDB_ADMIN_PASSWORD}"
+        volumeMounts:
+        - name: influxdb-storage
+          mountPath: /var/lib/influxdb
+      volumes:
+      - name: influxdb-storage
+        hostPath:
+          path: ${INFLUXDB_DATA_PATH}
+          type: DirectoryOrCreate

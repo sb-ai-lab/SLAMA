@@ -1,6 +1,5 @@
 import logging
 import os
-
 from typing import Dict
 from typing import List
 from uuid import uuid4
@@ -21,7 +20,6 @@ from sparklightautoml.mlwriters import СommonPickleMLReader
 from sparklightautoml.mlwriters import СommonPickleMLWriter
 from sparklightautoml.transformers.base import SparkBaseTransformer
 from sparklightautoml.utils import SparkDataFrame
-
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +43,8 @@ class TargetEncoderTransformer(
         input_cols: List[str],
         output_cols: List[str],
     ):
+        logger.info("Creating TargetEncoderTransformer")
+
         uid = f"TargetEncoderTransformer_{str(uuid4()).replace('-', '_')}"
         _java_obj = cls._new_java_obj(
             "org.apache.spark.ml.feature.lightautoml.TargetEncoderTransformer",

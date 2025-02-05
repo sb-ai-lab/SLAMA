@@ -1,0 +1,38 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: slama
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: slama
+  name: spark
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: slama
+  name: spark-executor-creator
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "pods/exec", "services", "configmaps", "persistentvolumeclaims" ]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete", "deletecollection"]
+- apiGroups: ["*"]
+  resources: ["pods", "pods/log", "pods/exec", "services", "configmaps", "persistentvolumeclaims" ]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete", "deletecollection"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: slama
+  name: spark-binding
+subjects:
+- kind: ServiceAccount
+  name: spark
+roleRef:
+  kind: Role
+  name: spark-executor-creator
+  apiGroup: rbac.authorization.k8s.io

@@ -76,7 +76,7 @@ def create_spark_session(warehouse_path: str, spark_local_dir: str):
         .master("local[4]")
         .config("spark.driver.memory", "2g")
         .config("spark.jars", JAR_PATH)
-        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.11.1")
+        .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:1.0.8")
         .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
         .config("spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
         .config("spark.executor.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")

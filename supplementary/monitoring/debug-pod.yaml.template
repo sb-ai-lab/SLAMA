@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-pod
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ['sleep', '3600']
+    volumeMounts:
+    - name: storage-volume
+      mountPath: /data
+  volumes:
+  - name: storage-volume
+    hostPath:
+      path: ${DEBUG_POD_STORAGE_PATH}
+      type: Directory

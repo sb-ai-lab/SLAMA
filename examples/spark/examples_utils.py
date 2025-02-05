@@ -1,4 +1,5 @@
 import inspect
+import pathlib
 import os
 
 from dataclasses import dataclass
@@ -18,7 +19,9 @@ from sparklightautoml.utils import get_current_session
 
 BUCKET_NUMS = 6
 PERSISTENCE_MANAGER_ENV_VAR = "PERSISTENCE_MANAGER"
-BASE_DATASETS_PATH = "file:///opt/spark_data/"
+
+BASE_HDFS_PREFIX = os.environ.get("BASE_HDFS_PREFIX", "")
+BASE_DATASETS_PATH = os.path.join(pathlib.Path(__file__).parent.parent.resolve(), 'data')
 
 
 @dataclass(frozen=True)
@@ -29,10 +32,15 @@ class Dataset:
     dtype: Dict[str, str] = field(default_factory=dict)
     file_format: str = "csv"
     file_format_options: Dict[str, Any] = field(default_factory=lambda: {"header": True, "escape": '"'})
+    remove_service_columns: bool = False
 
     def load(self) -> SparkDataFrame:
         spark = get_current_session()
-        return spark.read.format(self.file_format).options(**self.file_format_options).load(self.path)
+        df = spark.read.format(self.file_format).options(**self.file_format_options).load(self.path)
+        if self.remove_service_columns:
+            cols = [c for c in df.columns if c not in ['_id', 'reader_fold_num']]
+            df = df.select(*cols)
+        return df
 
 
 def ds_path(rel_path: str) -> str:
@@ -58,6 +66,7 @@ used_cars_params = {
             "main_picture_url",
             "interior_color",
             "exterior_color",
+            "vin"
         ],
         "numeric": ["latitude", "longitude", "mileage"],
     },
@@ -75,12 +84,49 @@ used_cars_params = {
     },
 }
 
+
+used_cars_preproc_params = {
+    "remove_service_columns": True,
+    "file_format": "parquet",
+    "task_type": "reg",
+    "roles": {
+        "target": "price",
+    }
+}
+
 DATASETS = {
-    "used_cars_dataset": Dataset(path=ds_path("small_used_cars_data.csv"), **used_cars_params),
-    "used_cars_dataset_1x": Dataset(path=ds_path("derivative_datasets/1x_dataset.csv"), **used_cars_params),
-    "used_cars_dataset_4x": Dataset(path=ds_path("derivative_datasets/4x_dataset.csv"), **used_cars_params),
+    # HDFS-located datasets
+    "hdfs_lama_test_dataset": Dataset(
+        path=f"{BASE_HDFS_PREFIX}/opt/spark_data/sampled_app_train.csv", task_type="binary", roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
+    ),
+    "hdfs_used_cars_dataset": Dataset(
+        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/CSV/used_cars_dataset.csv",  **used_cars_params
+    ),
+    "hdfs_used_cars_dataset_10x": Dataset(
+        path=f"{BASE_HDFS_PREFIX}/opt/spark_data/used_cars_10x_dataset.csv", **used_cars_params
+    ),
+    "hdfs_used_cars_dataset_100x": Dataset(
+        path=f"{BASE_HDFS_PREFIX}/opt/spark_data/used_cars_100x_dataset.csv", **used_cars_params
+    ),
+    "hdfs_small_used_cars_dataset_preproc": Dataset(
+        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/small_used_cars_dataset.slama/data.parquet",
+        **used_cars_preproc_params
+    ),
+    "hdfs_used_cars_dataset_100x_preproc": Dataset(
+        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/used_cars_dataset_100x.slama/data.parquet",
+        **used_cars_preproc_params
+    ),
+    # local datasets
+    "small_used_cars_dataset": Dataset(path=ds_path("small_used_cars_data.csv"), **used_cars_params),
+    "used_cars_dataset": Dataset(path=ds_path("used_cars_data.csv"), **used_cars_params),
+    # "used_cars_dataset_1x": Dataset(path=ds_path("derivative_datasets/1x_dataset.csv"), **used_cars_params),
+    "used_cars_dataset_4x": Dataset(path=ds_path("used_cars_data_4x_2.csv"), **used_cars_params),
+    "used_cars_dataset_10x": Dataset(path=ds_path("used_cars_data_10x_2.csv"), **used_cars_params),
+    "used_cars_dataset_40x": Dataset(path=ds_path("used_cars_40x_dataset.csv"), **used_cars_params),
+    "used_cars_dataset_100x": Dataset(path=ds_path("used_cars_100x_dataset.csv"), **used_cars_params),
     "lama_test_dataset": Dataset(
         path=ds_path("sampled_app_train.csv"), task_type="binary", roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
+        # path=ds_path("100k_sampled_app_train.csv"), task_type="binary", roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
     ),
     # https://www.openml.org/d/4549
     "buzz_dataset": Dataset(
@@ -95,6 +141,12 @@ DATASETS = {
     "company_bankruptcy_dataset": Dataset(
         path=ds_path("company_bankruptcy_prediction_data.csv"), task_type="binary", roles={"target": "Bankrupt?"}
     ),
+    "company_bankruptcy_dataset_100x": Dataset(
+        path=ds_path("company_bankruptcy_prediction_data_100x.csv"), task_type="binary", roles={"target": "Bankrupt?"}
+    ),
+    "company_bankruptcy_dataset_10000x": Dataset(
+        path=ds_path("company_bankruptcy_prediction_data_100x.csv"), task_type="binary", roles={"target": "Bankrupt?"}
+    ),
 }
 
 
@@ -104,29 +156,42 @@ def get_dataset(name: str) -> Dataset:
 
 
 def prepare_test_and_train(
-    dataset: Dataset, seed: int, test_size: float = 0.2
+    dataset: Dataset, seed: int, test_size: float = 0.2, partitions_coefficient: int = 1
 ) -> Tuple[SparkDataFrame, SparkDataFrame]:
     assert 0 <= test_size <= 1
 
     spark = get_current_session()
 
-    execs = int(spark.conf.get("spark.executor.instances", "1"))
-    cores = int(spark.conf.get("spark.executor.cores", "8"))
+    execs = int(os.getenv('SPARK_EXECUTOR_INSTANCES', spark.conf.get("spark.executor.instances", "1")))
+    cores = int(os.getenv('SPARK_EXECUTOR_CORES', spark.conf.get("spark.executor.cores", "8")))
 
     data = dataset.load()
 
-    data = data.repartition(execs * cores).cache()
+    data = data.repartition(execs * cores * partitions_coefficient).cache()
     data.write.mode("overwrite").format("noop").save()
 
     train_data, test_data = data.randomSplit([1 - test_size, test_size], seed)
-    train_data = train_data.cache()
-    test_data = test_data.cache()
-    train_data.write.mode("overwrite").format("noop").save()
-    test_data.write.mode("overwrite").format("noop").save()
+    # train_data = train_data.cache()
+    # test_data = test_data.cache()
+    # train_data.write.mode("overwrite").format("noop").save()
+    # test_data.write.mode("overwrite").format("noop").save()
 
-    data.unpersist()
+    # data.unpersist()
 
     return train_data, test_data
+
+
+def load_data(dataset: Dataset, partitions_coefficient: int = 1) -> SparkDataFrame:
+    spark = get_current_session()
+
+    execs = int(os.getenv('SPARK_EXECUTOR_INSTANCES', spark.conf.get("spark.executor.instances", "1")))
+    cores = int(os.getenv('SPARK_EXECUTOR_CORES', spark.conf.get("spark.executor.cores", "8")))
+
+    data = dataset.load()
+
+    data = data.repartition(execs * cores * partitions_coefficient).cache()
+    data.write.mode("overwrite").format("noop").save()
+    return data
 
 
 def get_spark_session(partitions_num: Optional[int] = None):
@@ -140,15 +205,20 @@ def get_spark_session(partitions_num: Optional[int] = None):
         # .config("spark.jars.packages",
         #         "com.microsoft.azure:synapseml_2.12:0.9.5,io.github.fonhorst:spark-lightautoml_2.12:0.1.1")
 
+        extra_jvm_options = ("-Dio.netty.tryReflectionSetAccessible=true "
+                             "-Dlog4j.debug=false "
+                             "-Dlog4j.configuration=examples/spark/log4j2.properties")
+
         spark_sess = (
             SparkSession.builder.master(f"local[{partitions_num}]")
             # .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.9.5")
-            .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.11.1-spark3.3")
+            # .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.11.1-spark3.3")
+            .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:1.0.8")
             # .config("spark.jars.packages", "com.microsoft.azure:synapseml_2.12:0.11.1")
             .config("spark.jars", "jars/spark-lightautoml_2.12-0.1.1.jar")
             .config("spark.jars.repositories", "https://mmlspark.azureedge.net/maven")
-            .config("spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
-            .config("spark.executor.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
+            .config("spark.driver.extraJavaOptions", extra_jvm_options)
+            .config("spark.executor.extraJavaOptions", extra_jvm_options)
             .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
             .config("spark.kryoserializer.buffer.max", "512m")
             .config("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
@@ -171,7 +241,7 @@ def get_spark_session(partitions_num: Optional[int] = None):
 
 
 def get_persistence_manager(name: Optional[str] = None):
-    arg_vals = {"bucketed_datasets_folder": "/tmp", "bucket_nums": BUCKET_NUMS}
+    arg_vals = {"bucket_nums": BUCKET_NUMS}
 
     class_name = name or os.environ.get(PERSISTENCE_MANAGER_ENV_VAR, None) or "CompositeBucketedPersistenceManager"
     clazz = getattr(persistence, class_name)

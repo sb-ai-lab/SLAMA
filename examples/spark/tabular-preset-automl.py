@@ -1,26 +1,25 @@
 import logging.config
 import os
+import sys
 import uuid
 
 import pandas as pd
 import pyspark.sql.functions as sf
-
-from examples_utils import BUCKET_NUMS
-from examples_utils import check_columns
-from examples_utils import get_dataset
-from examples_utils import get_persistence_manager
-from examples_utils import get_spark_session
-from examples_utils import prepare_test_and_train
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 
+from examples_utils import BUCKET_NUMS, BASE_HDFS_PREFIX
+from examples_utils import check_columns
+from examples_utils import get_dataset
+from examples_utils import get_spark_session
+from examples_utils import prepare_test_and_train
 from sparklightautoml.automl.presets.tabular_presets import SparkTabularAutoML
 from sparklightautoml.dataset.base import SparkDataset
+from sparklightautoml.dataset.persistence import PlainCachePersistenceManager
 from sparklightautoml.tasks.base import SparkTask
 from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import log_exec_timer
 from sparklightautoml.utils import logging_config
-
 
 logging.config.dictConfig(logging_config(level=logging.DEBUG, log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -30,19 +29,20 @@ logger = logging.getLogger(__name__)
 # Run ./bin/download-datasets.sh to get required datasets into the folder.
 
 
-def main(spark: SparkSession, dataset_name: str, seed: int):
+def main(spark: SparkSession, dataset_name: str, seed: int, check_all_predictions_ways: bool = True):
     # Algos and layers to be used during automl:
     # For example:
     # 1. use_algos = [["lgb"]]
     # 2. use_algos = [["lgb_tuned"]]
     # 3. use_algos = [["linear_l2"]]
     # 4. use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    use_algos = [["lgb", "linear_l2"], ["lgb"]]
-    cv = 3
+    use_algos = [["lgb"]]
+    cv = 5
     dataset = get_dataset(dataset_name)
 
-    persistence_manager = get_persistence_manager()
+    persistence_manager = PlainCachePersistenceManager()
     # Alternative ways to define persistence_manager
+    # persistence_manager = get_persistence_manager()
     # persistence_manager = get_persistence_manager("CompositePlainCachePersistenceManager")
     # persistence_manager = CompositePlainCachePersistenceManager(bucket_nums=BUCKET_NUMS)
 
@@ -59,14 +59,18 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
             general_params={"use_algos": use_algos},
             # execution mode only available for synapseml 0.11.1
             lgb_params={
+                "default_params": {
+                  "numIterations": 50,
+                },
                 "use_single_dataset_mode": True,
                 "execution_mode": "streaming",
                 "convert_to_onnx": False,
                 "mini_batch_size": 1000,
+                "freeze_defaults": True
             },
             linear_l2_params={"default_params": {"regParam": [1e-5]}},
             reader_params={"cv": cv, "advanced_roles": False},
-            computation_settings=("parallelism", 3),
+            # computation_settings=("parallelism", 3),
         )
 
         oof_predictions = automl.fit_predict(train_data, roles=dataset.roles, persistence_manager=persistence_manager)
@@ -96,6 +100,20 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         logger.info(f"score for test predictions: {test_metric_value}")
 
+    if not check_all_predictions_ways:
+        result = {
+            "seed": seed,
+            "dataset": dataset_name,
+            "used_algo": str(use_algos),
+            "metric_value": metric_value,
+            "test_metric_value": test_metric_value,
+            "train_duration_secs": train_timer.duration,
+            "predict_duration_secs": predict_timer.duration,
+        }
+
+        print(f"EXP-RESULT: {result}")
+        return result
+
     with log_exec_timer("spark-lama predicting on test (#2 way)"):
         te_pred = automl.transformer().transform(test_data_dropped)
 
@@ -113,7 +131,7 @@ def main(spark: SparkSession, dataset_name: str, seed: int):
 
         logger.info(f"score for test predictions: {test_metric_value}")
 
-    base_path = "/tmp/spark_results"
+    base_path = f"{BASE_HDFS_PREFIX}/tmp/spark_results"
     automl_model_path = os.path.join(base_path, "automl_pipeline")
     os.makedirs(base_path, exist_ok=True)
 
@@ -175,12 +193,14 @@ def multirun(spark: SparkSession, dataset_name: str):
 
 
 if __name__ == "__main__":
+    assert len(sys.argv) <= 2, "There may be no more than one argument"
+    dataset_name = sys.argv[1] if len(sys.argv) > 1 else "lama_test_dataset"
     # if one uses bucketing based persistence manager,
     # the argument below number should be equal to what is set to 'bucket_nums' of the manager
     spark_sess = get_spark_session(BUCKET_NUMS)
     # One can run:
     # 1. main(dataset_name="lama_test_dataste", seed=42)
     # 2. multirun(spark_sess, dataset_name="lama_test_dataset")
-    main(spark_sess, dataset_name="lama_test_dataset", seed=42)
+    main(spark_sess, dataset_name=dataset_name, seed=42, check_all_predictions_ways=False)
 
     spark_sess.stop()

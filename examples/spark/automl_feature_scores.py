@@ -25,7 +25,7 @@ if __name__ == "__main__":
     seed = 42
     cv = 2
     use_algos = [["linear_l2"]]
-    dataset_name = "used_cars_dataset"
+    dataset_name = "lama_test_dataset"
     dataset = get_dataset(dataset_name)
 
     with log_exec_timer("spark-lama training") as train_timer:

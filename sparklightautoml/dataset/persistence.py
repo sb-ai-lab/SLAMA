@@ -243,29 +243,26 @@ class BucketedPersistenceManager(BasePersistenceManager):
 
     def __init__(
         self,
-        bucketed_datasets_folder: str,
         bucket_nums: int = 100,
         parent: Optional["PersistenceManager"] = None,
         no_unpersisting: bool = False,
     ):
         super().__init__(parent)
         self._bucket_nums = bucket_nums
-        self._bucketed_datasets_folder = bucketed_datasets_folder
         self._no_unpersisting = no_unpersisting
 
     def _persist(self, pdf: PersistableDataFrame, level: PersistenceLevel) -> PersistableDataFrame:
         spark = get_current_session()
         name = self._build_name(pdf)
         # TODO: SLAMA join - need to identify correct setting  for bucket_nums if it is not provided
-        path = self._build_path(name)
         logger.debug(
             f"Manager {self._uid}: making a bucketed table "
-            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name} on path {path}."
+            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name}."
         )
 
         with JobGroup(
             "Persisting",
-            f"{type(self)} saving bucketed table of df (uid={pdf.uid}, name={pdf.name}). Table path: {path}",
+            f"{type(self)} saving bucketed table of df (uid={pdf.uid}, name={pdf.name}). Table name: {name}",
             pdf.sdf.sql_ctx.sparkSession,
         ):
             # If we directly put path in .saveAsTable(...), than Spark will create an external table
@@ -282,7 +279,7 @@ class BucketedPersistenceManager(BasePersistenceManager):
 
         logger.debug(
             f"Manager {self._uid}: the bucketed table has been made "
-            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name} on path {path}."
+            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name}."
         )
         return PersistableDataFrame(ds, pdf.uid, pdf.callback, pdf.base_dataset)
 
@@ -291,28 +288,55 @@ class BucketedPersistenceManager(BasePersistenceManager):
             return
 
         name = self._build_name(pdf)
-        path = self._build_path(name)
         logger.debug(
             f"Manager {self._uid}: removing the bucketed table "
-            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name} on path {path}."
+            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name}."
         )
 
         get_current_session().sql(f"DROP TABLE {name}")
 
         logger.debug(
             f"Manager {self._uid}: the bucketed table has been removed"
-            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name} on path {path}."
+            f"for the dataset (uid={pdf.uid}, name={pdf.name}) with name {name}."
         )
 
     def _create_child(self) -> PersistenceManager:
-        return BucketedPersistenceManager(self._bucketed_datasets_folder, self._bucket_nums, self)
-
-    def _build_path(self, name: str) -> str:
-        return os.path.join(self._bucketed_datasets_folder, f"{name}.parquet")
+        return BucketedPersistenceManager(self._bucket_nums, self)
 
     @staticmethod
     def _build_name(pdf: PersistableDataFrame):
         return f"{pdf.name}_{pdf.uid}".replace("-", "__")
+
+
+class NoOpPersistenceManager(BasePersistenceManager):
+    """
+    Manager that uses Spark .cache() / .persist() methods
+    """
+
+    def __init__(self, parent: Optional["PersistenceManager"] = None, prune_history: bool = False):
+        super().__init__(parent)
+        self._prune_history = prune_history
+
+    def _persist(self, pdf: PersistableDataFrame, level: PersistenceLevel) -> PersistableDataFrame:
+        logger.debug(
+            f"Manager {self._uid}: " f"caching and materializing the dataset (uid={pdf.uid}, name={pdf.name})."
+        )
+
+        df = (
+            pdf.sdf.sql_ctx.sparkSession.createDataFrame(pdf.sdf.rdd, schema=pdf.sdf.schema)
+            if self._prune_history
+            else pdf.sdf
+        )
+
+        logger.debug(f"Manager {self._uid}: " f"caching succeeded for the dataset (uid={pdf.uid}, name={pdf.name}).")
+
+        return PersistableDataFrame(df, pdf.uid, pdf.callback, pdf.base_dataset)
+
+    def _unpersist(self, pdf: PersistableDataFrame):
+        pass
+
+    def _create_child(self) -> PersistenceManager:
+        return NoOpPersistenceManager(self)
 
 
 class CompositePersistenceManager(BasePersistenceManager):
@@ -377,11 +401,11 @@ class CompositePlainCachePersistenceManager(CompositePersistenceManager):
     Combines PlainCache on READER and REGULAR levels with bucketing on CHECKPOINT level.
     """
 
-    def __init__(self, bucketed_datasets_folder: str, bucket_nums: int):
+    def __init__(self, bucket_nums: int):
         super(CompositePlainCachePersistenceManager, self).__init__(
             {
                 PersistenceLevel.READER: BucketedPersistenceManager(
-                    bucketed_datasets_folder=bucketed_datasets_folder, bucket_nums=bucket_nums, no_unpersisting=True
+                    bucket_nums=bucket_nums, no_unpersisting=True
                 ),
                 PersistenceLevel.REGULAR: PlainCachePersistenceManager(),
                 PersistenceLevel.CHECKPOINT: PlainCachePersistenceManager(),
@@ -394,15 +418,15 @@ class CompositeBucketedPersistenceManager(CompositePersistenceManager):
     Combines bucketing on READER and CHECKPOINT levels with PlainCache on REGULAR level.
     """
 
-    def __init__(self, bucketed_datasets_folder: str, bucket_nums: int):
+    def __init__(self, bucket_nums: int):
         super(CompositeBucketedPersistenceManager, self).__init__(
             {
                 PersistenceLevel.READER: BucketedPersistenceManager(
-                    bucketed_datasets_folder=bucketed_datasets_folder, bucket_nums=bucket_nums, no_unpersisting=True
+                    bucket_nums=bucket_nums, no_unpersisting=True
                 ),
                 PersistenceLevel.REGULAR: PlainCachePersistenceManager(prune_history=False),
                 PersistenceLevel.CHECKPOINT: BucketedPersistenceManager(
-                    bucketed_datasets_folder=bucketed_datasets_folder, bucket_nums=bucket_nums
+                    bucket_nums=bucket_nums
                 ),
             }
         )

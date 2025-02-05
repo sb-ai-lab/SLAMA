@@ -165,7 +165,9 @@ dumps
 *.orig
 
 jars/*.jar
+jars/*.backup
 !jars/spark-lightautoml_*.jar
+!jars/jvm-profiler*.jar
 
 docs/generated
 docs/slama-docs/generated
@@ -176,3 +178,9 @@ spark-warehouse
 
 # sphinx output folder
 html-docs
+*.ignore
+tmp/
+*.stdout
+*.stderr
+streaming_runs_exps.json
+note.txt
