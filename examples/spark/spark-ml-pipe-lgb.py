@@ -40,7 +40,7 @@ if __name__ == "__main__":
     spark = get_spark_session(bucket_nums)
 
     persistence_manager = CompositePlainCachePersistenceManager(
-        bucketed_datasets_folder="/tmp", bucket_nums=bucket_nums
+        bucket_nums=bucket_nums
     )
 
     seed = 42

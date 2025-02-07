@@ -1,13 +1,12 @@
 import logging.config
 
-from examples_utils import get_dataset
-from examples_utils import get_persistence_manager
-from examples_utils import get_spark_session
-from examples_utils import prepare_test_and_train
 from pyspark.ml import PipelineModel
 from pyspark.sql import functions as sf
 
-from examples.spark.examples_utils import check_columns
+from examples_utils import check_columns, get_persistence_manager
+from examples_utils import get_dataset
+from examples_utils import get_spark_session
+from examples_utils import prepare_test_and_train
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.ml_algo.boost_lgbm import SparkBoostLGBM
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
@@ -18,7 +17,6 @@ from sparklightautoml.utils import VERBOSE_LOGGING_FORMAT
 from sparklightautoml.utils import log_exec_time
 from sparklightautoml.utils import logging_config
 from sparklightautoml.validation.iterators import SparkFoldsIterator
-
 
 logging.config.dictConfig(logging_config(log_filename="/tmp/slama.log"))
 logging.basicConfig(level=logging.DEBUG, format=VERBOSE_LOGGING_FORMAT)
@@ -49,6 +47,9 @@ if __name__ == "__main__":
     with log_exec_time():
         train_df, test_df = prepare_test_and_train(dataset, seed)
 
+        print(f"TRAIN_DF size: {train_df.count()}")
+        print(f"TEST_DF size: {test_df.count()}")
+
         task = SparkTask(dataset.task_type)
         score = task.get_dataset_metric()
 
@@ -57,7 +58,13 @@ if __name__ == "__main__":
 
         iterator = SparkFoldsIterator(sdataset).convert_to_holdout_iterator()
 
-        spark_ml_algo = SparkBoostLGBM(freeze_defaults=False)
+        spark_ml_algo = SparkBoostLGBM(
+            default_params={
+              "numIterations": 50,
+            },
+            freeze_defaults=True,
+            execution_mode="bulk",
+        )
         spark_features_pipeline = SparkLGBSimpleFeatures()
 
         ml_pipe = SparkMLPipeline(ml_algos=[spark_ml_algo], features_pipeline=spark_features_pipeline)

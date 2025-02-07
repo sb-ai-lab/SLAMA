@@ -33,20 +33,20 @@ logger = logging.getLogger(__name__)
     [
         PlainCachePersistenceManager(),
         LocalCheckpointPersistenceManager(),
-        BucketedPersistenceManager(bucketed_datasets_folder="/tmp", bucket_nums=10),
+        BucketedPersistenceManager(bucket_nums=10),
         CompositePersistenceManager(
             {
-                PersistenceLevel.READER: BucketedPersistenceManager(bucketed_datasets_folder="/tmp", bucket_nums=10),
+                PersistenceLevel.READER: BucketedPersistenceManager(bucket_nums=10),
                 PersistenceLevel.REGULAR: PlainCachePersistenceManager(),
                 PersistenceLevel.CHECKPOINT: BucketedPersistenceManager(
-                    bucketed_datasets_folder="/tmp", bucket_nums=10
+                    bucket_nums=10
                 ),
             }
         ),
         CompositePersistenceManager(
             {
                 PersistenceLevel.READER: BucketedPersistenceManager(
-                    bucketed_datasets_folder="/tmp", bucket_nums=BUCKET_NUMS, no_unpersisting=True
+                    bucket_nums=BUCKET_NUMS, no_unpersisting=True
                 ),
                 PersistenceLevel.REGULAR: PlainCachePersistenceManager(prune_history=False),
                 PersistenceLevel.CHECKPOINT: PlainCachePersistenceManager(prune_history=False),
@@ -55,11 +55,11 @@ logger = logging.getLogger(__name__)
         CompositePersistenceManager(
             {
                 PersistenceLevel.READER: BucketedPersistenceManager(
-                    bucketed_datasets_folder="/tmp", bucket_nums=BUCKET_NUMS, no_unpersisting=True
+                    bucket_nums=BUCKET_NUMS, no_unpersisting=True
                 ),
                 PersistenceLevel.REGULAR: PlainCachePersistenceManager(prune_history=False),
                 PersistenceLevel.CHECKPOINT: BucketedPersistenceManager(
-                    bucketed_datasets_folder="/tmp", bucket_nums=BUCKET_NUMS
+                    bucket_nums=BUCKET_NUMS
                 ),
             }
         ),

@@ -35,15 +35,15 @@ packages = [
 
 
 [tool.poetry.dependencies]
-python = ">=3.8, <3.10"
+python = ">=3.8, <3.12"
 
 poetry-core = "^1.0.0"
 lightautoml = "0.3.8.1"
 
 # PySpark
-#pyspark = "3.3.1"
+pyspark = "^3.3.1"
 pyarrow = ">=1.0.0"
-synapseml = "0.11.1"
+synapseml = "^1.0.8"
 toposort = "1.7"
 onnxmltools = "^1.11.0"
 weasyprint = {version = "52.5", optional = true}
@@ -67,6 +67,9 @@ mypy = "^0.910"
 tox = "*"
 hdfs = "^2.7.0"
 
+
+[tool.poetry.group.dev.dependencies]
+kubernetes = "^31.0.0"
 
 [tool.pytest.ini_options]
 log_cli = true

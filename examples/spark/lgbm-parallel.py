@@ -19,9 +19,9 @@ from pyspark.sql import functions as sf
 from synapse.ml.lightgbm import LightGBMClassifier
 from synapse.ml.lightgbm import LightGBMRegressor
 
-from examples.spark.examples_utils import get_dataset
-from examples.spark.examples_utils import get_spark_session
-from examples.spark.examples_utils import prepare_test_and_train
+from examples_utils import get_dataset
+from examples_utils import get_spark_session
+from examples_utils import prepare_test_and_train
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.pipelines.features.lgb_pipeline import SparkLGBSimpleFeatures
 from sparklightautoml.reader.base import SparkToSparkReader
@@ -226,7 +226,7 @@ def main():
     partitions_num = 6
     spark = get_spark_session(partitions_num=partitions_num)
 
-    exp = ParallelExperiment(spark, dataset_name="used_cars_dataset")
+    exp = ParallelExperiment(spark, dataset_name="lama_test_dataset")
     exp.prepare_dataset()
     results = exp.run()
 

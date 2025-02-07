@@ -1,7 +1,7 @@
 Running spark lama app on Kubernetes cluster
 ============================================
 
-Examples for Spark-LAMA can be found in ``examples/spark/``.
+Examples for SLAMA can be found in ``examples/spark/``.
 These examples can be run both locally and remotely on a cluster.
 
 To run examples locally one needs just ensure that data files lay in appropriate locations.
@@ -10,6 +10,12 @@ These locations typically /opt/spark_data directory.
 
 To run examples remotely on a cluster under Kubernetes control one needs
 to have installed and configured **kubectl** utility.
+
+Prerequisites:
+
+#. HDFS, deployed and accessible.
+#. Kubernetes cluster (with access to HDFS).
+#. Namespace with appropriately configured service account (see example in examples/conf/k8s_namespace.yaml).
 
 1. Establish nfs / S3
 """""""""""""""""""""

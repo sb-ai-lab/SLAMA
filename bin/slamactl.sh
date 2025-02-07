@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
-BASE_IMAGE_TAG="lama-v3.2.0"
+export SPARK_VERSION=3.5.3
+export HADOOP_VERSION=3
+REPORT_TO_INFLUX=${REPORT_TO_INFLUX:-false}
+SYNAPSEML_VERSION=1.0.8
+SLAMA_VERSION=0.4.1
+LIGHTGBM_VERSION=3.3.5
+BASE_IMAGE_TAG="slama-${SYNAPSEML_VERSION}-spark${SPARK_VERSION}"
 
 if [[ -z "${KUBE_NAMESPACE}" ]]
 then
@@ -41,16 +47,18 @@ function build_jars() {
 }
 
 function build_pyspark_images() {
-  export SPARK_VERSION=3.2.0
-  export HADOOP_VERSION=3.2
+  filename="spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}"
 
   mkdir -p /tmp/spark-build-dir
   cd /tmp/spark-build-dir
 
-  wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz \
-    && tar -xvzf spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz \
-    && mv spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION} spark \
-    && rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz
+  if [ ! -f "${filename}.tgz" ]; then
+    rm -rf spark \
+      && rm -rf ${filename} \
+      && wget "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${filename}.tgz" \
+      && tar -xvzf${filename}.tgz \
+      && mv ${filename} spark
+  fi
 
   # create images with names:
   # - ${REPO}/spark:${BASE_IMAGE_TAG}
@@ -59,13 +67,13 @@ function build_pyspark_images() {
 
   if [[ ! -z "${REPO}" ]]
   then
-    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${BASE_IMAGE_TAG} \
+    DOCKER_DEFAULT_PLATFORM=linux/amd64 ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${BASE_IMAGE_TAG} \
       -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
       build
 
-    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${BASE_IMAGE_TAG} push
+#    ./spark/bin/docker-image-tool.sh -r ${REPO} -t ${BASE_IMAGE_TAG} push
   else
-      ./spark/bin/docker-image-tool.sh -t ${BASE_IMAGE_TAG} \
+      DOCKER_DEFAULT_PLATFORM=linux/amd64 ./spark/bin/docker-image-tool.sh -t ${BASE_IMAGE_TAG} \
       -p spark/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
       build
   fi
@@ -82,8 +90,12 @@ function build_lama_image() {
   poetry export -f requirements.txt > requirements.txt
   poetry build
 
-  docker build \
+  DOCKER_DEFAULT_PLATFORM=linux/amd64  docker build \
     --build-arg base_image=${BASE_SPARK_IMAGE} \
+    --build-arg SPARK_VER=${SPARK_VERSION} \
+    --build-arg SYNAPSEML_VER=${SYNAPSEML_VERSION} \
+    --build-arg SLAMA_VER=0.4.1 \
+    --build-arg LIGHTGBM_VER=3.2.1 \
     -t ${IMAGE} \
     -f docker/spark-lama/spark-py-lama.dockerfile \
     .
@@ -96,102 +108,113 @@ function build_lama_image() {
   rm -rf dist
 }
 
+function push_images() {
+    docker push ${BASE_SPARK_IMAGE}
+    docker push ${IMAGE}
+}
+
 function build_dist() {
     build_jars
     build_pyspark_images
     build_lama_image
 }
 
-function submit_job() {
+function submit_job_k8s() {
+  load_env
+
   APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 
   script_path=$1
 
   filename=$(echo ${script_path} | python -c 'import os; path = input(); print(os.path.splitext(os.path.basename(path))[0]);')
 
+  shift 1
+
+  local TIMESTAMP=$(date +%y%m%d_%H%M)
+
+  # Format the memory storage fraction (remove dot and pad with zeros)
+  local MSF=$(echo ${SPARK_MEMORY_STORAGE_FRACTION} | sed 's/0\.//' | awk '{printf "%03d", $1}')
+
+  # Format memory overhead factor to show as X_Y (e.g., 3.81 -> 3_8)
+  local MOF=$(echo ${SPARK_MEMORY_OVERHEAD_FACTOR} | awk -F '.' '{printf "%d_%d", $1, substr($2, 1, 1)}')
+
+  # Remove 'g' from executor memory
+  local MEM=$(echo ${SPARK_EXECUTOR_MEMORY} | sed 's/g$//')
+
+  # Create full and short versions of CONFIG_SUFFIX
+  local FULL_SUFFIX="${PIPELINE_NAME_SHORT}_${DATASET_NAME_SHORT}_${TIMESTAMP}_e${SPARK_EXECUTOR_INSTANCES}i${MSF}msf${MEM}g${MOF}f"
+  local SHORT_SUFFIX="${PIPELINE_NAME_SHORT}_${DATASET_NAME_SHORT}_${TIMESTAMP}"
+
+  # Use short version if full version is too long, this is a system limitation
+  if [ ${#FULL_SUFFIX} -ge 63 ]; then
+    local CONFIG_SUFFIX="${SHORT_SUFFIX}"
+  else
+    local CONFIG_SUFFIX="${FULL_SUFFIX}"
+  fi
+
+  if [[ "${REPORT_TO_INFLUX}" = true ]]; then
+    extra_java_options="
+      -javaagent:\"/root/jars/jvm-profiler-1.0.0.jar=
+        reporter=com.uber.profiling.reporters.InfluxDBOutputReporter,
+        metricInterval=2500,
+        sampleInterval=2500,
+        ioProfiling=false,
+        influxdb.host=${INFLUXDB_HOST},
+        influxdb.port=${INFLUXDB_PORT},
+        influxdb.database=${INFLUXDB_DATABASE},
+        influxdb.username=${INFLUXDB_USERNAME},
+        influxdb.password=${INFLUXDB_PASSWORD},
+        metaId.override=${CONFIG_SUFFIX}\"
+    "
+    extra_java_options=$(echo "${extra_java_options}" | tr -d '\n' | tr -d ' ')
+    extra_java_options="-Dlog4j.logger.com.uber.profiling=DEBUG ${extra_java_options}"
+    jars="jars/spark-lightautoml_2.12-0.1.1.jar,jars/jvm-profiler-1.0.0.jar"
+  else
+    jars="jars/spark-lightautoml_2.12-0.1.1.jar"
+  fi
+
+  extra_java_options="-Dlog4j.configuration=log4j2.properties ${extra_java_options}"
+
+  # TODO: spark.sql.warehouse.dir should be customizable
   spark-submit \
     --master k8s://${APISERVER} \
     --deploy-mode cluster \
-    --py-files "examples/spark/examples_utils.py" \
-    --conf 'spark.kryoserializer.buffer.max=512m' \
-    --conf 'spark.scheduler.minRegisteredResourcesRatio=1.0' \
-    --conf 'spark.scheduler.maxRegisteredResourcesWaitingTime=180s' \
-    --conf 'spark.executor.extraClassPath=/root/.ivy2/jars/com.azure_azure-ai-textanalytics-5.1.4.jar:/root/.ivy2/jars/com.azure_azure-core-1.22.0.jar:/root/.ivy2/jars/com.azure_azure-core-http-netty-1.11.2.jar:/root/.ivy2/jars/com.azure_azure-storage-blob-12.14.2.jar:/root/.ivy2/jars/com.azure_azure-storage-common-12.14.1.jar:/root/.ivy2/jars/com.azure_azure-storage-internal-avro-12.1.2.jar:/root/.ivy2/jars/com.beust_jcommander-1.27.jar:/root/.ivy2/jars/com.chuusai_shapeless_2.12-2.3.2.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-core-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-databind-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.dataformat_jackson-dataformat-xml-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.datatype_jackson-datatype-jsr310-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.module_jackson-module-jaxb-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.woodstox_woodstox-core-6.2.4.jar:/root/.ivy2/jars/com.github.vowpalwabbit_vw-jni-8.9.1.jar:/root/.ivy2/jars/com.jcraft_jsch-0.1.54.jar:/root/.ivy2/jars/com.linkedin.isolation-forest_isolation-forest_3.2.0_2.12-2.0.8.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-cognitive_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-core_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-deep-learning_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-lightgbm_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-opencv_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-vw_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.cntk_cntk-2.4.jar:/root/.ivy2/jars/com.microsoft.cognitiveservices.speech_client-jar-sdk-1.14.0.jar:/root/.ivy2/jars/com.microsoft.ml.lightgbm_lightgbmlib-3.2.110.jar:/root/.ivy2/jars/com.microsoft.onnxruntime_onnxruntime_gpu-1.8.1.jar:/root/.ivy2/jars/commons-codec_commons-codec-1.10.jar:/root/.ivy2/jars/commons-logging_commons-logging-1.2.jar:/root/.ivy2/jars/io.netty_netty-buffer-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http2-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-socks-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-common-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-proxy-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-native-macos-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-tcnative-boringssl-static-2.0.43.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-native-epoll-4.1.68.Final-linux-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-kqueue-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-unix-common-4.1.68.Final.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-core-1.0.11.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-http-1.0.11.jar:/root/.ivy2/jars/io.projectreactor_reactor-core-3.4.10.jar:/root/.ivy2/jars/io.spray_spray-json_2.12-1.3.2.jar:/root/.ivy2/jars/jakarta.activation_jakarta.activation-api-1.2.1.jar:/root/.ivy2/jars/jakarta.xml.bind_jakarta.xml.bind-api-2.3.2.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpclient-4.5.6.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpcore-4.4.10.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpmime-4.5.6.jar:/root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.2.0.jar:/root/.ivy2/jars/org.beanshell_bsh-2.0b4.jar:/root/.ivy2/jars/org.codehaus.woodstox_stax2-api-4.2.1.jar:/root/.ivy2/jars/org.openpnp_opencv-3.2.0-1.jar:/root/.ivy2/jars/org.reactivestreams_reactive-streams-1.0.3.jar:/root/.ivy2/jars/org.scalactic_scalactic_2.12-3.0.5.jar:/root/.ivy2/jars/org.scala-lang_scala-reflect-2.12.4.jar:/root/.ivy2/jars/org.slf4j_slf4j-api-1.7.32.jar:/root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar:/root/.ivy2/jars/org.testng_testng-6.8.8.jar:/root/.ivy2/jars/org.tukaani_xz-1.8.jar:/root/.ivy2/jars/org.typelevel_macro-compat_2.12-1.1.1.jar:/root/jars/spark-lightautoml_2.12-0.1.jar' \
-    --conf 'spark.driver.extraClassPath=/root/.ivy2/jars/com.azure_azure-ai-textanalytics-5.1.4.jar:/root/.ivy2/jars/com.azure_azure-core-1.22.0.jar:/root/.ivy2/jars/com.azure_azure-core-http-netty-1.11.2.jar:/root/.ivy2/jars/com.azure_azure-storage-blob-12.14.2.jar:/root/.ivy2/jars/com.azure_azure-storage-common-12.14.1.jar:/root/.ivy2/jars/com.azure_azure-storage-internal-avro-12.1.2.jar:/root/.ivy2/jars/com.beust_jcommander-1.27.jar:/root/.ivy2/jars/com.chuusai_shapeless_2.12-2.3.2.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-core-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.core_jackson-databind-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.dataformat_jackson-dataformat-xml-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.datatype_jackson-datatype-jsr310-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.jackson.module_jackson-module-jaxb-annotations-2.12.5.jar:/root/.ivy2/jars/com.fasterxml.woodstox_woodstox-core-6.2.4.jar:/root/.ivy2/jars/com.github.vowpalwabbit_vw-jni-8.9.1.jar:/root/.ivy2/jars/com.jcraft_jsch-0.1.54.jar:/root/.ivy2/jars/com.linkedin.isolation-forest_isolation-forest_3.2.0_2.12-2.0.8.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-cognitive_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-core_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-deep-learning_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-lightgbm_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-opencv_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.azure_synapseml-vw_2.12-0.9.5.jar:/root/.ivy2/jars/com.microsoft.cntk_cntk-2.4.jar:/root/.ivy2/jars/com.microsoft.cognitiveservices.speech_client-jar-sdk-1.14.0.jar:/root/.ivy2/jars/com.microsoft.ml.lightgbm_lightgbmlib-3.2.110.jar:/root/.ivy2/jars/com.microsoft.onnxruntime_onnxruntime_gpu-1.8.1.jar:/root/.ivy2/jars/commons-codec_commons-codec-1.10.jar:/root/.ivy2/jars/commons-logging_commons-logging-1.2.jar:/root/.ivy2/jars/io.netty_netty-buffer-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http2-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-http-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-codec-socks-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-common-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-handler-proxy-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-resolver-dns-native-macos-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-tcnative-boringssl-static-2.0.43.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-4.1.68.Final.jar:/root/.ivy2/jars/io.netty_netty-transport-native-epoll-4.1.68.Final-linux-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-kqueue-4.1.68.Final-osx-x86_64.jar:/root/.ivy2/jars/io.netty_netty-transport-native-unix-common-4.1.68.Final.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-core-1.0.11.jar:/root/.ivy2/jars/io.projectreactor.netty_reactor-netty-http-1.0.11.jar:/root/.ivy2/jars/io.projectreactor_reactor-core-3.4.10.jar:/root/.ivy2/jars/io.spray_spray-json_2.12-1.3.2.jar:/root/.ivy2/jars/jakarta.activation_jakarta.activation-api-1.2.1.jar:/root/.ivy2/jars/jakarta.xml.bind_jakarta.xml.bind-api-2.3.2.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpclient-4.5.6.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpcore-4.4.10.jar:/root/.ivy2/jars/org.apache.httpcomponents_httpmime-4.5.6.jar:/root/.ivy2/jars/org.apache.spark_spark-avro_2.12-3.2.0.jar:/root/.ivy2/jars/org.beanshell_bsh-2.0b4.jar:/root/.ivy2/jars/org.codehaus.woodstox_stax2-api-4.2.1.jar:/root/.ivy2/jars/org.openpnp_opencv-3.2.0-1.jar:/root/.ivy2/jars/org.reactivestreams_reactive-streams-1.0.3.jar:/root/.ivy2/jars/org.scalactic_scalactic_2.12-3.0.5.jar:/root/.ivy2/jars/org.scala-lang_scala-reflect-2.12.4.jar:/root/.ivy2/jars/org.slf4j_slf4j-api-1.7.32.jar:/root/.ivy2/jars/org.spark-project.spark_unused-1.0.0.jar:/root/.ivy2/jars/org.testng_testng-6.8.8.jar:/root/.ivy2/jars/org.tukaani_xz-1.8.jar:/root/.ivy2/jars/org.typelevel_macro-compat_2.12-1.1.1.jar:/root/jars/spark-lightautoml_2.12-0.1.jar' \
-    --conf 'spark.driver.cores=4' \
-    --conf 'spark.driver.memory=16g' \
-    --conf 'spark.executor.instances=1' \
-    --conf 'spark.executor.cores=8' \
-    --conf 'spark.executor.memory=16g' \
-    --conf 'spark.cores.max=8' \
-    --conf 'spark.memory.fraction=0.6' \
-    --conf 'spark.memory.storageFraction=0.5' \
-    --conf 'spark.sql.autoBroadcastJoinThreshold=100MB' \
-    --conf 'spark.sql.execution.arrow.pyspark.enabled=true' \
+    --conf "spark.kryoserializer.buffer.max=512m" \
+    --conf "spark.log.level=INFO" \
+    --conf "spark.app.name=${CONFIG_SUFFIX}" \
+    --conf "spark.scheduler.minRegisteredResourcesRatio=1.0" \
+    --conf "spark.scheduler.maxRegisteredResourcesWaitingTime=180s" \
+    --conf "spark.task.maxFailures=1" \
+    --conf "spark.driver.cores=${SPARK_DRIVER_CORES:-2}" \
+    --conf "spark.driver.memory=${SPARK_DRIVER_MEMORY:-8g}" \
+    --conf "spark.driver.extraJavaOptions=${extra_java_options}" \
+    --conf "spark.driver.extraClassPath=/root/.ivy2/jars/*" \
+    --conf "spark.executor.extraJavaOptions=${extra_java_options}" \
+    --conf "spark.executor.extraClassPath=/root/.ivy2/jars/*" \
+    --conf "spark.executor.instances=${SPARK_EXECUTOR_INSTANCES:-1}" \
+    --conf "spark.executor.cores=${SPARK_EXECUTOR_CORES:-4}" \
+    --conf "spark.executor.memory=${SPARK_EXECUTOR_MEMORY:-16g}" \
+    --conf "spark.cores.max=${SPARK_CORES_MAX:-4}" \
+    --conf "spark.memory.fraction=${SPARK_MEMORY_FRACTION:-0.6}" \
+    --conf "spark.memory.storageFraction=${SPARK_MEMORY_STORAGE_FRACTION:-0.6}" \
+    --conf "spark.sql.autoBroadcastJoinThreshold=100MB" \
+    --conf "spark.sql.execution.arrow.pyspark.enabled=true" \
+    --conf "spark.sql.warehouse.dir=${SPARK_WAREHOUSE_DIR:-/tmp/spark-warehouse}" \
     --conf "spark.kubernetes.container.image=${IMAGE}" \
-    --conf 'spark.kubernetes.namespace='${KUBE_NAMESPACE} \
-    --conf 'spark.kubernetes.authenticate.driver.serviceAccountName=spark' \
-    --conf 'spark.kubernetes.memoryOverheadFactor=0.4' \
-    --conf "spark.kubernetes.driver.label.appname=${filename}" \
-    --conf "spark.kubernetes.executor.label.appname=${filename}" \
-    --conf 'spark.kubernetes.executor.deleteOnTermination=false' \
-    --conf 'spark.kubernetes.container.image.pullPolicy=Always' \
-    --conf 'spark.kubernetes.driverEnv.SCRIPT_ENV=cluster' \
-    --conf 'spark.kubernetes.file.upload.path=/mnt/nfs/spark_upload_dir' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.options.claimName=spark-lama-data' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.options.storageClass=local-hdd' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.mount.path=/opt/spark_data/' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.spark-lama-data.mount.readOnly=true' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.options.claimName=spark-lama-data' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.options.storageClass=local-hdd' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.mount.path=/opt/spark_data/' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-lama-data.mount.readOnly=true' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.mnt-nfs.options.claimName=mnt-nfs' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.mnt-nfs.options.storageClass=nfs' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.mnt-nfs.mount.path=/mnt/nfs/' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.mnt-nfs.mount.readOnly=false' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.mnt-nfs.options.claimName=mnt-nfs' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.mnt-nfs.options.storageClass=nfs' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.mnt-nfs.mount.path=/mnt/nfs/' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.mnt-nfs.mount.readOnly=false' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.pvc-tmp.options.claimName=pvc-tmp' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.pvc-tmp.options.storageClass=local-hdd' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.pvc-tmp.mount.path=/tmp/spark_results/' \
-    --conf 'spark.kubernetes.driver.volumes.persistentVolumeClaim.pvc-tmp.mount.readOnly=false' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.pvc-tmp.options.claimName=pvc-tmp' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.pvc-tmp.options.storageClass=local-hdd' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.pvc-tmp.mount.path=/tmp/spark_results/' \
-    --conf 'spark.kubernetes.executor.volumes.persistentVolumeClaim.pvc-tmp.mount.readOnly=false' \
-    ${script_path}
-}
-
-function port_forward() {
-  script_path=$1
-  filename=$(echo ${script_path} | python -c 'import os; path = input(); print(os.path.splitext(os.path.basename(path))[0]);')
-  spark_app_selector=$(kubectl -n spark-lama-exps get pod -l appname=${filename} -l spark-role=driver -o jsonpath='{.items[0].metadata.labels.spark-app-selector}')
-
-  svc_name=$(kubectl -n ${KUBE_NAMESPACE} get svc -l spark-app-selector=${spark_app_selector} -o jsonpath='{.items[0].metadata.name}')
-  kubectl -n spark-lama-exps port-forward svc/${svc_name} 9040:4040
-}
-
-function port_forward_by_expname() {
-  expname=$1
-  port=$2
-  spark_app_selector=$(kubectl -n spark-lama-exps get pod -l spark-role=driver,expname=${expname} -o jsonpath='{.items[0].metadata.labels.spark-app-selector}')
-  svc_name=$(kubectl -n ${KUBE_NAMESPACE} get svc -l spark-app-selector=${spark_app_selector} -o jsonpath='{.items[0].metadata.name}')
-  kubectl -n spark-lama-exps port-forward svc/${svc_name} ${port}:4040
-}
-
-function logs_by_expname() {
-  expname=$1
-
-  kubectl -n spark-lama-exps logs -l spark-role=driver,expname=${expname}
-}
-
-function logs_ex_by_expname() {
-  expname=$1
-
-  kubectl -n spark-lama-exps logs -l spark-role=executor,expname=${expname}
+    --conf "spark.kubernetes.namespace=${KUBE_NAMESPACE}" \
+    --conf "spark.kubernetes.authenticate.driver.serviceAccountName=${SPARK_K8S_SERVICE_ACCOUNT:-spark}" \
+    --conf "spark.kubernetes.memoryOverheadFactor=${SPARK_MEMORY_OVERHEAD_FACTOR:-0.4}" \
+    --conf "spark.kubernetes.driver.label.appname=${CONFIG_SUFFIX}" \
+    --conf "spark.kubernetes.executor.label.appname=${CONFIG_SUFFIX}" \
+    --conf "spark.kubernetes.executor.deleteOnTermination=false" \
+    --conf "spark.kubernetes.container.image.pullPolicy=Always" \
+    --conf "spark.kubernetes.driverEnv.SCRIPT_ENV=cluster" \
+    --conf "spark.kubernetes.driverEnv.BASE_HDFS_PREFIX=${BASE_HDFS_PREFIX:-''}" \
+    --conf "spark.kubernetes.file.upload.path=${SPARK_K8S_FILE_UPLOAD_PATH:-/tmp/spark-upload-dir}" \
+    --jars "${jars}" \
+    --files "examples/spark/log4j2.properties" \
+    --py-files "examples/spark/examples_utils.py" \
+    ${script_path} "${@}"
 }
 
 function submit_job_yarn() {
@@ -272,6 +295,7 @@ function help() {
     build-jars - Builds scala-based components of Slama and creates appropriate jar files in jar folder of the project
     build-pyspark-images - Builds and pushes base pyspark images required to start pyspark on cluster.
       Pushing requires remote docker repo address accessible from the cluster.
+    build-lama-dist - Builds SLAMA .wheel
     build-lama-image - Builds and pushes a docker image to be used for running lama remotely on the cluster.
     build-dist - build_jars, build_pyspark_images, build_lama_image in a sequence
     submit-job - Submit a pyspark application with script that represent SLAMA automl app.
@@ -323,8 +347,8 @@ function main () {
         build_dist
         ;;
 
-    "submit-job")
-        submit_job "${@}"
+    "push-images")
+        push_images
         ;;
 
     "submit-job-yarn")
@@ -335,20 +359,8 @@ function main () {
         submit_job_spark "${@}"
         ;;
 
-    "port-forward")
-        port_forward "${@}"
-        ;;
-
-    "port-forward-by-expname")
-        port_forward_by_expname "${@}"
-        ;;
-
-    "logs-by-expname")
-        logs_by_expname "${@}"
-        ;;
-
-    "logs-ex-by-expname")
-        logs_ex_by_expname "${@}"
+    "submit-job-k8s")
+        submit_job_k8s "${@}"
         ;;
 
     "help")
@@ -360,6 +372,21 @@ function main () {
         ;;
 
     esac
+}
+
+load_env() {
+  if [ -f ".env" ]; then
+    set -a
+    source ".env"
+    set +a
+  elif [ -f "../.env" ]; then
+    set -a
+    source "../.env"
+    set +a
+  else
+    echo "Warning: .env file not found in current directory or project root directory"
+    exit 1
+  fi
 }
 
 main "${@}"
