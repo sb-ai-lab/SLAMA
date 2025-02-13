@@ -22,7 +22,7 @@ def main(dataset_name: str, seed: int = 42):
     dataset = get_dataset(dataset_name)
     persistence_manager = PlainCachePersistenceManager()
 
-    with log_exec_timer("spark-lama training") as train_timer:
+    with log_exec_timer("spark-lama training"):
         task = SparkTask(dataset.task_type)
         data = prepare_dataset(dataset, seed)
 

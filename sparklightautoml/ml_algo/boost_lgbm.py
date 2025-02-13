@@ -3,7 +3,6 @@ import logging
 import random
 import time
 import warnings
-
 from copy import copy
 from typing import Any
 from typing import Dict
@@ -16,7 +15,6 @@ from typing import cast
 import lightgbm as lgb
 import pandas as pd
 import pyspark.sql.functions as sf
-from pyspark.sql import SparkSession
 
 from sparklightautoml.computations.utils import get_executors
 

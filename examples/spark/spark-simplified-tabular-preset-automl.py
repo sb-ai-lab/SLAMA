@@ -51,7 +51,7 @@ def main(spark: SparkSession, seed: int):
             # execution mode only available for synapseml 0.11.1
             lgb_params={
                 "default_params": {
-                  "numIterations": 50,
+                    "numIterations": 50,
                 },
                 "use_single_dataset_mode": True,
                 "execution_mode": "streaming",

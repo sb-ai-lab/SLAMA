@@ -100,7 +100,7 @@ DATASETS = {
         path=f"{BASE_HDFS_PREFIX}/opt/spark_data/sampled_app_train.csv", task_type="binary", roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
     ),
     "hdfs_used_cars_dataset": Dataset(
-        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/CSV/used_cars_dataset.csv",  **used_cars_params
+        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/CSV/used_cars_dataset.csv", **used_cars_params
     ),
     "hdfs_used_cars_dataset_10x": Dataset(
         path=f"{BASE_HDFS_PREFIX}/opt/spark_data/used_cars_10x_dataset.csv", **used_cars_params
