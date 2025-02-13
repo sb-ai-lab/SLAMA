@@ -490,7 +490,7 @@ class SparkBoostLGBM(SparkTabularMLAlgo, ImportanceEstimator):
         # prepare assembler
         if self._assembler is None:
             self._assembler = VectorAssembler(
-                inputCols=train.features, outputCol=f"{self._name}_vassembler_features", handleInvalid="keep"
+                inputCols=list(train.features), outputCol=f"{self._name}_vassembler_features", handleInvalid="keep"
             )
 
         # assign a random port to decrease chances of allocating the same port from multiple instances

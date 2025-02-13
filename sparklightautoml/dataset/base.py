@@ -143,7 +143,22 @@ class SparkDatasetMetadataJsonDecoder(JSONDecoder):
                 if isinstance(json_object["origin"], float):
                     json_object["origin"] = datetime.fromtimestamp(json_object["origin"])
 
-            json_object["dtype"] = getattr(np, json_object["dtype"])
+            try:
+                json_object["dtype"] = getattr(np, json_object["dtype"])
+            except AttributeError:
+                logger.warning(f"Cannot access attribute {json_object['dtype']} of numpy as np.{json_object['dtype']}. "
+                               f"Will use it directly")
+                supported_types = ['str', 'object', 'bool','float', 'int']
+                if json_object["dtype"] not in supported_types:
+                    raise ValueError(f"Unknown type {json_object['dtype']} to use directly as dtype. "
+                                     f"Only supported: {supported_types}")
+                match json_object["dtype"]:
+                    case 'str': json_object["dtype"] = str
+                    case 'object': json_object["dtype"] = object
+                    case 'bool': json_object["dtype"] = bool
+                    case 'float': json_object["dtype"] = float
+                    case 'int': json_object["dtype"] = int
+
 
             if clazz in [GroupRole, DropRole, WeightsRole, FoldsRole, PathRole, TreatmentRole]:
                 del json_object["dtype"]

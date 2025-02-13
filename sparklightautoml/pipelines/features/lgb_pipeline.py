@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from typing import Union
 
@@ -16,6 +17,9 @@ from sparklightautoml.transformers.base import SparkSequentialTransformer
 from sparklightautoml.transformers.base import SparkUnionTransformer
 from sparklightautoml.transformers.categorical import SparkOrdinalEncoderEstimator
 from sparklightautoml.transformers.datetime import SparkTimeToNumTransformer
+
+
+logger = logging.getLogger(__name__)
 
 
 class SparkLGBSimpleFeatures(SparkFeaturesPipeline, SparkTabularDataFeatures):
@@ -126,6 +130,8 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
 
         transformer_list = []
 
+        logger.debug(f"Creating pipeline for dataset {train.name} with roles: {train.roles}")
+
         target_encoder = self.get_target_encoder(train)
 
         output_category_role = (
@@ -162,7 +168,6 @@ class SparkLGBAdvancedPipeline(SparkFeaturesPipeline, SparkTabularDataFeatures):
                 un_values = self.get_uniques_cnt(train, auto)
                 te = te + [x for x in un_values.index if un_values[x] > self.auto_unique_co]
                 ordinal = ordinal + list(set(auto) - set(te))
-
             else:
                 te = []
                 ordinal = ordinal + auto + self._cols_by_role(train, "Category", encoding_type="oof")

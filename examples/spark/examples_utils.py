@@ -155,6 +155,20 @@ def get_dataset(name: str) -> Dataset:
     return DATASETS[name]
 
 
+def prepare_dataset(dataset: Dataset, partitions_coefficient: int = 1) -> SparkDataFrame:
+    spark = get_current_session()
+
+    execs = int(os.getenv('SPARK_EXECUTOR_INSTANCES', spark.conf.get("spark.executor.instances", "1")))
+    cores = int(os.getenv('SPARK_EXECUTOR_CORES', spark.conf.get("spark.executor.cores", "8")))
+
+    data = dataset.load()
+
+    data = data.repartition(execs * cores * partitions_coefficient).cache()
+    data.write.mode("overwrite").format("noop").save()
+
+    return data
+
+
 def prepare_test_and_train(
     dataset: Dataset, seed: int, test_size: float = 0.2, partitions_coefficient: int = 1
 ) -> Tuple[SparkDataFrame, SparkDataFrame]:
