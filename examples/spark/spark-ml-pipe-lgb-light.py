@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
         spark_ml_algo = SparkBoostLGBM(
             default_params={
-              "numIterations": 50,
+                "numIterations": 50,
             },
             freeze_defaults=True,
             execution_mode="bulk",

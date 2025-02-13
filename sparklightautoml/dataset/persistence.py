@@ -1,8 +1,6 @@
 import logging
-import os
 import uuid
 import warnings
-
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Dict
@@ -17,7 +15,6 @@ from sparklightautoml.dataset.base import PersistenceManager
 from sparklightautoml.dataset.base import SparkDataset
 from sparklightautoml.utils import JobGroup
 from sparklightautoml.utils import get_current_session
-
 
 logger = logging.getLogger(__name__)
 

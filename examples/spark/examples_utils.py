@@ -100,7 +100,7 @@ DATASETS = {
         path=f"{BASE_HDFS_PREFIX}/opt/spark_data/sampled_app_train.csv", task_type="binary", roles={"target": "TARGET", "drop": ["SK_ID_CURR"]}
     ),
     "hdfs_used_cars_dataset": Dataset(
-        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/CSV/used_cars_dataset.csv",  **used_cars_params
+        path=f"{BASE_HDFS_PREFIX}/opt/preprocessed_datasets/CSV/used_cars_dataset.csv", **used_cars_params
     ),
     "hdfs_used_cars_dataset_10x": Dataset(
         path=f"{BASE_HDFS_PREFIX}/opt/spark_data/used_cars_10x_dataset.csv", **used_cars_params
@@ -153,6 +153,20 @@ DATASETS = {
 def get_dataset(name: str) -> Dataset:
     assert name in DATASETS, f"Unknown dataset: {name}. Known datasets: {list(DATASETS.keys())}"
     return DATASETS[name]
+
+
+def prepare_dataset(dataset: Dataset, partitions_coefficient: int = 1) -> SparkDataFrame:
+    spark = get_current_session()
+
+    execs = int(os.getenv('SPARK_EXECUTOR_INSTANCES', spark.conf.get("spark.executor.instances", "1")))
+    cores = int(os.getenv('SPARK_EXECUTOR_CORES', spark.conf.get("spark.executor.cores", "8")))
+
+    data = dataset.load()
+
+    data = data.repartition(execs * cores * partitions_coefficient).cache()
+    data.write.mode("overwrite").format("noop").save()
+
+    return data
 
 
 def prepare_test_and_train(

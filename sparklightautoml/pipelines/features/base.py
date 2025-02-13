@@ -655,6 +655,8 @@ class SparkTabularDataFeatures:
             Series.
 
         """
+        logger.debug(f"Getting counts of unique for features: {feats}")
+
         warn_if_not_cached(train.data)
 
         sdf = train.data.select(feats)
@@ -663,10 +665,12 @@ class SparkTabularDataFeatures:
         # if self.subsample:
         #     sdf = sdf.sample(withReplacement=False, fraction=self.subsample, seed=self.random_state)
 
-        sdf = sdf.select([sf.approx_count_distinct(col).alias(col) for col in feats])
-        result = sdf.collect()[0]
-
-        uns = [result[col] for col in feats]
+        if len(feats) > 0:
+            sdf = sdf.select([sf.approx_count_distinct(col).alias(col) for col in feats])
+            result = sdf.collect()[0]
+            uns = [result[col] for col in feats]
+        else:
+            uns = []
         return Series(uns, index=feats, dtype="int")
 
     def get_top_categories(self, train: SparkDataset, top_n: int = 5) -> List[str]:

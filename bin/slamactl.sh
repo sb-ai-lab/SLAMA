@@ -2,11 +2,11 @@
 
 set -e
 
-export SPARK_VERSION=3.5.3
+export SPARK_VERSION=${SPARK_VERSION:-3.5.4}
 export HADOOP_VERSION=3
 REPORT_TO_INFLUX=${REPORT_TO_INFLUX:-false}
-SYNAPSEML_VERSION=1.0.8
-SLAMA_VERSION=0.4.1
+SYNAPSEML_VERSION=${SYNAPSEML_VERSION:-1.0.8}
+SLAMA_VERSION=${SLAMA_VERSION:-0.5.0}
 LIGHTGBM_VERSION=3.3.5
 BASE_IMAGE_TAG="slama-${SYNAPSEML_VERSION}-spark${SPARK_VERSION}"
 
@@ -94,7 +94,7 @@ function build_lama_image() {
     --build-arg base_image=${BASE_SPARK_IMAGE} \
     --build-arg SPARK_VER=${SPARK_VERSION} \
     --build-arg SYNAPSEML_VER=${SYNAPSEML_VERSION} \
-    --build-arg SLAMA_VER=0.4.1 \
+    --build-arg SLAMA_VER=${SLAMA_VERSION} \
     --build-arg LIGHTGBM_VER=3.2.1 \
     -t ${IMAGE} \
     -f docker/spark-lama/spark-py-lama.dockerfile \
